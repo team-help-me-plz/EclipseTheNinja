@@ -18,7 +18,10 @@ public class EclipseTheNinja : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
-			"Slate"
+			"Slate",
+            "SlateCore",
+            "Niagara",
+            "GameplayAbilities", "GameplayTags", "GameplayTasks"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
