@@ -13,6 +13,8 @@
 #include "SideScrollingInteractable.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "TimerManager.h"
+#include "GAS/StatAttributeSet.h"
+#include "AbilitySystemComponent.h"
 
 ASideScrollingCharacter::ASideScrollingCharacter()
 {
@@ -57,6 +59,11 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 
 	// enable double jump and coyote time
 	JumpMaxCount = 3;
+
+	// AbilitySystemComponent 생성
+	ASC = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("ASC"));
+	// AttributeSet 생성
+	StatAttributeSet = CreateDefaultSubobject<UStatAttributeSet>(TEXT("Stat"));
 }
 
 void ASideScrollingCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -130,6 +137,16 @@ void ASideScrollingCharacter::OnMovementModeChanged(EMovementMode PrevMovementMo
 	{
 		// save the game time when we started falling, so we can check it later for coyote time jumps
 		LastFallTime = GetWorld()->GetTimeSeconds();
+	}
+}
+
+void ASideScrollingCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	if (IsValid(ASC))
+	{
+		ASC->InitAbilityActorInfo(this, this);
 	}
 }
 
@@ -337,6 +354,16 @@ void ASideScrollingCharacter::SetSoftCollision(bool bEnabled)
 {
 	// enable or disable collision response to the soft collision channel
 	GetCapsuleComponent()->SetCollisionResponseToChannel(SoftCollisionObjectType, bEnabled ? ECR_Ignore : ECR_Block);
+}
+
+UStatAttributeSet* ASideScrollingCharacter::GetStatAttribute() const
+{
+	return StatAttributeSet;
+}
+
+UAbilitySystemComponent* ASideScrollingCharacter::GetAbilitySystemComponent() const
+{
+	return ASC;
 }
 
 bool ASideScrollingCharacter::HasDoubleJumped() const

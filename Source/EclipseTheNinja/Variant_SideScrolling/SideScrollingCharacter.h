@@ -4,8 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "AbilitySystemInterface.h"
 #include "SideScrollingCharacter.generated.h"
 
+class UStatAttributeSet;
 class UCameraComponent;
 class UInputAction;
 struct FInputActionValue;
@@ -14,7 +16,7 @@ struct FInputActionValue;
  *  A player-controllable character side scrolling game
  */
 UCLASS(abstract)
-class ASideScrollingCharacter : public ACharacter
+class ASideScrollingCharacter : public ACharacter, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
@@ -79,6 +81,15 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Coyote Time", meta = (ClampMin = 0, ClampMax = 5, Units = "s"))
 	float MaxCoyoteTime = 0.16f;
 
+	/*어빌리티 시스템 컴포넌트*/
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	TObjectPtr<UAbilitySystemComponent> ASC;
+
+	/*스탯 어트리뷰트 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	TObjectPtr<UStatAttributeSet> StatAttributeSet;
+
+
 	/** Wall jump lockout timer */
 	FTimerHandle WallJumpTimer;
 
@@ -118,6 +129,9 @@ protected:
 
 	/** Handle movement mode changes to keep track of coyote time jumps */
 	virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode = 0) override;
+
+	/**캐릭터 빙의시 호출되는 함수, ASC 활성화 하는 타이밍으로 사용**/
+	virtual void PossessedBy(AController* NewController) override;
 
 protected:
 
@@ -168,6 +182,10 @@ public:
 	/** Sets the soft collision response. True passes, False blocks */
 	void SetSoftCollision(bool bEnabled);
 
+	/// 스탯 어트리뷰트를 반환하는 함수
+	UStatAttributeSet* GetStatAttribute() const;
+	/// 어빌리티 시스템 컴포넌트를 반환하는 함수
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 public:
 
 	/** Returns true if the character has just double jumped */
