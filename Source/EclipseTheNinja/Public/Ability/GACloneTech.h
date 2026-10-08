@@ -19,7 +19,7 @@ struct FTargetingResult
  */
 
 UCLASS()
-class ECLIPSETHENINJA_API UGACloneTech : public UGATargetingAbility
+class ECLIPSETHENINJA_API UGACloneTech : public UGameplayAbility
 {
 	GENERATED_BODY()
 	
@@ -34,9 +34,6 @@ public:
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
 		OUT FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
-
-	virtual void OnTargetingConfirmed(const FTargetingResult& Result);
-	virtual void OnTargetingCancelled();
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Target")
