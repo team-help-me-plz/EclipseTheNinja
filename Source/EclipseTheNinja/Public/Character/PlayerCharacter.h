@@ -3,18 +3,24 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
-#include "SideScrollingCharacter.generated.h"
+#include "Character/BaseCharacter.h"
+#include "Abilities/GameplayAbility.h"
+#include "PlayerCharacter.generated.h"
 
+class UStatAttributeSet;
 class UCameraComponent;
 class UInputAction;
+class UInputMappingContext;
+class UEnhancedInputLocalPlayerSubsystem;
+class UAnimMontage;
+class UGABaseAttack;
 struct FInputActionValue;
 
 /**
- *  A player-controllable character side scrolling game
+ *  공통 전투 기능을 상속받아 카메라, 플레이어 입력, 점프를 처리한다.
  */
-UCLASS(abstract)
-class ASideScrollingCharacter : public ACharacter
+UCLASS()
+class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter
 {
 	GENERATED_BODY()
 
@@ -79,6 +85,15 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Coyote Time", meta = (ClampMin = 0, ClampMax = 5, Units = "s"))
 	float MaxCoyoteTime = 0.16f;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> BasicAttackAction;
+
+	UPROPERTY()
+	TObjectPtr<UInputMappingContext> BasicAttackMappingContext;
+
+	TWeakObjectPtr<UEnhancedInputLocalPlayerSubsystem> AttackInputSubsystem;
+
+
 	/** Wall jump lockout timer */
 	FTimerHandle WallJumpTimer;
 
@@ -91,8 +106,8 @@ protected:
 	/** If true, this character has already wall jumped */
 	bool bHasWallJumped = false;
 
-	/** If true, this character has already double jumped */
-	bool bHasDoubleJumped = false;
+	/** True only while the initial walk-off coyote jump is still available. */
+	bool bCanCoyoteJump = false;
 
 	/** If true, this character is moving along the side scrolling axis */
 	bool bMovingHorizontally = false;
@@ -100,9 +115,10 @@ protected:
 public:
 	
 	/** Constructor */
-	ASideScrollingCharacter();
+	APlayerCharacter();
 
 protected:
+	virtual void BeginPlay() override;
 
 	/** Gameplay cleanup */
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
@@ -118,6 +134,13 @@ protected:
 
 	/** Handle movement mode changes to keep track of coyote time jumps */
 	virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode = 0) override;
+
+	/**캐릭터 빙의시 호출되는 함수, ASC 활성화 하는 타이밍으로 사용**/
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void UnPossessed() override;
+	virtual void PawnClientRestart() override;
+
+	void RemoveAttackMappingContext();
 
 protected:
 
@@ -154,7 +177,7 @@ public:
 
 protected:
 
-	/** Handles advanced jump logic */
+	/** 발판 내려가기, 지상 점프, 벽 점프, 코요테 점프를 처리한다. */
 	void MultiJump();
 
 	/** Checks for soft collision with platforms */
@@ -170,11 +193,27 @@ public:
 
 public:
 
-	/** Returns true if the character has just double jumped */
+	/** 기존 Anim BP 연결을 유지하기 위한 함수. 2단 점프는 사용하지 않는다. */
 	UFUNCTION(BlueprintPure, Category="Side Scrolling")
-	bool HasDoubleJumped() const;
+	bool HasDoubleJumped() const { return false; }
 
 	/** Returns true if the character has just wall jumped */
 	UFUNCTION(BlueprintPure, Category="Side Scrolling")
 	bool HasWallJumped() const;
+
+
+
+	/*============================================================
+	여기 있는 코드는 단순 테스트용 실제 빌드에서는 사용하지 마시오
+	=============================================================*/
+protected:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AttackTest")
+	TSubclassOf<UGameplayAbility> TestAbilityClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackTest", meta = (ClampMin = "1"))
+	int32 TestAbilityLevel = 1;
+
+	UFUNCTION(BlueprintCallable)
+	void GiveTestAbility();
+
 };

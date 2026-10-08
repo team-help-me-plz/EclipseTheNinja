@@ -4,7 +4,7 @@
 
 UStatAttributeSet::UStatAttributeSet()
 {
-	InitHealth(100.0f);
+	InitHealth(50.0f);
 	InitMaxHealth(100.0f);
 	InitAttackPower(10.0f);
 	InitDamage(0.0f);

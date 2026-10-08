@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 
-#include "SideScrollingCharacter.h"
+#include "Character/PlayerCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Camera/CameraComponent.h"
@@ -13,8 +13,14 @@
 #include "SideScrollingInteractable.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "TimerManager.h"
+#include "AbilitySystemComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputMappingContext.h"
+#include "InputCoreTypes.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/PlayerController.h"
 
-ASideScrollingCharacter::ASideScrollingCharacter()
+APlayerCharacter::APlayerCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
@@ -26,9 +32,6 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 
 	// configure the collision capsule
 	GetCapsuleComponent()->SetCapsuleSize(35.0f, 90.0f);
-
-	// configure the Pawn properties
-	bUseControllerRotationYaw = false;
 
 	// configure the character movement component
 	GetCharacterMovement()->GravityScale = 1.75f;
@@ -52,46 +55,56 @@ ASideScrollingCharacter::ASideScrollingCharacter()
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 750.0f, 0.0f);
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 
-	GetCharacterMovement()->SetPlaneConstraintNormal(FVector(0.0f, 1.0f, 0.0f));
-	GetCharacterMovement()->bConstrainToPlane = true;
+	// 일반 점프는 1회만 허용하고, 벽 점프는 LaunchCharacter로 처리한다.
+	JumpMaxCount = 1;
 
-	// enable double jump and coyote time
-	JumpMaxCount = 3;
+	BasicAttackAction = CreateDefaultSubobject<UInputAction>(TEXT("BasicAttackAction"));
+	BasicAttackAction->ValueType = EInputActionValueType::Boolean;
+	BasicAttackMappingContext = CreateDefaultSubobject<UInputMappingContext>(TEXT("BasicAttackMappingContext"));
+	BasicAttackMappingContext->MapKey(BasicAttackAction, EKeys::LeftMouseButton);
 }
 
-void ASideScrollingCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
+void APlayerCharacter::BeginPlay()
 {
-	Super::EndPlay(EndPlayReason);
+	Super::BeginPlay();
+	JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
+}
 
+void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
+{
+	RemoveAttackMappingContext();
 	// clear the wall jump timer
 	GetWorld()->GetTimerManager().ClearTimer(WallJumpTimer);
+	Super::EndPlay(EndPlayReason);
 }
 
-void ASideScrollingCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
+void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
+		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &ABaseCharacter::DoBasicAttack);
+
 		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ASideScrollingCharacter::DoJumpStart);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ASideScrollingCharacter::DoJumpEnd);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoJumpStart);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoJumpEnd);
 
 		// Interacting
-		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &ASideScrollingCharacter::DoInteract);
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoInteract);
 
 		// Moving
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ASideScrollingCharacter::Move);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
 
 		// Dropping from platform
-		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Triggered, this, &ASideScrollingCharacter::Drop);
-		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Completed, this, &ASideScrollingCharacter::DropReleased);
+		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Drop);
+		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Completed, this, &APlayerCharacter::DropReleased);
 
 	}
 }
 
-void ASideScrollingCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
+void APlayerCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
 {
 	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
 
@@ -115,13 +128,13 @@ void ASideScrollingCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActo
 	}
 }
 
-void ASideScrollingCharacter::Landed(const FHitResult& Hit)
+void APlayerCharacter::Landed(const FHitResult& Hit)
 {
-	// reset the double jump
-	bHasDoubleJumped = false;
+	Super::Landed(Hit);
+	bCanCoyoteJump = false;
 }
 
-void ASideScrollingCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode /*= 0*/)
+void APlayerCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode /*= 0*/)
 {
 	Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
 
@@ -130,10 +143,59 @@ void ASideScrollingCharacter::OnMovementModeChanged(EMovementMode PrevMovementMo
 	{
 		// save the game time when we started falling, so we can check it later for coyote time jumps
 		LastFallTime = GetWorld()->GetTimeSeconds();
+		bCanCoyoteJump = PrevMovementMode == MOVE_Walking && JumpCurrentCount == 0 && !bPressedJump;
 	}
 }
 
-void ASideScrollingCharacter::Move(const FInputActionValue& Value)
+void APlayerCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	if (IsValid(ASC))
+	{
+		//TODO 테스트용 함수로 추후에 기본 어빌리티 주는 함수 들어오면 삭제
+		GiveTestAbility();
+	}
+}
+
+void APlayerCharacter::PawnClientRestart()
+{
+	// 재빙의 시 GAS 정보를 갱신하고 로컬 공격 입력을 다시 연결한다.
+	Super::PawnClientRestart();
+	ASC->InitAbilityActorInfo(this, this);
+	RemoveAttackMappingContext();
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (PlayerController && PlayerController->IsLocalController())
+	{
+		if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+			{
+				Subsystem->AddMappingContext(BasicAttackMappingContext, 0);
+				AttackInputSubsystem = Subsystem;
+			}
+		}
+	}
+}
+
+void APlayerCharacter::RemoveAttackMappingContext()
+{
+	// 빙의 해제나 종료 시 공격 입력 매핑이 남지 않도록 제거한다.
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = AttackInputSubsystem.Get())
+	{
+		Subsystem->RemoveMappingContext(BasicAttackMappingContext);
+	}
+	AttackInputSubsystem.Reset();
+}
+
+void APlayerCharacter::UnPossessed()
+{
+	RemoveAttackMappingContext();
+	ASC->CancelAllAbilities();
+	Super::UnPossessed();
+}
+
+void APlayerCharacter::Move(const FInputActionValue& Value)
 {
 	FVector2D MoveVector = Value.Get<FVector2D>();
 
@@ -141,19 +203,19 @@ void ASideScrollingCharacter::Move(const FInputActionValue& Value)
 	DoMove(MoveVector.Y);
 }
 
-void ASideScrollingCharacter::Drop(const FInputActionValue& Value)
+void APlayerCharacter::Drop(const FInputActionValue& Value)
 {
 	// route the input
 	DoDrop(Value.Get<float>());
 }
 
-void ASideScrollingCharacter::DropReleased(const FInputActionValue& Value)
+void APlayerCharacter::DropReleased(const FInputActionValue& Value)
 {
 	// reset the input
 	DoDrop(0.0f);
 }
 
-void ASideScrollingCharacter::DoMove(float Forward)
+void APlayerCharacter::DoMove(float Forward)
 {
 	// is movement temporarily disabled after wall jumping?
 	if (!bHasWallJumped)
@@ -169,24 +231,24 @@ void ASideScrollingCharacter::DoMove(float Forward)
 	}
 }
 
-void ASideScrollingCharacter::DoDrop(float Value)
+void APlayerCharacter::DoDrop(float Value)
 {
 	// save the movement value
 	DropValue = Value;
 }
 
-void ASideScrollingCharacter::DoJumpStart()
+void APlayerCharacter::DoJumpStart()
 {
-	// handle advanced jump behaviors
+	// 입력 상태에 따라 점프 또는 발판 내려가기를 선택한다.
 	MultiJump();
 }
 
-void ASideScrollingCharacter::DoJumpEnd()
+void APlayerCharacter::DoJumpEnd()
 {
 	StopJumping();
 }
 
-void ASideScrollingCharacter::DoInteract()
+void APlayerCharacter::DoInteract()
 {
 	// do a sphere trace to look for interactive objects
 	FHitResult OutHit;
@@ -215,9 +277,9 @@ void ASideScrollingCharacter::DoInteract()
 	}
 }
 
-void ASideScrollingCharacter::MultiJump()
+void APlayerCharacter::MultiJump()
 {
-	// does the user want to drop to a lower platform?
+	// 아래 방향 입력 중에는 점프보다 발판 내려가기를 우선한다.
 	if (DropValue > 0.0f)
 	{
 		CheckForSoftCollision();
@@ -227,14 +289,14 @@ void ASideScrollingCharacter::MultiJump()
 	// reset the drop value
 	DropValue = 0.0f;
 
-	// if we're grounded, disregard advanced jump logic
+	// 지상에서는 일반 점프를 실행한다.
 	if (!GetCharacterMovement()->IsFalling())
 	{
 		Jump();
 		return;
 	}
 
-	// if we have a horizontal input, try for wall jump first
+	// 공중에서 좌우 입력이 있으면 벽 점프를 먼저 시도한다.
 	if (!bHasWallJumped && !FMath::IsNearlyZero(ActionValueY))
 	{
 		// trace ahead of the character for walls
@@ -250,6 +312,7 @@ void ASideScrollingCharacter::MultiJump()
 
 		if (OutHit.bBlockingHit)
 		{
+			bCanCoyoteJump = false;
 			// rotate to the bounce direction
 			const FRotator BounceRot = UKismetMathLibrary::MakeRotFromX(OutHit.ImpactNormal);
 			SetActorRotation(FRotator(0.0f, BounceRot.Yaw, 0.0f));
@@ -265,7 +328,7 @@ void ASideScrollingCharacter::MultiJump()
 			bHasWallJumped = true;
 
 			// schedule wall jump lockout reset
-			GetWorld()->GetTimerManager().SetTimer(WallJumpTimer, this, &ASideScrollingCharacter::ResetWallJump, DelayBetweenWallJumps, false);
+			GetWorld()->GetTimerManager().SetTimer(WallJumpTimer, this, &APlayerCharacter::ResetWallJump, DelayBetweenWallJumps, false);
 
 			return;
 		}
@@ -273,34 +336,16 @@ void ASideScrollingCharacter::MultiJump()
 
 
 
-	// test for double jump only if we haven't already tested for wall jump
-	if (!bHasWallJumped)
+	// 발판에서 걸어 나온 직후에만 짧은 점프 유예를 허용한다. 2단 점프는 없다.
+	if (!bHasWallJumped && bCanCoyoteJump && !bPressedJump
+		&& GetWorld()->GetTimeSeconds() - LastFallTime < MaxCoyoteTime)
 	{
-		// are we still within coyote time frames?
-		if (GetWorld()->GetTimeSeconds() - LastFallTime < MaxCoyoteTime)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Coyote Jump"));
-
-			// use the built-in CMC functionality to do the jump
-			Jump();
-
-		// no coyote time jump
-		} else {
-		
-			// The movement component handles double jump but we still need to manage the flag for animation
-			if (!bHasDoubleJumped)
-			{
-				// raise the double jump flag
-				bHasDoubleJumped = true;
-
-				// let the CMC handle jump
-				Jump();
-			}
-		}
+		bCanCoyoteJump = false;
+		LaunchCharacter(FVector(0.0f, 0.0f, GetCharacterMovement()->JumpZVelocity), false, true);
 	}
 }
 
-void ASideScrollingCharacter::CheckForSoftCollision()
+void APlayerCharacter::CheckForSoftCollision()
 {
 	// reset the drop value
 	DropValue = 0.0f;
@@ -327,24 +372,30 @@ void ASideScrollingCharacter::CheckForSoftCollision()
 	}
 }
 
-void ASideScrollingCharacter::ResetWallJump()
+void APlayerCharacter::ResetWallJump()
 {
 	// reset the wall jump flag
 	bHasWallJumped = false;
 }
 
-void ASideScrollingCharacter::SetSoftCollision(bool bEnabled)
+void APlayerCharacter::SetSoftCollision(bool bEnabled)
 {
 	// enable or disable collision response to the soft collision channel
 	GetCapsuleComponent()->SetCollisionResponseToChannel(SoftCollisionObjectType, bEnabled ? ECR_Ignore : ECR_Block);
 }
 
-bool ASideScrollingCharacter::HasDoubleJumped() const
-{
-	return bHasDoubleJumped;
-}
-
-bool ASideScrollingCharacter::HasWallJumped() const
+bool APlayerCharacter::HasWallJumped() const
 {
 	return bHasWallJumped;
+}
+
+
+/*============================================================
+여기 있는 코드는 단순 테스트용 실제 빌드에서는 사용하지 마시오
+=============================================================*/
+void APlayerCharacter::GiveTestAbility()
+{
+	if (!HasAuthority() || !ASC || !TestAbilityClass || ASC->FindAbilitySpecFromClass(TestAbilityClass)) return;
+	FGameplayAbilitySpec Spec(TestAbilityClass, TestAbilityLevel);
+	ASC->GiveAbility(Spec);
 }
