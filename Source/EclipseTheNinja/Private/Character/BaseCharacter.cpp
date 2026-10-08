@@ -51,7 +51,7 @@ void ABaseCharacter::PossessedBy(AController* NewController)
 void ABaseCharacter::GiveBasicAttackAbility()
 {
     // 권한이 있는 쪽에서 기본 공격을 한 번만 부여한다.
-    if (HasAuthority() && BasicAttackAbilityClass && !ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass))
+    if (BasicAttackAbilityClass && !ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass))
     {
         ASC->GiveAbility(FGameplayAbilitySpec(BasicAttackAbilityClass, 1, INDEX_NONE, this));
     }

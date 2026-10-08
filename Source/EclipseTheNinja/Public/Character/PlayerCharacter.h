@@ -46,6 +46,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* InteractAction;
 
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> BasicAttackAction;
+
 	/** Impulse to manually push physics objects while we're in midair */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Jump")
 	float JumpPushImpulse = 600.0f;
@@ -84,12 +87,6 @@ protected:
 	/** Max amount of time that can pass since we started falling when we allow a regular jump */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Coyote Time", meta = (ClampMin = 0, ClampMax = 5, Units = "s"))
 	float MaxCoyoteTime = 0.16f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
-	TObjectPtr<UInputAction> BasicAttackAction;
-
-	UPROPERTY()
-	TObjectPtr<UInputMappingContext> BasicAttackMappingContext;
 
 	TWeakObjectPtr<UEnhancedInputLocalPlayerSubsystem> AttackInputSubsystem;
 
@@ -140,7 +137,6 @@ protected:
 	virtual void UnPossessed() override;
 	virtual void PawnClientRestart() override;
 
-	void RemoveAttackMappingContext();
 
 protected:
 
