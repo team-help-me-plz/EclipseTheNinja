@@ -26,6 +26,7 @@ void ACloneTechTestCharacter::PossessedBy(AController* NewController)
 	{
 		this->AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
+	this->GiveInitAbility();
 }
 
 void ACloneTechTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
