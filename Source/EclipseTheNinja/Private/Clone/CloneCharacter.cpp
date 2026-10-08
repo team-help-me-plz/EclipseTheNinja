@@ -28,7 +28,6 @@ void ACloneCharacter::BeginPlay()
 
 	const float	Sign = GetActorForwardVector().X >= 0.f ? 1.f : -1.f;
 	this->WalkDir = FVector(Sign, 0.f, 0.f);
-
 }
 
 // Called every frame
@@ -36,7 +35,33 @@ void ACloneCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	AddMovementInput(this->WalkDir, 1.f, true);
+	if (!this->bIsArrived)
+	{
+		FVector	LocationDiff = GetActorLocation() - this->TargetLocation;
+		if (LocationDiff.SquaredLength() > 10.f)
+		{
+			AddMovementInput(this->WalkDir, 1.f, true);
+		}
+		else
+		{
+			switch (this->CommandType)
+			{
+			case (ECloneCommandType::Move):
+			{
+				break;
+			}
+			case (ECloneCommandType::Interact):
+			{
+				IInteractable::Execute_Interact(this->TargetActor, this);
+				break;
+			}
+			default:
+				break;
+			}
+			ConsumeMovementInputVector();
+			this->bIsArrived = true;
+		}
+	}
 }
 
 // Called to bind functionality to input
@@ -44,5 +69,26 @@ void ACloneCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+}
+
+void ACloneCharacter::SetCommand(const FCloneCommandType& InCommand)
+{
+	this->CommandType = InCommand.Type;
+	switch (InCommand.Type)
+	{
+	case (ECloneCommandType::Move):
+	{
+		this->TargetLocation = InCommand.TargetLocation;
+		break;
+	}
+	case (ECloneCommandType::Interact):
+	{
+		this->TargetLocation = InCommand.TargetLocation;
+		this->TargetActor = InCommand.TargetActor;
+		break;
+	}
+	default:
+		break;
+	}
 }
 
