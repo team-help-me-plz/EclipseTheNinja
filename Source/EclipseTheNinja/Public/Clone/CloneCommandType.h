@@ -30,7 +30,7 @@ struct ECLIPSETHENINJA_API FCloneCommandType
 	AActor*				TargetActor = nullptr;
 
 public:
-	static	FCloneCommandType	MakeMove(FVector InLocation)
+	static	FCloneCommandType	MakeMove(const FVector& InLocation)
 	{
 		FCloneCommandType	Command;
 
@@ -39,11 +39,12 @@ public:
 
 		return (Command);
 	}
-	static	FCloneCommandType	MakeInteract(AActor* InTargetActor)
+	static	FCloneCommandType	MakeInteract(AActor* InTargetActor, const FVector& InLocation)
 	{
 		FCloneCommandType	Command;
 
 		Command.Type = ECloneCommandType::Interact;
+		Command.TargetLocation = InLocation;
 		Command.TargetActor = InTargetActor;
 
 		return (Command);

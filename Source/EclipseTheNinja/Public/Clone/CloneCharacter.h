@@ -3,6 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Clone/CloneCommandType.h"
+#include "Interface/Interactable.h"
+
 #include "GameFramework/Character.h"
 #include "CloneCharacter.generated.h"
 
@@ -26,6 +29,13 @@ public:
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	void	SetCommand(const FCloneCommandType& InCommand);
+
 private:
+	bool	bIsArrived = false;
 	FVector	WalkDir = FVector::ZeroVector;
+
+	TObjectPtr<AActor>	TargetActor = nullptr;
+	FVector				TargetLocation = FVector::ZeroVector;
+	ECloneCommandType	CommandType;
 };
