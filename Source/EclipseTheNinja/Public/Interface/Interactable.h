@@ -26,4 +26,10 @@ class ECLIPSETHENINJA_API IInteractable
 public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	void	Interact(AActor* InActor);
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+	void	ShowInteractionIndicator();
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+	void	HideInteractionIndicator();
 };
