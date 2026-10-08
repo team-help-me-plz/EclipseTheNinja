@@ -52,6 +52,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|SpawnDist")
 	float							CloneDist = 100.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|LifeTime")
+	float							CloneLifeTime = 5.0f;
+
 	UPROPERTY()
 	TWeakObjectPtr<ACloneCharacter>	SpawnedClone = nullptr;
 private:

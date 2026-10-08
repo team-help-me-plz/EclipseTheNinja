@@ -53,6 +53,7 @@ void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 	}
 	this->SpawnedClone.Get()->OnDestroyed.AddDynamic(this, &UGACloneTech::HandleCloneDestroyed);
+	this->SpawnedClone.Get()->SetLifeSpan(this->CloneLifeTime);
 }
 
 bool UGACloneTech::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, OUT FGameplayTagContainer* OptionalRelevantTags) const

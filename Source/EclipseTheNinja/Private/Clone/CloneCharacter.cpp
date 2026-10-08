@@ -29,7 +29,6 @@ void ACloneCharacter::BeginPlay()
 	const float	Sign = GetActorForwardVector().X >= 0.f ? 1.f : -1.f;
 	this->WalkDir = FVector(Sign, 0.f, 0.f);
 
-	SetLifeSpan(5.f);
 }
 
 // Called every frame
@@ -37,11 +36,6 @@ void ACloneCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	this->LifeTime += DeltaTime;
-	if (this->LifeTime > this->DeadTime)
-	{
-		Destroy();
-	}
 	AddMovementInput(this->WalkDir, 1.f, true);
 }
 

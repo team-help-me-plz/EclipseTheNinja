@@ -28,6 +28,4 @@ public:
 
 private:
 	FVector	WalkDir = FVector::ZeroVector;
-	float	LifeTime = 0.0f;
-	float	DeadTime = 5.0f;
 };
