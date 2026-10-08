@@ -6,7 +6,6 @@
 #include "AbilitySystemComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
-//#include "Components/InputComponent.h"
 
 ACloneTechTestCharacter::ACloneTechTestCharacter()
 {
@@ -73,14 +72,6 @@ void ACloneTechTestCharacter::OnLocalInputStart(int32 InID)
 	{
 		this->AbilitySystemComponent->AbilityLocalInputPressed(InID);
 	}
-	else
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("ASC 없음")
-		);
-	}
 }
 
 void ACloneTechTestCharacter::OnLocalInputCompleted(int32 InID)
@@ -93,11 +84,6 @@ void ACloneTechTestCharacter::OnLocalInputCompleted(int32 InID)
 
 void ACloneTechTestCharacter::DoCloneTech()
 {
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT("분신술")
-	);
 	this->OnLocalInputStart(this->CloneTechInputID);
 }
 

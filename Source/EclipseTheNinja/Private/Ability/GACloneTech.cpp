@@ -6,6 +6,11 @@
 
 #include "GameFramework/Character.h"
 
+UGACloneTech::UGACloneTech()
+{
+	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+}
+
 void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	// 어빌리티 사용 불가능 상태
@@ -21,6 +26,11 @@ void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+	// 내부 값 초기화
+	this->bIsSwaped = false;
+	this->SpawnedClone.Reset();
+
+	// 분신 이동 관련 값 초기화
 	const FVector	CharacterDir = Character->GetActorForwardVector();
 	const bool		bIsRightDir = CharacterDir.X > 0;
 	const FVector	CloneDir = bIsRightDir ? FVector(1.0f, 0.0f, 0.0f) : FVector(-1.0f, 0.0f, 0.0f);
@@ -31,13 +41,19 @@ void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	Params.Instigator = Character;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
 
-	ACloneCharacter* Clone = GetWorld()->SpawnActor<ACloneCharacter>(
+	// 분신 소환
+	this->SpawnedClone = GetWorld()->SpawnActor<ACloneCharacter>(
 		CloneClass,
 		ClonePos,
 		CloneRotate,
 		Params
 	);
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, Clone == nullptr);
+	if (!this->SpawnedClone.IsValid())
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+	}
+	this->SpawnedClone.Get()->OnDestroyed.AddDynamic(this, &UGACloneTech::HandleCloneDestroyed);
+	this->SpawnedClone.Get()->SetLifeSpan(this->CloneLifeTime);
 }
 
 bool UGACloneTech::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, OUT FGameplayTagContainer* OptionalRelevantTags) const
@@ -49,4 +65,57 @@ bool UGACloneTech::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGam
 	if (!ASC)	return (false);
 
 	return (true);
+}
+
+void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo)
+{
+	ACharacter* Character = Cast<ACharacter>(ActorInfo->AvatarActor.Get());
+	if (!Character)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return ;
+	}
+	if (!this->SpawnedClone.IsValid())
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return ;
+	}
+	if (this->bIsSwaped)
+	{
+		return ;
+	}
+	this->bIsSwaped = true;
+	const FVector	PlayerLocation = Character->GetActorLocation();
+	const FVector	CloneLocation = this->SpawnedClone.Get()->GetActorLocation();
+
+	Character->SetActorLocation(CloneLocation);
+	this->SpawnedClone.Get()->SetActorLocation(PlayerLocation);
+	//EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+}
+
+void UGACloneTech::HandleCloneDestroyed(AActor* DestroyedActor)
+{
+	if (!DestroyedActor)
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("[UGACloneTech::HandleCloneDestroyed] HandleCloneDestroyed에 nullptr이 들어왔습니다.")
+		);
+		return ;
+	}
+	DestroyedActor->OnDestroyed.RemoveDynamic(this, &UGACloneTech::HandleCloneDestroyed);
+	this->bIsSwaped = false;
+	this->SpawnedClone.Reset();
+	if (!IsActive())
+	{
+		return ;
+	}
+	EndAbility(
+		CurrentSpecHandle,
+		CurrentActorInfo,
+		CurrentActivationInfo,
+		true,
+		false
+	);
 }
