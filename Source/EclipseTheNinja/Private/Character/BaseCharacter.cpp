@@ -62,6 +62,21 @@ void ABaseCharacter::DoBasicAttack()
     // 공격 실행은 GAS 어빌리티에 맡긴다.
     if (BasicAttackAbilityClass && BasicAttackMontage)
     {
+        // 이미 공격중인지 확인
+        if (ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
+        {
+            // 공격 중이면 재실행 대신 입력 이벤트를 보낸다.
+            FGameplayEventData Payload;
+            Payload.EventTag = UGABaseAttack::GetComboInputEventTag();
+            Payload.Instigator = this;
+
+            // 콤보 입력용 이벤트 발생
+            UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(
+                this, Payload.EventTag, Payload);
+
+            return;
+        }
+
         ASC->TryActivateAbilityByClass(BasicAttackAbilityClass);
     }
 }

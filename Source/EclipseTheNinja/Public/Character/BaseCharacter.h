@@ -32,6 +32,11 @@ protected:
     void InitializeAbilitySystem();
     void GiveBasicAttackAbility();
 
+private:
+    UAnimMontage* GetBasicAttackMontage(const ACharacter* Character) const;
+
+
+protected:
     // 기존 BP 설정을 유지하도록 컴포넌트와 프로퍼티 이름을 보존한다.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
     TObjectPtr<UAbilitySystemComponent> ASC;
@@ -53,4 +58,5 @@ protected:
     /** Anim BP와 같은 스켈레톤 및 Slot을 사용하는 사망 몽타주. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Death")
     TObjectPtr<UAnimMontage> DeathMontage;
+
 };
