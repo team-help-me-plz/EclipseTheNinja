@@ -15,6 +15,10 @@ class ECLIPSETHENINJA_API UGABaseAttack : public UGameplayAbility
 public:
 	UGABaseAttack();
 	static FGameplayTag GetHitEventTag();
+	static FGameplayTag GetComboInputEventTag();
+	static FGameplayTag GetComboEndEventTag();
+	static FGameplayTag GetAttackStartEventTag();
+	static FGameplayTag GetAttackingTag();
 
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr,
@@ -46,6 +50,26 @@ protected:
 	UFUNCTION()
 	void OnHitEvent(FGameplayEventData Payload);
 
+	UFUNCTION()
+	void OnComboInput(FGameplayEventData Payload);
+
+	UFUNCTION()
+	void OnComboCheck(FGameplayEventData Payload);
+
+	UFUNCTION()
+	void OnAttackStart(FGameplayEventData Payload);
+
 private:
 	TSet<TWeakObjectPtr<AActor>> HitActors;
+
+
+	// 현재 몇 타인지
+	int32 ComboIndex = 1;
+	// 다음 입력이 예약되어 있는지
+	bool bNextAttackPending = false;
+	bool bAcceptComboInput = false;
+
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> CurrentAttackMontage;
 };

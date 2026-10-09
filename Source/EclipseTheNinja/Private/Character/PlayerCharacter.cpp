@@ -57,11 +57,6 @@ APlayerCharacter::APlayerCharacter()
 
 	// 일반 점프는 1회만 허용하고, 벽 점프는 LaunchCharacter로 처리한다.
 	JumpMaxCount = 1;
-
-	BasicAttackAction = CreateDefaultSubobject<UInputAction>(TEXT("BasicAttackAction"));
-	BasicAttackAction->ValueType = EInputActionValueType::Boolean;
-	BasicAttackMappingContext = CreateDefaultSubobject<UInputMappingContext>(TEXT("BasicAttackMappingContext"));
-	BasicAttackMappingContext->MapKey(BasicAttackAction, EKeys::LeftMouseButton);
 }
 
 void APlayerCharacter::BeginPlay()
@@ -72,7 +67,6 @@ void APlayerCharacter::BeginPlay()
 
 void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
-	RemoveAttackMappingContext();
 	// clear the wall jump timer
 	GetWorld()->GetTimerManager().ClearTimer(WallJumpTimer);
 	Super::EndPlay(EndPlayReason);
@@ -163,34 +157,11 @@ void APlayerCharacter::PawnClientRestart()
 	// 재빙의 시 GAS 정보를 갱신하고 로컬 공격 입력을 다시 연결한다.
 	Super::PawnClientRestart();
 	ASC->InitAbilityActorInfo(this, this);
-	RemoveAttackMappingContext();
-	APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	if (PlayerController && PlayerController->IsLocalController())
-	{
-		if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
-		{
-			if (UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
-			{
-				Subsystem->AddMappingContext(BasicAttackMappingContext, 0);
-				AttackInputSubsystem = Subsystem;
-			}
-		}
-	}
-}
 
-void APlayerCharacter::RemoveAttackMappingContext()
-{
-	// 빙의 해제나 종료 시 공격 입력 매핑이 남지 않도록 제거한다.
-	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = AttackInputSubsystem.Get())
-	{
-		Subsystem->RemoveMappingContext(BasicAttackMappingContext);
-	}
-	AttackInputSubsystem.Reset();
 }
 
 void APlayerCharacter::UnPossessed()
 {
-	RemoveAttackMappingContext();
 	ASC->CancelAllAbilities();
 	Super::UnPossessed();
 }
