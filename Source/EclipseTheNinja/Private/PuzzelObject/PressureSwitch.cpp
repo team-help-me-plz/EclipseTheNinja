@@ -31,7 +31,8 @@ APressureSwitch::APressureSwitch()
 	SetRootComponent(this->PressureTrigger);
 
 	this->Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	this->Mesh->SetupAttachment(GetRootComponent());
+	this->Mesh->SetMobility(EComponentMobility::Movable);
+	this->Mesh->SetupAttachment(this->PressureTrigger);
 
 }
 

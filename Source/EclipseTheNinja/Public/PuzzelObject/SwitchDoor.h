@@ -6,13 +6,13 @@
 #include "Interface/Activatable.h"
 #include "Interface/Interactable.h"
 
-#include "Engine/StaticMeshActor.h"
+#include "GameFramework/Actor.h"
 #include "SwitchDoor.generated.h"
 
 class UStaticMeshComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API ASwitchDoor : public AStaticMeshActor, public IActivatable, public IInteractable
+class ECLIPSETHENINJA_API ASwitchDoor : public AActor, public IActivatable, public IInteractable
 {
 	GENERATED_BODY()
 
@@ -33,7 +33,7 @@ public:
 protected:
 	virtual void	BeginPlay() override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")

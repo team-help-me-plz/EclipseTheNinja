@@ -12,6 +12,7 @@ AMovingPlatform::AMovingPlatform()
 	PrimaryActorTick.bStartWithTickEnabled = true;
 
 	this->Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	this->Mesh->SetMobility(EComponentMobility::Movable);
 	SetRootComponent(this->Mesh);
 }
 
