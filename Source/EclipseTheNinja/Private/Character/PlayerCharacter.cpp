@@ -14,11 +14,8 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "TimerManager.h"
 #include "AbilitySystemComponent.h"
-#include "EnhancedInputSubsystems.h"
-#include "InputMappingContext.h"
-#include "InputCoreTypes.h"
-#include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
+#include "Character/PlayerCharacterController.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -95,6 +92,8 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Drop);
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Completed, this, &APlayerCharacter::DropReleased);
 
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCameraMoveEnd);
 	}
 }
 
@@ -246,6 +245,30 @@ void APlayerCharacter::DoInteract()
 			Interactable->Interaction(this);
 		}
 	}
+}
+
+void APlayerCharacter::DoCameraMoveStart()
+{
+	APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController());
+	if (!APC)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[APlayerCharacter::DoCameraMoveStart] : APC Was nullptr"));
+		return;
+	}
+
+	APC->StartCameraMove();
+}
+
+void APlayerCharacter::DoCameraMoveEnd()
+{
+	APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController());
+	if (!APC)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[APlayerCharacter::DoCameraMoveStart] : APC Was nullptr"));
+		return;
+	}
+
+	APC->StopCameraMove();
 }
 
 void APlayerCharacter::MultiJump()
