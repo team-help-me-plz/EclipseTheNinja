@@ -13,6 +13,8 @@ class UEnhancedInputComponent;
 class UEnhancedInputLocalPlayerSubsystem;
 class UInputAction;
 class UInputMappingContext;
+class UNiagaraSystem;
+class UNiagaraComponent;
 
 // 마우스 좌클릭으로 분신에게 명령 전달
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FCloneTargetAccepted, const FCloneCommandType&, Command);
@@ -39,6 +41,7 @@ public:
 		UInputMappingContext* MappingContext,
 		UInputAction* AcceptAction,
 		UInputAction* CancelAction,
+		UNiagaraSystem* DestinataionNS,
 		int32 MappingPriority = 100,
 		float SlowMotionScale = 0.2f
 	);
@@ -51,6 +54,12 @@ public:
 
 protected:
 	virtual void OnDestroy(bool bInOwnerFinished) override;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|NS")
+	TObjectPtr<UNiagaraSystem>		DestinationSystem = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|NS")
+	TObjectPtr<UNiagaraComponent>	DestinationEffect;
 
 private:
 	void HandleAccept();
