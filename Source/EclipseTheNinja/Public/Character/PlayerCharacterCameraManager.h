@@ -65,6 +65,12 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Side Scrolling Camera", meta = (ClampMin = 0, ClampMax = 10000, Units = "cm"))
 	float CameraExploreMaxDistance = 100.f;
 
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling Camera", meta = (ClampMin = 0, ClampMax = 10))
+	float CameraExploreSpeed = 5.f;
+
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling Camera", meta = (ClampMin = 0, ClampMax = 10))
+	float CameraReturnSpeed = 2.f;
+
 
 protected:
 	virtual void BeginPlay() override;
