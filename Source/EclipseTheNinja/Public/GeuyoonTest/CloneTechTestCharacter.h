@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Interface/Interactor.h"
 
 #include "GameplayAbilitySpecHandle.h"
 #include "GameplayEffectTypes.h"
@@ -12,6 +13,7 @@
 
 class UAbilitySystemComponent;
 class UInputAction;
+class USphereComponent;
 
 USTRUCT(BlueprintType)
 struct FAbilityInfo
@@ -32,7 +34,7 @@ struct FAbilityInfo
  * 
  */
 UCLASS()
-class ECLIPSETHENINJA_API ACloneTechTestCharacter : public ASideScrollingCharacter, public IAbilitySystemInterface
+class ECLIPSETHENINJA_API ACloneTechTestCharacter : public ASideScrollingCharacter, public IAbilitySystemInterface, public IInteractor
 {
 	GENERATED_BODY()
 	
@@ -42,6 +44,7 @@ public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
 protected:
+	virtual void PostInitializeComponents() override;
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
@@ -53,8 +56,30 @@ protected:
 	void			DoCloneTech();
 	virtual void	DoInteract() override;
 
+	UFUNCTION()
+	void OnInteractBeginOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp,
+		int32 OtherBodyIndex,
+		bool bFromSweep,
+		const FHitResult& SweepResult);
+
+	UFUNCTION()
+	void OnInteractEndOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComp,
+		int32 OtherBodyIndex);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	TObjectPtr<USphereComponent>	InteractCollision = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sphere|Radius")
+	float							InteractRadius = 100.f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
-	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
 	TArray<FAbilityInfo>		AbilityClassArray;
@@ -68,9 +93,13 @@ protected:
 	TObjectPtr<AActor>			CloneTarget = nullptr;
 
 private:
+	TArray<AActor*>	OverlappedInteractActor;
+	int32			OverlappedInteractActorTargetIndex = 0;
 	TMap<int32, FGameplayAbilitySpecHandle>	AbilityHandles;
 
 	//static constexpr int32 InteractInputID = 100;
 	static constexpr int32 CloneTechInputID = 100;
 
 };
+
+

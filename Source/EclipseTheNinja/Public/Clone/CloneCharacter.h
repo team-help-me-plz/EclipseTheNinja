@@ -5,12 +5,13 @@
 #include "CoreMinimal.h"
 #include "Clone/CloneCommandType.h"
 #include "Interface/Interactable.h"
+#include "Interface/Interactor.h"
 
 #include "GameFramework/Character.h"
 #include "CloneCharacter.generated.h"
 
 UCLASS()
-class ECLIPSETHENINJA_API ACloneCharacter : public ACharacter
+class ECLIPSETHENINJA_API ACloneCharacter : public ACharacter, public IInteractor
 {
 	GENERATED_BODY()
 

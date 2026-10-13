@@ -2,19 +2,33 @@
 
 
 #include "GeuyoonTest/CloneTechTestCharacter.h"
+#include "Interface/Interactable.h"
 
+#include "Components/SphereComponent.h"
 #include "AbilitySystemComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 
 ACloneTechTestCharacter::ACloneTechTestCharacter()
 {
+	this->InteractCollision = CreateDefaultSubobject<USphereComponent>(TEXT("InteractCollision"));
+	this->InteractCollision->SetSphereRadius(this->InteractRadius);
+	this->InteractCollision->SetupAttachment(GetRootComponent());
+
 	this->AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("ASC"));
 }
 
 UAbilitySystemComponent* ACloneTechTestCharacter::GetAbilitySystemComponent() const
 {
 	return (this->AbilitySystemComponent);
+}
+
+void ACloneTechTestCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	this->InteractCollision->OnComponentBeginOverlap.AddDynamic(this, &ACloneTechTestCharacter::OnInteractBeginOverlap);
+	this->InteractCollision->OnComponentEndOverlap.AddDynamic(this, &ACloneTechTestCharacter::OnInteractEndOverlap);
 }
 
 void ACloneTechTestCharacter::PossessedBy(AController* NewController)
@@ -89,4 +103,30 @@ void ACloneTechTestCharacter::DoCloneTech()
 
 void ACloneTechTestCharacter::DoInteract()
 {
+    if (this->OverlappedInteractActor.Num())
+    {
+		UE_LOG(LogTemp, Log, TEXT("상호작용 시작"));
+		IInteractable::Execute_Interact(this->OverlappedInteractActor[this->OverlappedInteractActorTargetIndex], this);
+    }
+}
+
+void ACloneTechTestCharacter::OnInteractBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+    UE_LOG(LogTemp, Log, TEXT("뭔가 overlap됨"));
+    if (OtherActor && OtherActor->Implements<UInteractable>() && IInteractable::Execute_bIsInteractReady(OtherActor))
+    {
+        UE_LOG(LogTemp, Log, TEXT("[%s]가 overlap됨"), *OtherActor->GetName());
+        this->OverlappedInteractActor.AddUnique(OtherActor);
+        this->OverlappedInteractActorTargetIndex = 0;
+    }
+}
+
+void ACloneTechTestCharacter::OnInteractEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+    if (OtherActor && OtherActor->Implements<UInteractable>() && IInteractable::Execute_bIsInteractReady(OtherActor))
+    {
+        UE_LOG(LogTemp, Log, TEXT("[%s]가 overlap 풀림"), *OtherActor->GetName());
+        this->OverlappedInteractActor.Remove(OtherActor);
+        this->OverlappedInteractActorTargetIndex = 0;
+    }
 }
