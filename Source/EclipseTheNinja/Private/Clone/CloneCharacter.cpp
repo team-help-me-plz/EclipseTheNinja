@@ -92,3 +92,47 @@ void ACloneCharacter::SetCommand(const FCloneCommandType& InCommand)
 	}
 }
 
+void ACloneCharacter::Interact_Implementation(AActor* InActor)
+{
+	if (!InActor || InActor != this->GetOwner())
+	{
+		return ;
+	}
+	ACharacter*	InCharacter = Cast<ACharacter>(InActor);
+	if (!InCharacter)
+	{
+		return ;
+	}
+	if (bIsInteractCooldown)
+	{
+		return;
+	}
+	this->bIsInteractCooldown = true;
+	//this->bIsInteracted = true;
+	GetWorldTimerManager().SetTimer(
+		InteractionCooldownTimer,
+		this,
+		&ACloneCharacter::ResetInteractionCooldown,
+		this->InteractInterval,
+		false
+	);
+	InCharacter->LaunchCharacter(this->InteractVelocity, false, true);
+}
+
+void ACloneCharacter::ShowInteractionIndicator_Implementation()
+{
+}
+
+void ACloneCharacter::HideInteractionIndicator_Implementation()
+{
+}
+
+bool ACloneCharacter::bIsInteractReady_Implementation()
+{
+	return (true);
+}
+
+void	ACloneCharacter::ResetInteractionCooldown()
+{
+	this->bIsInteractCooldown = false;
+}
