@@ -13,12 +13,13 @@ AInteractSwitch::AInteractSwitch()
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
-	this->InteractSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractSphere"));
-	this->InteractSphere->SetSphereRadius(this->InteractRadius);
-	SetRootComponent(this->InteractSphere);
+	//this->InteractSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractSphere"));
+	//this->InteractSphere->SetSphereRadius(this->InteractRadius);
+	//SetRootComponent(this->InteractSphere);
 
 	this->Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	this->Mesh->SetupAttachment(GetRootComponent());
+	SetRootComponent(this->Mesh);
+	//this->Mesh->SetupAttachment(GetRootComponent());
 
 }
 
@@ -51,8 +52,8 @@ void AInteractSwitch::Interact_Implementation(AActor* InActor)
 	{
 		return;
 	}
-	UE_LOG(LogTemp, Log, TEXT("상호작용 진짜 시작"));
 	this->bIsInteractCooldown = true;
+	this->bIsInteracted = true;
 	GetWorldTimerManager().SetTimer(
 		InteractionCooldownTimer,
 		this,
@@ -60,7 +61,7 @@ void AInteractSwitch::Interact_Implementation(AActor* InActor)
 		this->InteractInterval,
 		false
 	);
-	IInteractable::Execute_Interact(TargetActor, InActor);
+	IActivatable::Execute_ToggleActivate(this->TargetActor);
 }
 
 void AInteractSwitch::ShowInteractionIndicator_Implementation()
