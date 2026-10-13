@@ -4,16 +4,17 @@
 #include "GeuyoonTest/CloneTechTestCharacter.h"
 #include "Interface/Interactable.h"
 
-#include "Components/SphereComponent.h"
+#include "Components/BoxComponent.h"
 #include "AbilitySystemComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 
 ACloneTechTestCharacter::ACloneTechTestCharacter()
 {
-	this->InteractCollision = CreateDefaultSubobject<USphereComponent>(TEXT("InteractCollision"));
-	this->InteractCollision->SetSphereRadius(this->InteractRadius);
-	this->InteractCollision->SetupAttachment(GetRootComponent());
+	this->InteractBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractCollision"));
+	//this->InteractCollision->SetSphereRadius(this->InteractRadius);
+	this->InteractBox->SetBoxExtent(this->InteractBoxSize);
+	this->InteractBox->SetupAttachment(GetRootComponent());
 
 	this->AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("ASC"));
 }
@@ -27,8 +28,8 @@ void ACloneTechTestCharacter::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 
-	this->InteractCollision->OnComponentBeginOverlap.AddDynamic(this, &ACloneTechTestCharacter::OnInteractBeginOverlap);
-	this->InteractCollision->OnComponentEndOverlap.AddDynamic(this, &ACloneTechTestCharacter::OnInteractEndOverlap);
+	this->InteractBox->OnComponentBeginOverlap.AddDynamic(this, &ACloneTechTestCharacter::OnInteractBeginOverlap);
+	this->InteractBox->OnComponentEndOverlap.AddDynamic(this, &ACloneTechTestCharacter::OnInteractEndOverlap);
 }
 
 void ACloneTechTestCharacter::PossessedBy(AController* NewController)

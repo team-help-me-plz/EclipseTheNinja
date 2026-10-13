@@ -13,7 +13,7 @@
 
 class UAbilitySystemComponent;
 class UInputAction;
-class USphereComponent;
+class UBoxComponent;
 
 USTRUCT(BlueprintType)
 struct FAbilityInfo
@@ -73,10 +73,13 @@ protected:
 		int32 OtherBodyIndex);
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	TObjectPtr<USphereComponent>	InteractCollision = nullptr;
+	TObjectPtr<UBoxComponent>	InteractBox = nullptr;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sphere|Radius")
-	float							InteractRadius = 100.f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Collision|Interact")
+	FVector						InteractBoxSize = FVector(80.f, 1000.f, 100.f);
+
+	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sphere|Radius")
+	//float							InteractRadius = 100.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent = nullptr;
