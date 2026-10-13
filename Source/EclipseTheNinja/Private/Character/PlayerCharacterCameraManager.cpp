@@ -178,14 +178,14 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 		else if (!bIsCameraExploreMode)
 		{
 			//2-1 offset을 0으로 보간
-			MoveOffset = FMath::Vector2DInterpTo(MoveOffset, FVector2D::ZeroVector, DeltaTime, 5.0f);
+			MoveOffset = FMath::Vector2DInterpTo(MoveOffset, FVector2D::ZeroVector, DeltaTime, CameraExploreSpeed);
 		}
 
 		// blend towards the new camera location and update the output
 
 		float FinalX = FMath::Clamp(CurrentActorLocation.X + MoveOffset.X, CameraXMinBounds, CameraXMaxBounds);
 		FVector TargetCameraLocation(FinalX, CurrentY, CurrentActorLocation.Z + CameraZOffset + MoveOffset.Y);
-		OutVT.POV.Location = FMath::VInterpTo(GetCameraLocation(), TargetCameraLocation, DeltaTime, 2.0f);
+		OutVT.POV.Location = FMath::VInterpTo(GetCameraLocation(), TargetCameraLocation, DeltaTime, CameraReturnSpeed);
 	}
 }
 
