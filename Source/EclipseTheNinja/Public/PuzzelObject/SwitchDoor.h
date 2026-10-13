@@ -46,6 +46,8 @@ protected:
 	bool	bIsInteractable = true;
 
 private:
+	void	ResetInteractionCooldown();
+
 	UPROPERTY(Transient)
 	double	ElapsedTime = 0.0;
 
@@ -61,4 +63,7 @@ private:
 	UPROPERTY(Transient)
 	bool	bIsOpen = false;
 
+	FTimerHandle	InteractionCooldownTimer;
+	bool			bIsInteractCooldown = false;
+	float			InteractInterval = 0.5f;
 };

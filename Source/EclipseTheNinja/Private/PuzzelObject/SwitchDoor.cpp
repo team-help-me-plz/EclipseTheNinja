@@ -40,7 +40,7 @@ void ASwitchDoor::ToggleActivate_Implementation()
 
 void ASwitchDoor::Interact_Implementation(AActor* InActor)
 {
-	if (!this->bIsInteractable)
+	if (!this->bIsInteractable || this->bIsInteractCooldown)
 	{
 		return ;
 	}
@@ -48,6 +48,14 @@ void ASwitchDoor::Interact_Implementation(AActor* InActor)
 	{
 		return ;
 	}
+	this->bIsInteractCooldown = true;
+	GetWorldTimerManager().SetTimer(
+		InteractionCooldownTimer,
+		this,
+		&ASwitchDoor::ResetInteractionCooldown,
+		this->InteractInterval,
+		false
+	);
 	this->bIsOpen = !this->bIsOpen;
 }
 
@@ -93,4 +101,7 @@ void ASwitchDoor::DoorMovement(float DeltaTime)
 	SetActorLocation(NewLocation);
 }
 
-
+void	ASwitchDoor::ResetInteractionCooldown()
+{
+	this->bIsInteractCooldown = false;
+}
