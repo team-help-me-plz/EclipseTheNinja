@@ -2,19 +2,33 @@
 
 
 #include "GeuyoonTest/CloneTechTestCharacter.h"
+#include "Interface/Interactable.h"
 
+#include "Components/SphereComponent.h"
 #include "AbilitySystemComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 
 ACloneTechTestCharacter::ACloneTechTestCharacter()
 {
+	this->InteractCollision = CreateDefaultSubobject<USphereComponent>(TEXT("InteractCollision"));
+	this->InteractCollision->SetSphereRadius(this->InteractRadius);
+	this->InteractCollision->SetupAttachment(GetRootComponent());
+
 	this->AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("ASC"));
 }
 
 UAbilitySystemComponent* ACloneTechTestCharacter::GetAbilitySystemComponent() const
 {
 	return (this->AbilitySystemComponent);
+}
+
+void ACloneTechTestCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	this->InteractCollision->OnComponentBeginOverlap.AddDynamic(this, &ACloneTechTestCharacter::OnInteractBeginOverlap);
+	this->InteractCollision->OnComponentEndOverlap.AddDynamic(this, &ACloneTechTestCharacter::OnInteractEndOverlap);
 }
 
 void ACloneTechTestCharacter::PossessedBy(AController* NewController)
@@ -89,4 +103,26 @@ void ACloneTechTestCharacter::DoCloneTech()
 
 void ACloneTechTestCharacter::DoInteract()
 {
+    if (this->OverlappedInteractActor.Num())
+    {
+		IInteractable::Execute_Interact(this->OverlappedInteractActor[this->OverlappedInteractActorTargetIndex], this);
+    }
+}
+
+void ACloneTechTestCharacter::OnInteractBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+    if (OtherActor && OtherActor->Implements<UInteractable>() && IInteractable::Execute_bIsInteractReady(OtherActor))
+    {
+        this->OverlappedInteractActor.AddUnique(OtherActor);
+        this->OverlappedInteractActorTargetIndex = 0;
+    }
+}
+
+void ACloneTechTestCharacter::OnInteractEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+    if (OtherActor && OtherActor->Implements<UInteractable>() && IInteractable::Execute_bIsInteractReady(OtherActor))
+    {
+        this->OverlappedInteractActor.Remove(OtherActor);
+        this->OverlappedInteractActorTargetIndex = 0;
+    }
 }
