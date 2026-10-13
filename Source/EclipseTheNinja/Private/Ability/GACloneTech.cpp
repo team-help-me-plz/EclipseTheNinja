@@ -57,7 +57,8 @@ void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	this->SpawnedClone.Reset();
 	this->TargetingTask = UAbilityTask_WaitCloneTargeting::WaitCloneTarget(
 		this, this->TargetingMappingContext.Get(), this->AcceptInputAction.Get(),
-		this->CancelInputAction.Get(), this->TargetingMappingPriority, this->TargetingTimeDilation);
+		this->CancelInputAction.Get(), this->DestinationSystem.Get(), 
+		this->TargetingMappingPriority, this->TargetingTimeDilation);
 	if (!this->TargetingTask)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);

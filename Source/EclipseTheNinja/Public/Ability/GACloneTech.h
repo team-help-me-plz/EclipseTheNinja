@@ -9,6 +9,7 @@ class ACloneCharacter;
 class UAbilityTask_WaitCloneTargeting;
 class UInputAction;
 class UInputMappingContext;
+class UNiagaraSystem;
 
 UCLASS()
 class ECLIPSETHENINJA_API UGACloneTech : public UGameplayAbility
@@ -57,6 +58,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Targeting")
 	TObjectPtr<UInputAction>	CancelInputAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Targeting")
+	TObjectPtr<UNiagaraSystem>		DestinationSystem = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Targeting")
 	int32	TargetingMappingPriority = 100;
