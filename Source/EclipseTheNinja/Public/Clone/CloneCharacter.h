@@ -32,6 +32,10 @@ public:
 
 	void	SetCommand(const FCloneCommandType& InCommand);
 
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Margin")
+	float	TargetLocationMargin = 49.f;
+
 private:
 	bool	bIsArrived = false;
 	FVector	WalkDir = FVector::ZeroVector;
