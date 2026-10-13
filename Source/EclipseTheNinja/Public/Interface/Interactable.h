@@ -32,4 +32,7 @@ public:
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	void	HideInteractionIndicator();
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+	bool	bIsInteractReady();
 };
