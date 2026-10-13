@@ -14,6 +14,8 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 
 UAbilityTask_WaitCloneTargeting::UAbilityTask_WaitCloneTargeting()
 {
@@ -23,6 +25,7 @@ UAbilityTask_WaitCloneTargeting::UAbilityTask_WaitCloneTargeting()
 UAbilityTask_WaitCloneTargeting* UAbilityTask_WaitCloneTargeting::WaitCloneTarget(
 	UGameplayAbility* OwningAbility, UInputMappingContext* MappingContext,
 	UInputAction* AcceptAction, UInputAction* CancelAction,
+	UNiagaraSystem* DestinataionNS,
 	int32	MappingPriority, float SlowMotionScale)
 {
 	if (!IsValid(OwningAbility))
@@ -36,6 +39,7 @@ UAbilityTask_WaitCloneTargeting* UAbilityTask_WaitCloneTargeting::WaitCloneTarge
 	Task->CancelInputAction = CancelAction;
 	Task->TargetingMappingPriority = MappingPriority;
 	Task->TargetingTimeDilation = FMath::Clamp(SlowMotionScale, 0.01f, 1.0f);
+	Task->DestinationSystem = DestinataionNS;
 	return (Task);
 }
 
@@ -116,6 +120,18 @@ void UAbilityTask_WaitCloneTargeting::Activate()
 	this->PreviousTimeDilation = UGameplayStatics::GetGlobalTimeDilation(this);
 	this->bTimeDilationChanged = true;
 	UGameplayStatics::SetGlobalTimeDilation(this, this->PreviousTimeDilation * this->TargetingTimeDilation);
+	this->DestinationEffect =
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			this,
+			this->DestinationSystem,
+			AvatarPawn->GetActorLocation(),
+			FRotator::ZeroRotator,
+			FVector::OneVector,
+			false,
+			true,
+			ENCPoolMethod::None,
+			false
+		);
 	UpdateTargetCandidate();
 }
 
@@ -167,25 +183,64 @@ void UAbilityTask_WaitCloneTargeting::UpdateTargetCandidate()
 	FVector	CursorOnPlane = RayOrigin + RayDirection * DistanceToPlane;
 	CursorOnPlane.Y = PlaneY;
 
+	AActor* HitActor = CursorHit.GetActor();
+
+	if (IsValid(HitActor) && HitActor->Implements<UInteractable>() && IInteractable::Execute_bIsInteractReady(HitActor))
+	{
+		FVector	TraceStart = HitActor->GetActorLocation();
+		TraceStart.Y = Avatar->GetActorLocation().Y;
+		FVector	TraceEnd = TraceStart - FVector(0.f, 0.f, 2000.f);
+		FCollisionQueryParams	InteractQueryParams;
+
+		InteractQueryParams.AddIgnoredActor(Avatar);
+		InteractQueryParams.AddIgnoredActor(HitActor);
+		
+		FHitResult	GroundHit;
+		const bool	bGroundHit = World->LineTraceSingleByChannel(
+			GroundHit, TraceStart, TraceEnd,
+			ECC_Visibility, InteractQueryParams);
+		if (bGroundHit)
+		{
+			FVector	TargetLocation = GroundHit.ImpactPoint + FVector(0.f, 0.f, 90.f);
+
+			this->PendingCommand = FCloneCommandType::MakeInteract(HitActor, TargetLocation);
+			this->bHasValidTarget = true;
+		}
+		if (IsValid(this->DestinationEffect.Get()))
+		{
+			this->DestinationEffect->SetVisibility(false);
+		}
+		return;
+	}
 	FHitResult	GroundHit;
 	const bool	bGroundHit = World->LineTraceSingleByChannel(
 		GroundHit, CursorOnPlane, CursorOnPlane - FVector(0.0, 0.0, 10000.0),
 		ECC_Visibility, QueryParams);
+
 	if (!bGroundHit)
 	{
+		if (IsValid(this->DestinationEffect.Get()))
+		{
+			this->DestinationEffect->SetVisibility(false);
+		}
 		return ;
 	}
 	if (GroundHit.bStartPenetrating)
 	{
+		if (IsValid(this->DestinationEffect.Get()))
+		{
+			this->DestinationEffect->SetVisibility(false);
+		}
 		return ;
 	}
-	AActor* HitActor = CursorHit.GetActor();
 	FVector	TargetLocation = GroundHit.ImpactPoint + FVector(0.f, 0.f, 90.f);
-	if (IsValid(HitActor) && HitActor->Implements<UInteractable>())
+	if (IsValid(this->DestinationEffect.Get()))
 	{
-		this->PendingCommand = FCloneCommandType::MakeInteract(HitActor, TargetLocation);
-		this->bHasValidTarget = true;
-		return;
+		const FVector	IndicatorLocation =
+			GroundHit.ImpactPoint + GroundHit.ImpactNormal * 2.f;
+
+		this->DestinationEffect->SetWorldLocation(IndicatorLocation);
+		this->DestinationEffect->SetVisibility(true);
 	}
 	this->PendingCommand = FCloneCommandType::MakeMove(TargetLocation);
 	this->bHasValidTarget = true;
@@ -260,6 +315,11 @@ void UAbilityTask_WaitCloneTargeting::CleanupTargeting()
 		{
 			UGameplayStatics::SetGlobalTimeDilation(this, this->PreviousTimeDilation);
 		}
+	}
+	if (IsValid(this->DestinationEffect.Get()))
+	{
+		this->DestinationEffect->DestroyComponent();
+		this->DestinationEffect = nullptr;
 	}
 	this->bHasValidTarget = false;
 	this->PendingCommand = FCloneCommandType{};

@@ -38,7 +38,7 @@ void ACloneCharacter::Tick(float DeltaTime)
 	if (!this->bIsArrived)
 	{
 		FVector	LocationDiff = GetActorLocation() - this->TargetLocation;
-		if (LocationDiff.SquaredLength() > 10.f)
+		if (LocationDiff.SquaredLength() > this->TargetLocationMargin)
 		{
 			AddMovementInput(this->WalkDir, 1.f, true);
 		}
