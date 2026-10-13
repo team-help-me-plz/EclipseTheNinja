@@ -6,13 +6,13 @@
 #include "Interface/Activatable.h"
 
 #include "Engine/TargetPoint.h"
-#include "Engine/StaticMeshActor.h"
+#include "GameFramework/Actor.h"
 #include "MovingPlatform.generated.h"
 
 class UStaticMeshComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API AMovingPlatform : public AStaticMeshActor, public IActivatable
+class ECLIPSETHENINJA_API AMovingPlatform : public AActor, public IActivatable
 {
 	GENERATED_BODY()
 
@@ -28,7 +28,7 @@ protected:
 
 	void	PlatformMovement(float DeltaTime);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Movement")

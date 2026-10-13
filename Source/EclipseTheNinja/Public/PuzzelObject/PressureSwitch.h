@@ -6,14 +6,14 @@
 #include "Interface/Interactable.h"
 #include "Interface/Activatable.h"
 
-#include "Engine/StaticMeshActor.h"
+#include "GameFramework/Actor.h"
 #include "PressureSwitch.generated.h"
 
 class UBoxComponent;
 class UStaticMeshComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API APressureSwitch : public AStaticMeshActor, public IInteractable
+class ECLIPSETHENINJA_API APressureSwitch : public AActor, public IInteractable
 {
 	GENERATED_BODY()
 
@@ -46,7 +46,7 @@ protected:
 		UPrimitiveComponent* OtherComp,
 		int32 OtherBodyIndex);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
