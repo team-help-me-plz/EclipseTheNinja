@@ -20,7 +20,9 @@ void AMovingPlatform::BeginPlay()
 {
 	Super::BeginPlay();
 
-	this->ElapsedTime = 0.0;
+	//this->ElapsedTime = 0.0;
+	this->EndPointFloat = static_cast<float>(this->TargetPoint.Num());
+	this->CycleLength = EndPointFloat * 2.0f;
 }
 
 void AMovingPlatform::PlatformMovement(float DeltaTime)
@@ -29,41 +31,34 @@ void AMovingPlatform::PlatformMovement(float DeltaTime)
 	{
 		return ;
 	}
+	if (!this->bIsMovement && !this->bIsResetable)
+	{
+		return ;
+	}
+	const float	Step = DeltaTime / this->TargetPointTravelTime;
 	if (this->bIsMovement)
 	{
-		this->ElapsedTime += DeltaTime;
-		if (GetActorLocation().Equals(this->TargetPoint[this->NextTargetPoint]->GetActorLocation()))
-		{
-			if (this->bIsMoveForward)
-			{
-				this->CurrentTargetPoint++;
-			}
-			else
-			{
-				this->CurrentTargetPoint--;
-			}
-			if (this->NextTargetPoint == 0 || this->NextTargetPoint == this->TargetPoint.Num() - 1)
-			{
-				this->bIsMoveForward = !this->bIsMoveForward;
-			}
-			if (this->bIsMoveForward)
-			{
-				this->NextTargetPoint++;
-			}
-			else
-			{
-				this->NextTargetPoint--;
-			}
-			this->ElapsedTime = 0.0;
-		}
-		const double	Alpha = FMath::Clamp(this->ElapsedTime / this->TargetPointTravelTime, 0.0, 1.0);
-		const FVector	NewLocation = FMath::Lerp(
-			this->TargetPoint[this->CurrentTargetPoint]->GetActorLocation(),
-			this->TargetPoint[this->NextTargetPoint]->GetActorLocation(),
-			Alpha
-		);
-		SetActorLocation(NewLocation);
+		float	Phase = this->bIsMoveForward
+			? this->RouteProgress
+			: this->CycleLength - this->RouteProgress;
+		Phase = FMath::Fmod(Phase + Step, CycleLength);
+		this->bIsMoveForward = Phase < this->EndPointFloat;
+		this->RouteProgress = this->bIsMoveForward
+			? Phase
+			: this->CycleLength - Phase;
 	}
+	else if (this->bIsResetable)
+	{
+		this->RouteProgress = FMath::Max(this->RouteProgress - Step, 0.0);
+		this->bIsMoveForward = true;
+	}
+	const int32		SegmentIndex = FMath::Min(FMath::FloorToInt(this->RouteProgress), this->TargetPoint.Num() - 2);
+	const double	Alpha = this->RouteProgress - SegmentIndex;
+
+	SetActorLocation(FMath::Lerp(
+		this->TargetPoint[SegmentIndex]->GetActorLocation(),
+		this->TargetPoint[SegmentIndex + 1]->GetActorLocation(),
+		Alpha));
 }
 
 void AMovingPlatform::Tick(float DeltaTime)

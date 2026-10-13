@@ -35,18 +35,25 @@ protected:
 	TArray<ATargetPoint*>	TargetPoint;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.1"))
-	double					TargetPointTravelTime;
+	float					TargetPointTravelTime;
 
+	// 트리거로 움직임을 제어할 수 있는지 설정하는 값
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|State")
 	bool	bIsActivatable = false;
 
+	// 움직임을 제어하는 값
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|State")
 	bool	bIsMovement = true;
 
-private:
-	UPROPERTY(Transient)
-	double	ElapsedTime = 0.0;
+	// bIsMovement가 false일 때 원위치로 돌아갈지 설정하는 값
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|State")
+	bool	bIsResetable = true;
 
+private:
+	float	RouteProgress = 0.0;
+	float	EndPointFloat = 0.0;
+	float	CycleLength = 0.0;
+	
 	int32	CurrentTargetPoint = 0;
 	int32	NextTargetPoint = 1;
 	bool	bIsMoveForward = true;
