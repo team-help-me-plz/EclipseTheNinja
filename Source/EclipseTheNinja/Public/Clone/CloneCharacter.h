@@ -11,7 +11,7 @@
 #include "CloneCharacter.generated.h"
 
 UCLASS()
-class ECLIPSETHENINJA_API ACloneCharacter : public ACharacter, public IInteractor
+class ECLIPSETHENINJA_API ACloneCharacter : public ACharacter, public IInteractor, public IInteractable
 {
 	GENERATED_BODY()
 
@@ -32,15 +32,29 @@ public:
 
 	void	SetCommand(const FCloneCommandType& InCommand);
 
+	virtual void	Interact_Implementation(AActor* InActor) override;
+	virtual void	ShowInteractionIndicator_Implementation() override;
+	virtual void	HideInteractionIndicator_Implementation() override;
+	virtual bool	bIsInteractReady_Implementation() override;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Margin")
 	float	TargetLocationMargin = 49.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Margin")
+	FVector	InteractVelocity = FVector(0.f, 0.f, 500.f);
+
 private:
+	void	ResetInteractionCooldown();
+
 	bool	bIsArrived = false;
 	FVector	WalkDir = FVector::ZeroVector;
 
 	TObjectPtr<AActor>	TargetActor = nullptr;
 	FVector				TargetLocation = FVector::ZeroVector;
 	ECloneCommandType	CommandType;
+
+	FTimerHandle	InteractionCooldownTimer;
+	bool			bIsInteractCooldown = false;
+	float			InteractInterval = 0.5f;
 };
