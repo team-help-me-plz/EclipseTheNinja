@@ -127,7 +127,7 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 				const float CameraDepth = FMath::Abs(GetCameraLocation().Y - CurrentActorLocation.Y);
 
 				// 전체 FOV의 40프로에 해당하는 길이를 이동시킴
-				const float HalfWidth = CameraDepth * FMath::Tan(FMath::DegreesToRadians(OutVT.POV.FOV * 0.4f));
+				const float HalfWidth = CameraDepth * FMath::Tan(FMath::DegreesToRadians(OutVT.POV.FOV * CameraMoveDistance));
 				// 높이는 비율에 맞춰서 계산
 				const float HalfHeight = HalfWidth / AspectRatio;
 
