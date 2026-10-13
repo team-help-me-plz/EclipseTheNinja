@@ -37,8 +37,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TObjectPtr<USphereComponent>	InteractSphere = nullptr;
+	//UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	//TObjectPtr<USphereComponent>	InteractSphere = nullptr;
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|Target")
 	TObjectPtr<AActor>			TargetActor = nullptr;
@@ -47,9 +47,9 @@ protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|State")
 	bool	bIsReinteractable = false;
 	
-	// 디폴트 맵의 Y축 중앙이 300임을 이용(700.f~1300.f)해 500.f로 일단 설정함
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Radius")
-	float	InteractRadius = 500.f;
+	//// 디폴트 맵의 Y축 중앙이 300임을 이용(700.f~1300.f)해 500.f로 일단 설정함
+	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Radius")
+	//float	InteractRadius = 500.f;
 
 private:
 	void	ResetInteractionCooldown();
