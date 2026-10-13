@@ -49,6 +49,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> BasicAttackAction;
 
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> AimAction;
+
+
 	/** Impulse to manually push physics objects while we're in midair */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Jump")
 	float JumpPushImpulse = 600.0f;
@@ -170,6 +174,15 @@ public:
 	/** Handles interact inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoInteract();
+
+
+	// 카메라 이동 처리
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	virtual void DoCameraMoveStart();
+
+	// 카메라 이동 처리
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	virtual void DoCameraMoveEnd();
 
 protected:
 
