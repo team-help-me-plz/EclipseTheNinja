@@ -1,7 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "PuzzelObject/PressureSwitch.h"
-#include "PuzzelObject/SwitchDoor.h"
 #include "Interface/Interactor.h"
 
 #include "Components/BoxComponent.h"
