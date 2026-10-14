@@ -59,6 +59,10 @@ protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|State")
 	bool	bIsUnpressure = false;
 
+	// 여러번 Interact 할 수 있는 액터인가
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|State")
+	bool	bIsReinteractable = false;
+
 private:
 	// Interact 함수가 한 번이라도 불렸는가
 	bool	bIsInteracted = false;
