@@ -24,6 +24,13 @@ UAbilitySystemComponent* ACloneTechTestCharacter::GetAbilitySystemComponent() co
 	return (this->AbilitySystemComponent);
 }
 
+void ACloneTechTestCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	this->InteractBox->SetAbsolute(false, true, true);
+}
+
 void ACloneTechTestCharacter::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
