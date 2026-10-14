@@ -64,16 +64,12 @@ protected:
 	// 체력 어트리뷰트가 변경되었을 때 호출될 함수
 	void OnHealthChanged(const FOnAttributeChangeData& Data);
 
-	// 피격 몽타주 재생용 함수
-	UFUNCTION(BlueprintCallable, Category = "Combat|Hit Reaction")
-	void PlayHitReaction();
+	virtual void PlayHitReaction() override;
+
 
 	// 사망 처리용 함수
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
 	void Die();
-
-	// 몽타주 블랜드아웃용 함수
-	void OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted);
 
 	// 상태기반 로직 처리용 함수
 	void UpdateBehavior(float DeltaTime);
@@ -171,10 +167,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Death", meta = (ClampMin = "0.0", Units = "s"))
 	float DeathDespawnDelay = 3.0f;
 
-	UPROPERTY(Transient, BlueprintReadOnly, Category = "Combat|Death")
-	bool bIsDead = false;
-
-	FDelegateHandle HealthChangedDelegateHandle;
 
 
 	//머리위에 표시할 위젯

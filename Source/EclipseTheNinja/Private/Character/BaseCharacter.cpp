@@ -3,6 +3,7 @@
 #include "GAS/Ability/GABaseAttack.h"
 #include "GAS/StatAttributeSet.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GAS/StatAttributeSet.h"
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -54,6 +55,31 @@ void ABaseCharacter::GiveBasicAttackAbility()
     if (BasicAttackAbilityClass && !ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass))
     {
         ASC->GiveAbility(FGameplayAbilitySpec(BasicAttackAbilityClass, 1, INDEX_NONE, this));
+    }
+}
+
+void ABaseCharacter::PlayHitReaction()
+{
+    // 이미 죽었거나, 몽타주가 없으면 종료
+    if (bIsDead || !HitReactionMontage)
+    {
+        return;
+    }
+
+    // 공격 쿨타임에 몽타주 재생 시간이 추가되도록 조정
+    if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+    {
+        // Restart on a new hit. Death is checked first and can replace this montage.
+        MonategeDuration = AnimInstance->Montage_Play(HitReactionMontage, 1.0f, EMontagePlayReturnType::Duration);
+    }
+}
+
+void ABaseCharacter::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted)
+{
+    if (bIsDead && Montage == DeathMontage)
+    {
+        // Hold the death pose instead of blending back to the locomotion graph.
+        GetMesh()->bPauseAnims = true;
     }
 }
 

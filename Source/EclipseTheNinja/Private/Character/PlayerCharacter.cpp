@@ -16,6 +16,10 @@
 #include "AbilitySystemComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Character/PlayerCharacterController.h"
+#include "Character/PlayerCharacterAnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "InputCoreTypes.h"
+#include "GAS/StatAttributeSet.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -60,13 +64,131 @@ void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
+
+	// 체력 변화 델리게이트 바인딩
+	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
+		.AddUObject(this, &APlayerCharacter::OnHealthChanged);
 }
 
 void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
+	SetCursorFacingActive(false);
 	// clear the wall jump timer
 	GetWorld()->GetTimerManager().ClearTimer(WallJumpTimer);
 	Super::EndPlay(EndPlayReason);
+}
+
+void APlayerCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	UpdateCursorTarget();
+	UpdateCursorFacing(DeltaSeconds);
+}
+
+void APlayerCharacter::UpdateCursorTarget()
+{
+	bHasCursorTarget = false;
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	// 우클릭을 놓으면 몸 회전을 끄고 고개는 정면으로 복귀한다.
+	if (!PlayerController || !PlayerController->IsLocalPlayerController()
+		|| !PlayerController->IsInputKeyDown(EKeys::RightMouseButton))
+	{
+		return;
+	}
+
+	FVector RayOrigin;
+	FVector RayDirection;
+	if (!PlayerController->DeprojectMousePositionToWorld(RayOrigin, RayDirection)
+		|| FMath::IsNearlyZero(RayDirection.Y))
+	{
+		return;
+	}
+
+	// 커서 광선과 캐릭터가 서 있는 XZ 평면의 교점을 구한다.
+	const float Distance = (GetActorLocation().Y - RayOrigin.Y) / RayDirection.Y;
+	if (Distance < 0.0f)
+	{
+		return;
+	}
+
+	CursorWorldLocation = RayOrigin + RayDirection * Distance;
+	bHasCursorTarget = true;
+}
+
+void APlayerCharacter::UpdateCursorFacing(float DeltaSeconds)
+{
+	const bool bShouldFaceCursor = bFaceCursor && bHasCursorTarget;
+	SetCursorFacingActive(bShouldFaceCursor);
+	UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance());
+	if (!bShouldFaceCursor || bHasWallJumped)
+	{
+		if (Animation)
+		{
+			Animation->StopTurnInPlace();
+		}
+		return;
+	}
+
+	const float HorizontalDistance = CursorWorldLocation.X - GetActorLocation().X;
+	if (FMath::Abs(HorizontalDistance) > CursorFacingDeadZone)
+	{
+		CursorFacingYaw = HorizontalDistance > 0.0f ? 0.0f : 180.0f;
+	}
+
+	const UCharacterMovementComponent* Movement = GetCharacterMovement();
+	const bool bCanContinueTurn = Movement->IsMovingOnGround()
+		&& Movement->GetCurrentAcceleration().IsNearlyZero();
+	const bool bCanTurnInPlace = bCanContinueTurn && GetVelocity().SizeSquared2D() < FMath::Square(20.0f);
+	if (Animation && Animation->IsTurningInPlace())
+	{
+		if (bCanContinueTurn)
+		{
+			Animation->UpdateTurnInPlaceTarget(CursorFacingYaw);
+			return; // 턴 클립이 회전하므로 코드 회전은 적용하지 않는다.
+		}
+		Animation->StopTurnInPlace();
+	}
+
+	const float RemainingYaw = FMath::Abs(FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, CursorFacingYaw));
+	if (Animation && bCanTurnInPlace && RemainingYaw >= 175.0f
+		&& Animation->TryStartTurnInPlace(CursorFacingYaw))
+	{
+		return;
+	}
+
+	// 중심 여유 구간에 들어와도 마지막 방향까지 부드럽게 회전한다.
+	const FRotator TargetRotation(0.0f, CursorFacingYaw, 0.0f);
+	const FRotator NewRotation = FMath::RInterpConstantTo(
+		GetActorRotation(), TargetRotation, DeltaSeconds, FMath::Max(0.0f, CursorBodyTurnSpeed));
+	SetActorRotation(NewRotation);
+}
+
+void APlayerCharacter::SetCursorFacingActive(bool bActive)
+{
+	if (bCursorFacingActive == bActive)
+	{
+		return;
+	}
+
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	if (bActive)
+	{
+		CursorFacingYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
+		// 커서 회전이 이동 및 컨트롤러 회전과 충돌하지 않게 한다.
+		bSavedOrientRotationToMovement = Movement->bOrientRotationToMovement;
+		bSavedUseControllerDesiredRotation = Movement->bUseControllerDesiredRotation;
+		bSavedUseControllerRotationYaw = bUseControllerRotationYaw;
+		Movement->bOrientRotationToMovement = false;
+		Movement->bUseControllerDesiredRotation = false;
+		bUseControllerRotationYaw = false;
+	}
+	else
+	{
+		Movement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
+		Movement->bUseControllerDesiredRotation = bSavedUseControllerDesiredRotation;
+		bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+	}
+	bCursorFacingActive = bActive;
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
@@ -76,7 +198,7 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &ABaseCharacter::DoBasicAttack);
+		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
 
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoJumpStart);
@@ -161,6 +283,8 @@ void APlayerCharacter::PawnClientRestart()
 
 void APlayerCharacter::UnPossessed()
 {
+	bHasCursorTarget = false;
+	SetCursorFacingActive(false);
 	ASC->CancelAllAbilities();
 	Super::UnPossessed();
 }
@@ -183,6 +307,77 @@ void APlayerCharacter::DropReleased(const FInputActionValue& Value)
 {
 	// reset the input
 	DoDrop(0.0f);
+}
+
+void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
+{
+	// 체력이 0이면 사망하고, 살아 있는 상태의 체력 감소는 피격으로 처리한다.
+	if (bIsDead)
+	{
+		return;
+	}
+	if (Data.NewValue <= 0.0f)
+	{
+		Die();
+		return;
+	}
+	if (Data.NewValue < Data.OldValue)
+	{
+		PlayHitReaction();
+	}
+}
+
+void APlayerCharacter::Die()
+{
+	// 사망은 한 번만 처리하고 공격, AI, 이동과 충돌을 정리한다.
+	if (bIsDead)
+	{
+		return;
+	}
+
+	//사망 처리
+	bIsDead = true;
+
+	// 정지 후 움직이지 못하게 세팅
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+
+	// 사망 몽타주 재생
+	float MontageDuration = 0.0f;
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		if (DeathMontage)
+		{
+			MontageDuration = AnimInstance->Montage_Play(DeathMontage, 1.0f, EMontagePlayReturnType::Duration);
+			if (MontageDuration > 0.0f)
+			{
+				FOnMontageBlendingOutStarted BlendOutDelegate;
+				BlendOutDelegate.BindUObject(this, &APlayerCharacter::OnDeathMontageBlendingOut);
+				AnimInstance->Montage_SetBlendingOutDelegate(BlendOutDelegate, DeathMontage);
+			}
+		}
+	}
+
+	if (MontageDuration <= 0.0f)
+	{
+		// A missing/incompatible montage must not leave an immortal corpse.
+		GetMesh()->bPauseAnims = true;
+		UE_LOG(LogTemp, Warning, TEXT("%s: Death montage was not set or could not be played."), *GetName());
+	}
+	// SetLifeSpan(0) cancels destruction, so keep a small positive minimum.
+	SetLifeSpan(FMath::Max(0.01f, MontageDuration));
+}
+
+void APlayerCharacter::DoBasicAttack()
+{
+	// 우클릭 중에는 새 공격과 콤보 입력을 모두 막는다.
+	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (PlayerController && PlayerController->IsInputKeyDown(EKeys::RightMouseButton))
+	{
+		return;
+	}
+
+	Super::DoBasicAttack();
 }
 
 void APlayerCharacter::DoMove(float Forward)

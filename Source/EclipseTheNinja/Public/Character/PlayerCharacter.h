@@ -94,7 +94,6 @@ protected:
 
 	TWeakObjectPtr<UEnhancedInputLocalPlayerSubsystem> AttackInputSubsystem;
 
-
 	/** Wall jump lockout timer */
 	FTimerHandle WallJumpTimer;
 
@@ -117,9 +116,41 @@ public:
 	
 	/** Constructor */
 	APlayerCharacter();
+	virtual void DoBasicAttack() override;
+
+	bool HasCursorTarget() const { return bHasCursorTarget; }
+	bool IsFacingCursor() const { return bCursorFacingActive; }
+	const FVector& GetCursorWorldLocation() const { return CursorWorldLocation; }
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cursor Look")
+	bool bFaceCursor = true;
+
+	// 중심 근처에서 방향이 계속 뒤집히는 것을 막는다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cursor Look", meta = (ClampMin = "0", Units = "cm"))
+	float CursorFacingDeadZone = 15.0f;
+
+	// 초당 회전 각도. 360이면 180도 회전에 약 0.5초가 걸린다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cursor Look", meta = (ClampMin = "1", Units = "deg/s"))
+	float CursorBodyTurnSpeed = 360.0f;
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+private:
+	void UpdateCursorTarget();
+	void UpdateCursorFacing(float DeltaSeconds);
+	void SetCursorFacingActive(bool bActive);
+
+	FVector CursorWorldLocation = FVector::ZeroVector;
+	bool bHasCursorTarget = false;
+	bool bCursorFacingActive = false;
+	float CursorFacingYaw = 0.0f;
+	bool bSavedOrientRotationToMovement = false;
+	bool bSavedUseControllerDesiredRotation = false;
+	bool bSavedUseControllerRotationYaw = false;
+
+protected:
 
 	/** Gameplay cleanup */
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
@@ -152,6 +183,13 @@ protected:
 
 	/** Called for drop from platform input release */
 	void DropReleased(const FInputActionValue& Value);
+
+	// 체력 어트리뷰트가 변경되었을 때 호출될 함수
+	void OnHealthChanged(const FOnAttributeChangeData& Data);
+
+	// 사망 처리용 함수
+	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
+	void Die();
 
 public:
 
