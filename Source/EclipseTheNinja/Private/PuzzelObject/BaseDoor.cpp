@@ -1,44 +1,51 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-#include "PuzzelObject/SwitchDoor.h"
+#include "PuzzelObject/BaseDoor.h"
 #include "Interface/Interactor.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "UObject/ConstructorHelpers.h"
 
-ASwitchDoor::ASwitchDoor()
+ABaseDoor::ABaseDoor()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
 
-	this->Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	this->Mesh->SetMobility(EComponentMobility::Movable);
-	SetRootComponent(this->Mesh);
+	this->RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
+	SetRootComponent(this->RootComponent);
+
+	this->RightDoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RightDoorMesh"));
+	this->RightDoorMesh->SetMobility(EComponentMobility::Movable);
+	this->RightDoorMesh->SetupAttachment(GetRootComponent());
+
+	this->LeftDoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LeftDoorMesh"));
+	this->LeftDoorMesh->SetMobility(EComponentMobility::Movable);
+	this->LeftDoorMesh->SetupAttachment(GetRootComponent());
 }
 
-void ASwitchDoor::BeginPlay()
+void ABaseDoor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	this->CloseLocation = GetActorLocation();
-	this->OpenLocation = GetActorLocation() + this->OpenOffset;
+	//this->CloseLocation = GetActorLocation();
+	//this->OpenLocation = GetActorLocation() + this->OpenOffset;
 	this->OpenAlpha = 0.0;
 }
 
-void ASwitchDoor::Tick(float DeltaTime)
+void ABaseDoor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
 	this->DoorMovement(DeltaTime);
 }
 
-void ASwitchDoor::ToggleActivate_Implementation()
+void ABaseDoor::ToggleActivate_Implementation()
 {
 	this->bIsOpen = !this->bIsOpen;
 }
 
-void ASwitchDoor::Interact_Implementation(AActor* InActor)
+void ABaseDoor::Interact_Implementation(AActor* InActor)
 {
 	if (!this->bIsInteractable || this->bIsInteractCooldown)
 	{
@@ -52,14 +59,14 @@ void ASwitchDoor::Interact_Implementation(AActor* InActor)
 	GetWorldTimerManager().SetTimer(
 		InteractionCooldownTimer,
 		this,
-		&ASwitchDoor::ResetInteractionCooldown,
+		&ABaseDoor::ResetInteractionCooldown,
 		this->InteractInterval,
 		false
 	);
 	this->bIsOpen = !this->bIsOpen;
 }
 
-void ASwitchDoor::ShowInteractionIndicator_Implementation()
+void ABaseDoor::ShowInteractionIndicator_Implementation()
 {
 	if (!this->bIsInteractable)
 	{
@@ -67,7 +74,7 @@ void ASwitchDoor::ShowInteractionIndicator_Implementation()
 	}
 }
 
-void ASwitchDoor::HideInteractionIndicator_Implementation()
+void ABaseDoor::HideInteractionIndicator_Implementation()
 {
 	if (!this->bIsInteractable)
 	{
@@ -75,12 +82,12 @@ void ASwitchDoor::HideInteractionIndicator_Implementation()
 	}
 }
 
-bool ASwitchDoor::bIsInteractReady_Implementation()
+bool ABaseDoor::bIsInteractReady_Implementation()
 {
 	return (this->bIsInteractable);
 }
 
-void ASwitchDoor::DoorMovement(float DeltaTime)
+void ABaseDoor::DoorMovement(float DeltaTime)
 {
 	const double SafeMoveTime = FMath::Max(static_cast<double>(this->DoorMoveTime), 0.01);
 
@@ -91,17 +98,9 @@ void ASwitchDoor::DoorMovement(float DeltaTime)
 		this->OpenAlpha + Direction * DeltaTime / SafeMoveTime,
 		0.0,
 		1.0);
-
-	// 양 끝 위치는 항상 고정
-	const FVector NewLocation = FMath::Lerp(
-		this->CloseLocation,
-		this->OpenLocation,
-		this->OpenAlpha);
-
-	SetActorLocation(NewLocation);
 }
 
-void	ASwitchDoor::ResetInteractionCooldown()
+void	ABaseDoor::ResetInteractionCooldown()
 {
 	this->bIsInteractCooldown = false;
 }

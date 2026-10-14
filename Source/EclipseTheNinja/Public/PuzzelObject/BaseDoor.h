@@ -7,17 +7,17 @@
 #include "Interface/Interactable.h"
 
 #include "GameFramework/Actor.h"
-#include "SwitchDoor.generated.h"
+#include "BaseDoor.generated.h"
 
 class UStaticMeshComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API ASwitchDoor : public AActor, public IActivatable, public IInteractable
+class ECLIPSETHENINJA_API ABaseDoor : public AActor, public IActivatable, public IInteractable
 {
 	GENERATED_BODY()
 
 public:
-	ASwitchDoor();
+	ABaseDoor();
 
 	virtual void	Tick(float DeltaTime) override;
 
@@ -28,16 +28,19 @@ public:
 	virtual void	HideInteractionIndicator_Implementation() override;
 	virtual bool	bIsInteractReady_Implementation() override;
 
-	void	DoorMovement(float DeltaTime);
+	virtual void	DoorMovement(float DeltaTime);
 
 protected:
 	virtual void	BeginPlay() override;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<USceneComponent>			RootScene = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-	FVector	OpenOffset = FVector(0.0f, 0.0f, 280.0f);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<UStaticMeshComponent>	RightDoorMesh = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<UStaticMeshComponent>	LeftDoorMesh = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.01"))
 	float	DoorMoveTime = 3.0;
@@ -45,23 +48,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Interactable", meta = (ClampMin = "0.01"))
 	bool	bIsInteractable = true;
 
-private:
-	void	ResetInteractionCooldown();
-
-	UPROPERTY(Transient)
-	double	ElapsedTime = 0.0;
-
-	UPROPERTY(Transient)
-	FVector	CloseLocation = FVector::ZeroVector;
-
-	UPROPERTY(Transient)
-	FVector	OpenLocation = FVector::ZeroVector;
-
 	UPROPERTY(Transient)
 	double	OpenAlpha = 0.0;
 
 	UPROPERTY(Transient)
 	bool	bIsOpen = false;
+
+private:
+	void	ResetInteractionCooldown();
+
 
 	FTimerHandle	InteractionCooldownTimer;
 	bool			bIsInteractCooldown = false;
