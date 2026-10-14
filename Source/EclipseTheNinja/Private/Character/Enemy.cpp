@@ -91,22 +91,12 @@ void AEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 
 void AEnemy::PlayHitReaction()
 {
-	// 이미 죽었거나, 몽타주가 없으면 종료
-	if (bIsDead || !HitReactionMontage)
-	{
-		return;
-	}
+	Super::PlayHitReaction();
 
-	// 공격 쿨타임에 몽타주 재생 시간이 추가되도록 조정
-	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	if (MonategeDuration > 0.0f)
 	{
-		// Restart on a new hit. Death is checked first and can replace this montage.
-		const float Duration = AnimInstance->Montage_Play(HitReactionMontage, 1.0f, EMontagePlayReturnType::Duration);
-		if (Duration > 0.0f)
-		{
-			StopHorizontalMovement();
-			NextAttackTime = FMath::Max(NextAttackTime, GetWorld()->GetTimeSeconds() + Duration);
-		}
+		StopHorizontalMovement();
+		NextAttackTime = FMath::Max(NextAttackTime, GetWorld()->GetTimeSeconds() + MonategeDuration);
 	}
 }
 
@@ -170,15 +160,6 @@ void AEnemy::Die()
 	}
 	// SetLifeSpan(0) cancels destruction, so keep a small positive minimum.
 	SetLifeSpan(FMath::Max(0.01f, MontageDuration + FMath::Max(0.0f, DeathDespawnDelay)));
-}
-
-void AEnemy::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted)
-{
-	if (bIsDead && Montage == DeathMontage)
-	{
-		// Hold the death pose instead of blending back to the locomotion graph.
-		GetMesh()->bPauseAnims = true;
-	}
 }
 
 // Called every frame

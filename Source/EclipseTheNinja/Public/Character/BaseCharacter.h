@@ -23,7 +23,7 @@ public:
     UAnimMontage* GetBasicAttackMontage() const { return BasicAttackMontage; }
 
     UFUNCTION(BlueprintCallable, Category = "Combat")
-    void DoBasicAttack();
+    virtual void DoBasicAttack();
 
 protected:
     virtual void BeginPlay() override;
@@ -32,11 +32,21 @@ protected:
     void InitializeAbilitySystem();
     void GiveBasicAttackAbility();
 
+    // 피격 몽타주 재생용 함수
+    UFUNCTION(BlueprintCallable, Category = "Combat|Hit Reaction")
+    virtual void PlayHitReaction();
+
+    // 몽타주 블랜드아웃용 함수
+    void OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted);
+
 private:
     UAnimMontage* GetBasicAttackMontage(const ACharacter* Character) const;
 
 
 protected:
+    UPROPERTY(Transient, BlueprintReadOnly, Category = "Combat|Death")
+    bool bIsDead = false;
+
     // 기존 BP 설정을 유지하도록 컴포넌트와 프로퍼티 이름을 보존한다.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
     TObjectPtr<UAbilitySystemComponent> ASC;
@@ -58,5 +68,9 @@ protected:
     /** Anim BP와 같은 스켈레톤 및 Slot을 사용하는 사망 몽타주. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Death")
     TObjectPtr<UAnimMontage> DeathMontage;
+
+    FDelegateHandle HealthChangedDelegateHandle;
+
+    float MonategeDuration = 0.f;
 
 };

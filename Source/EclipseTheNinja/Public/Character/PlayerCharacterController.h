@@ -41,7 +41,7 @@ protected:
 
 	/** Character class to respawn when the possessed pawn is destroyed */
 	UPROPERTY(EditAnywhere, Category = "Respawn")
-	TSubclassOf<ASideScrollingCharacter> CharacterClass;
+	TSubclassOf<ACharacter> CharacterClass;
 
 
 public:

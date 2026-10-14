@@ -6,7 +6,7 @@
 #include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerStart.h"
-#include "SideScrollingCharacter.h"
+#include "Character/PlayerCharacter.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "Blueprint/UserWidget.h"
@@ -91,8 +91,9 @@ void APlayerCharacterController::OnPawnDestroyed(AActor * DestroyedActor)
 		// spawn a character at the player start
 		const FTransform SpawnTransform = ActorList[0]->GetActorTransform();
 
-		if (ASideScrollingCharacter* RespawnedCharacter = GetWorld()->SpawnActor<ASideScrollingCharacter>(CharacterClass, SpawnTransform))
+		if (APlayerCharacter* RespawnedCharacter = GetWorld()->SpawnActor<APlayerCharacter>(CharacterClass, SpawnTransform))
 		{
+			UE_LOG(LogTemp, Display, TEXT("RespawnTest"));
 			// possess the character
 			Possess(RespawnedCharacter);
 		}

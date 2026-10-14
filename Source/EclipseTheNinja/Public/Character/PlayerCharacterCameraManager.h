@@ -71,6 +71,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Side Scrolling Camera", meta = (ClampMin = 0, ClampMax = 10))
 	float CameraReturnSpeed = 2.f;
 
+	// 1이면 현재 화면의 가로 전체만큼 이동
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling Camera", meta = (ClampMin = 0, ClampMax = 1))
+	float CameraMoveDistance = .4f;
+
 
 protected:
 	virtual void BeginPlay() override;
