@@ -53,7 +53,7 @@ void APressureSwitch::PostInitializeComponents()
 void APressureSwitch::OnPressureBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	// 한 번만 눌리는 발판이고 이미 눌렸을 때 아무것도 하지 않는다
-	if (!this->bIsUnpressure && this->bIsInteracted)
+	if (!this->bIsUnpressure && !this->bIsReinteractable && this->bIsInteracted)
 	{
 		return ;
 	}
