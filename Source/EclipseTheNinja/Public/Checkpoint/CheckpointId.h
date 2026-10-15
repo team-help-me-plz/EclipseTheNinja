@@ -20,4 +20,8 @@ enum class ECheckpointId : uint8
     CheckpointTest_Trap,        // 화살 함정 + 낙사 구덩이
     CheckpointTest_Clone,       // 분신으로 발판을 누르고 있어야 열리는 문
     CheckpointTest_Final,       // 상호작용 스위치 + 힌지 문 + 상자
+
+    // Lvl_CheckpointTest_Enemy
+    CheckpointEnemy_Start,      // 첫 번째 몬스터 구간
+    CheckpointEnemy_Second,     // 두 번째 몬스터 구간
 };

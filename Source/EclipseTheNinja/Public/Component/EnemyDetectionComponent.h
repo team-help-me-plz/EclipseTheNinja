@@ -63,6 +63,12 @@ public:
     UFUNCTION(BlueprintCallable, Category="AI|Detection")
     void NotifyDamaged(AActor* DamageInstigator);
 
+    /** 체크포인트 리스폰용. 경계 게이지/단계와 마지막 목격 정보를 초기화하고, 사망 시 꺼진 틱과 UI를 되살린다. */
+    void ResetDetection();
+
+    /** 현재 감지 상태를 Blackboard에 다시 기록한다. (BT 재시작 시 사용) */
+    void RefreshBlackboard() { UpdateBlackboard(); }
+
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

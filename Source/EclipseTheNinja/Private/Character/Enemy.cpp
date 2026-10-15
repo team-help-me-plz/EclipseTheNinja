@@ -11,6 +11,11 @@
 #include "Kismet/GameplayStatics.h"
 #include "AIController.h"
 #include "BrainComponent.h"
+#include "BehaviorTree/BehaviorTreeComponent.h"
+#include "BehaviorTree/BlackboardComponent.h"
+#include "BehaviorTree/Blackboard/BlackboardKey.h"
+#include "Checkpoint/CheckpointBoundComponent.h"
+#include "TimerManager.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Components/CapsuleComponent.h"
@@ -36,6 +41,8 @@ AEnemy::AEnemy()
 	OverHeadWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("OverheadWidgetComp"));
 	OverHeadWidgetComponent->SetupAttachment(RootComponent);
 	OverHeadWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 }
 
 // Called when the game starts or when spawned
@@ -51,6 +58,10 @@ void AEnemy::BeginPlay()
 	PatrolMinX = BehaviorOrigin.X + FMath::Clamp(FMath::Min(PatrolMinOffset, PatrolMaxOffset), -AreaRadius, AreaRadius);
 	PatrolMaxX = BehaviorOrigin.X + FMath::Clamp(FMath::Max(PatrolMinOffset, PatrolMaxOffset), -AreaRadius, AreaRadius);
 
+	// 리스폰 시 복원할 충돌 설정 저장
+	InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
+	InitialMeshCollision = GetMesh()->GetCollisionEnabled();
+
 	// 체력 변화 델리게이트 바인딩
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
 		.AddUObject(this, &AEnemy::OnHealthChanged);
@@ -64,6 +75,8 @@ void AEnemy::BeginPlay()
 
 void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(DeathDeactivateTimer);
+
 	// ASC 바인딩 해제
 	if (ASC)
 	{
@@ -166,8 +179,105 @@ void AEnemy::Die()
 		GetMesh()->bPauseAnims = true;
 		UE_LOG(LogTemp, Warning, TEXT("%s: Death montage was not set or could not be played."), *GetName());
 	}
-	// SetLifeSpan(0) cancels destruction, so keep a small positive minimum.
-	SetLifeSpan(FMath::Max(0.01f, MontageDuration + FMath::Max(0.0f, DeathDespawnDelay)));
+	// 체크포인트 리스폰으로 되살릴 수 있도록 파괴하지 않고, 연출이 끝나면 숨긴다.
+	GetWorldTimerManager().SetTimer(DeathDeactivateTimer, this, &AEnemy::DeactivateAfterDeath,
+		FMath::Max(0.01f, MontageDuration + FMath::Max(0.0f, DeathDespawnDelay)), false);
+}
+
+void AEnemy::DeactivateAfterDeath()
+{
+	if (!bIsDead)
+	{
+		return;
+	}
+
+	// 충돌, 이동, 틱, AI는 Die()에서 이미 정지했으므로 외형만 숨긴다.
+	SetActorHiddenInGame(true);
+	GetMesh()->bPauseAnims = true;
+}
+
+void AEnemy::ResetToInitial_Implementation()
+{
+	// 트랜스폼은 CheckpointBound 컴포넌트가 이미 복원했다. 여기서는 자기 자신의 상태만 초기화한다.
+	GetWorldTimerManager().ClearTimer(DeathDeactivateTimer);
+
+	// 진행 중인 공격 어빌리티 정리 (EndAbility가 몽타주 태스크와 태그를 정리)
+	ASC->CancelAllAbilities();
+
+	// 사망/전투 상태 초기화
+	bIsDead = false;
+	BehaviorState = EEnemyBehaviorState::Patrol;
+	CombatTarget.Reset();
+	bPatrolTowardsMax = true;
+	NextAttackTime = 0.0;
+	MonategeDuration = 0.0f;
+
+	// 체력 회복. 증가 변화이므로 OnHealthChanged에서 피격/사망으로 처리되지 않고, 오버헤드 위젯은 델리게이트로 갱신된다.
+	ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), StatAttributeSet->GetMaxHealth());
+
+	// 사망 몽타주와 정지된 포즈 해제
+	GetMesh()->bPauseAnims = false;
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->StopAllMontages(0.0f);
+	}
+
+	// 충돌, 이동 복원
+	GetCapsuleComponent()->SetCollisionEnabled(InitialCapsuleCollision);
+	GetMesh()->SetCollisionEnabled(InitialMeshCollision);
+
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->StopMovementImmediately();
+	Movement->SetDefaultMovementMode();
+	Movement->SetPlaneConstraintOrigin(BehaviorOrigin);
+
+	// 외형, UI, 틱 복원
+	SetActorHiddenInGame(false);
+	OverHeadWidgetComponent->SetVisibility(true, true);
+	SetActorTickEnabled(true);
+
+	// 감지 게이지/경계 단계 초기화
+	EnemyDetectComponent->ResetDetection();
+}
+
+void AEnemy::OnAfterReset_Implementation()
+{
+	RestartAI();
+}
+
+void AEnemy::RestartAI()
+{
+	AAIController* AIController = Cast<AAIController>(GetController());
+	if (!AIController)
+	{
+		return;
+	}
+
+	AIController->StopMovement();
+
+	UBehaviorTreeComponent* BTComp = Cast<UBehaviorTreeComponent>(AIController->GetBrainComponent());
+	if (!BTComp)
+	{
+		return;
+	}
+
+	// 실행 중인 태스크를 즉시 중단 (사망 시 이미 정지된 경우에도 안전)
+	BTComp->StopTree(EBTStopMode::Forced);
+
+	// 블랙보드 값을 모두 비운 뒤 SelfActor와 감지 상태를 다시 기록한다.
+	// (같은 에셋으로 InitializeBlackboard를 호출하면 기존 값이 유지되므로 직접 비운다)
+	if (UBlackboardComponent* BB = AIController->GetBlackboardComponent())
+	{
+		for (int32 KeyIndex = 0; KeyIndex < BB->GetNumKeys(); ++KeyIndex)
+		{
+			BB->ClearValue(FBlackboard::FKey(KeyIndex));
+		}
+		BB->SetValueAsObject(FBlackboard::KeySelf, this);
+	}
+	EnemyDetectComponent->RefreshBlackboard();
+
+	// 정지된 트리는 마지막으로 실행한 에셋으로 루트부터 다시 시작한다.
+	BTComp->RestartTree();
 }
 
 // Called every frame

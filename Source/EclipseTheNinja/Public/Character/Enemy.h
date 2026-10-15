@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
+#include "Interface/CheckpointResettable.h"
 #include "Enemy.generated.h"
 
 class UStatAttributeSet;
@@ -11,6 +12,7 @@ class UWidgetComponent;
 class UAnimMontage;
 class UGABaseAttack;
 class UEnemyDetectionComponent;
+class UCheckpointBoundComponent;
 struct FOnAttributeChangeData;
 
 /** 적의 순찰, 추적, 공격, 사망 상태. */
@@ -36,7 +38,7 @@ enum class EEnemyAlertLevel : uint8
 
 /** 공통 전투 기능에 AI 행동, 피격/사망 처리, 머리 위 UI를 추가한다. */
 UCLASS()
-class ECLIPSETHENINJA_API AEnemy : public ABaseCharacter
+class ECLIPSETHENINJA_API AEnemy : public ABaseCharacter, public ICheckpointResettable
 {
 	GENERATED_BODY()
 
@@ -85,6 +87,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement")
 	void FaceLocation(const FVector& Location);
 
+	// 체크포인트 리스폰 1단계: 체력/사망/전투 상태, 충돌, 이동, 애니메이션, 감지 상태를 초기화한다.
+	virtual void ResetToInitial_Implementation() override;
+
+	// 체크포인트 리스폰 2단계: 블랙보드를 비우고 BT를 처음부터 다시 실행한다.
+	virtual void OnAfterReset_Implementation() override;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -109,6 +117,12 @@ protected:
 	// 사망 처리용 함수
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
 	void Die();
+
+	// 사망 연출이 끝난 뒤 숨김 처리하는 함수 (리스폰을 위해 Destroy하지 않는다)
+	void DeactivateAfterDeath();
+
+	// AI 컨트롤러의 블랙보드를 비우고 BT를 처음부터 다시 실행하는 함수
+	void RestartAI();
 
 	// 폰이 살아있는지 확인하는 함수
 	UFUNCTION(BlueprintPure, Category = "AI|Target")
@@ -182,6 +196,16 @@ protected:
 	/** 사망 몽타주 종료 후 시체를 유지하는 시간(초). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Death", meta = (ClampMin = "0.0", Units = "s"))
 	float DeathDespawnDelay = 3.0f;
+
+	/** 이 적이 속한 체크포인트 구간. 해당 체크포인트에서 플레이어가 리스폰하면 적도 리스폰된다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UCheckpointBoundComponent> CheckpointBound;
+
+	FTimerHandle DeathDeactivateTimer;
+
+	// 사망 시 끄는 충돌 설정을 리스폰 때 되돌리기 위한 초기값
+	ECollisionEnabled::Type InitialCapsuleCollision = ECollisionEnabled::QueryAndPhysics;
+	ECollisionEnabled::Type InitialMeshCollision = ECollisionEnabled::NoCollision;
 
 
 

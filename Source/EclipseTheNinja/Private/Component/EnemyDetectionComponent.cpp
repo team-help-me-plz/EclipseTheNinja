@@ -92,6 +92,36 @@ void UEnemyDetectionComponent::NotifyDamaged(AActor* DamageInstigator)
     UpdateDetection(0.0f);
 }
 
+void UEnemyDetectionComponent::ResetDetection()
+{
+    AlertLevel = EEnemyAlertLevel::Normal;
+    AlertGauge = 0.0f;
+    DisplayedGauge = 0.0f;
+    bHasLineOfSight = false;
+    VisibleTarget.Reset();
+    LastKnownLocation = FVector::ZeroVector;
+    bHasLastKnownLocation = false;
+    TimeWithoutSight = 0.0f;
+    DetectionElapsed = 0.0f;
+
+    if (!Owner.IsValid()) return;
+
+    // 사망 시 꺼진 틱과 발각 범위 UI를 복원한다.
+    SetComponentTickEnabled(true);
+    if (PresentationWidget)
+    {
+        if (!PresentationWidget->IsInViewport())
+            PresentationWidget->AddToViewport(5);
+    }
+    else
+    {
+        CreatePresentationWidget();
+    }
+
+    UpdateBlackboard();
+    OnAwarenessChanged.Broadcast(AlertGauge, AlertLevel);
+}
+
 bool UEnemyDetectionComponent::CanSeeTarget(const AActor* Target, float Radius) const
 {
     const AEnemy* OwnerEnemy = Owner.Get();
