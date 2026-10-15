@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
 #include "Abilities/GameplayAbility.h"
+#include "Ability/AbilityInfo.h"
+#include "Interface/Interactor.h"
 #include "PlayerCharacter.generated.h"
 
 class UStatAttributeSet;
@@ -14,13 +16,14 @@ class UInputMappingContext;
 class UEnhancedInputLocalPlayerSubsystem;
 class UAnimMontage;
 class UGABaseAttack;
+class UBoxComponent;
 struct FInputActionValue;
 
 /**
  *  공통 전투 기능을 상속받아 카메라, 플레이어 입력, 점프를 처리한다.
  */
 UCLASS()
-class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter
+class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter, public IInteractor
 {
 	GENERATED_BODY()
 
@@ -29,6 +32,20 @@ class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter
 	UCameraComponent* Camera;
 
 protected:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
+	TArray<FAbilityInfo> AbilityClassArray;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> CloneTechAction;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
+	TObjectPtr<UBoxComponent> InteractBox;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Collision|Interact")
+	FVector InteractBoxSize = FVector(80.f, 1000.f, 100.f);
+
+	void GiveInitAbility();
+	static constexpr int32 CloneTechInputID = 100;
 
 	/** Move Input Action */
 	UPROPERTY(EditAnywhere, Category="Input")
@@ -117,6 +134,14 @@ public:
 	/** Constructor */
 	APlayerCharacter();
 	virtual void DoBasicAttack() override;
+	virtual void RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
+	virtual void ReturnToSafePoint_Implementation() override;
+
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void DoCloneTech();
+
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void DoCloneTechEnd();
 
 	bool HasCursorTarget() const { return bHasCursorTarget; }
 	bool IsFacingCursor() const { return bCursorFacingActive; }
@@ -147,6 +172,8 @@ protected:
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
+	FTransform SafePointTransform;
+	bool bHasSafePoint = false;
 	// 커서의 위치 갱신
 	void UpdateCursorTarget();
 	// 캐릭터가 커서를 바라보도록 업데이트하는 함수

@@ -124,7 +124,7 @@ protected:
 	// AI 컨트롤러의 블랙보드를 비우고 BT를 처음부터 다시 실행하는 함수
 	void RestartAI();
 
-	// 폰이 살아있는지 확인하는 함수
+	// 플레이어 또는 분신이 살아있는지 확인한다. 기존 Blueprint 함수 이름은 유지한다.
 	UFUNCTION(BlueprintPure, Category = "AI|Target")
 	bool IsLivingPlayer(const APawn* Player) const;
 	

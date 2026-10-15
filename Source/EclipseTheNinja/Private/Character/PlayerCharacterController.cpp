@@ -77,11 +77,27 @@ void APlayerCharacterController::OnPossess(APawn * InPawn)
 	Super::OnPossess(InPawn);
 
 	// subscribe to the pawn's OnDestroyed delegate
-	InPawn->OnDestroyed.AddDynamic(this, &APlayerCharacterController::OnPawnDestroyed);
+	InPawn->OnDestroyed.AddUniqueDynamic(this, &APlayerCharacterController::OnPawnDestroyed);
+}
+
+void APlayerCharacterController::OnUnPossess()
+{
+	if (APawn* PreviousPawn = GetPawn())
+	{
+		if (!PreviousPawn->IsActorBeingDestroyed())
+		{
+			PreviousPawn->OnDestroyed.RemoveDynamic(this, &APlayerCharacterController::OnPawnDestroyed);
+		}
+	}
+	StopCameraMove();
+	Super::OnUnPossess();
 }
 
 void APlayerCharacterController::OnPawnDestroyed(AActor * DestroyedActor)
 {
+	if (!HasAuthority() || !IsValid(DestroyedActor) || GetWorld()->bIsTearingDown) return;
+	// A missing Blueprint override should still respawn the same configured player.
+	const TSubclassOf<ACharacter> RespawnClass = CharacterClass ? CharacterClass.Get() : DestroyedActor->GetClass();
 	// find the player start
 	TArray<AActor*> ActorList;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), APlayerStart::StaticClass(), ActorList);
@@ -91,7 +107,7 @@ void APlayerCharacterController::OnPawnDestroyed(AActor * DestroyedActor)
 		// spawn a character at the player start
 		const FTransform SpawnTransform = ActorList[0]->GetActorTransform();
 
-		if (APlayerCharacter* RespawnedCharacter = GetWorld()->SpawnActor<APlayerCharacter>(CharacterClass, SpawnTransform))
+		if (APlayerCharacter* RespawnedCharacter = GetWorld()->SpawnActor<APlayerCharacter>(RespawnClass, SpawnTransform))
 		{
 			UE_LOG(LogTemp, Display, TEXT("RespawnTest"));
 			// possess the character

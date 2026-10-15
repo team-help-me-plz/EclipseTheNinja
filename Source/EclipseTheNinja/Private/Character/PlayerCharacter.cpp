@@ -21,10 +21,19 @@
 #include "InputCoreTypes.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Ability/GABaseAttack.h"
+#include "Components/BoxComponent.h"
+#include "Engine/TargetPoint.h"
+#include "Interface/Interactable.h"
 
 APlayerCharacter::APlayerCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	InteractBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractCollision"));
+	InteractBox->SetupAttachment(RootComponent);
+	InteractBox->SetBoxExtent(InteractBoxSize);
+	InteractBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	InteractBox->SetCollisionResponseToAllChannels(ECR_Overlap);
+	InteractBox->SetGenerateOverlapEvents(true);
 
 	// create the camera component
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
@@ -64,6 +73,9 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	InteractBox->SetBoxExtent(InteractBoxSize);
+	InteractBox->SetAbsolute(false, true, true);
+	GiveInitAbility();
 	JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
 	FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
@@ -276,6 +288,12 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
+		if (CloneTechAction)
+		{
+			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneTech);
+			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCloneTechEnd);
+			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Canceled, this, &APlayerCharacter::DoCloneTechEnd);
+		}
 		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveEnd);
 		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
 
@@ -347,6 +365,7 @@ void APlayerCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uin
 void APlayerCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
+	GiveInitAbility();
 
 	if (IsValid(ASC))
 	{
@@ -365,6 +384,8 @@ void APlayerCharacter::PawnClientRestart()
 
 void APlayerCharacter::UnPossessed()
 {
+	DoCameraMoveEnd();
+	DoCloneTechEnd();
 	bHasCursorTarget = false;
 	SetCursorFacingActive(false);
 	ASC->CancelAllAbilities();
@@ -419,6 +440,9 @@ void APlayerCharacter::Die()
 
 	//사망 처리
 	bIsDead = true;
+	DoCameraMoveEnd();
+	DoCloneTechEnd();
+	ASC->CancelAllAbilities();
 
 	// 정지 후 움직이지 못하게 세팅
 	GetCharacterMovement()->StopMovementImmediately();
@@ -510,6 +534,21 @@ void APlayerCharacter::DoJumpEnd()
 
 void APlayerCharacter::DoInteract()
 {
+	if (bIsDead) return;
+
+	// Clone-tech interactables (levers, clone launch, traps) use a separate interface.
+	TArray<AActor*> Candidates;
+	InteractBox->GetOverlappingActors(Candidates);
+	for (AActor* Candidate : Candidates)
+	{
+		if (IsValid(Candidate) && Candidate != this && Candidate->Implements<UInteractable>()
+			&& IInteractable::Execute_bIsInteractReady(Candidate))
+		{
+			IInteractable::Execute_Interact(Candidate, this);
+			return;
+		}
+	}
+
 	// do a sphere trace to look for interactive objects
 	FHitResult OutHit;
 
@@ -686,4 +725,51 @@ void APlayerCharacter::GiveTestAbility()
 	if (!HasAuthority() || !ASC || !TestAbilityClass || ASC->FindAbilitySpecFromClass(TestAbilityClass)) return;
 	FGameplayAbilitySpec Spec(TestAbilityClass, TestAbilityLevel);
 	ASC->GiveAbility(Spec);
+}
+
+void APlayerCharacter::GiveInitAbility()
+{
+	if (!HasAuthority() || !ASC) return;
+	for (const FAbilityInfo& Info : AbilityClassArray)
+	{
+		if (!Info.AbilityClass) continue;
+		if (FGameplayAbilitySpec* Existing = ASC->FindAbilitySpecFromClass(Info.AbilityClass))
+		{
+			Existing->InputID = Info.InputID;
+			Existing->Level = FMath::Max(1, Info.AbilityLevel);
+			ASC->MarkAbilitySpecDirty(*Existing);
+		}
+		else
+		{
+			ASC->GiveAbility(FGameplayAbilitySpec(Info.AbilityClass, FMath::Max(1, Info.AbilityLevel), Info.InputID, this));
+		}
+	}
+}
+
+void APlayerCharacter::DoCloneTech()
+{
+	if (bIsDead || !ASC) return;
+	DoCameraMoveEnd();
+	ASC->AbilityLocalInputPressed(CloneTechInputID);
+}
+
+void APlayerCharacter::DoCloneTechEnd()
+{
+	if (ASC) ASC->AbilityLocalInputReleased(CloneTechInputID);
+}
+
+void APlayerCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)
+{
+	if (!IsValid(InSafePoint)) return;
+	SafePointTransform = InSafePoint->GetActorTransform();
+	bHasSafePoint = true;
+}
+
+void APlayerCharacter::ReturnToSafePoint_Implementation()
+{
+	if (!bHasSafePoint || bIsDead) return;
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
+	SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
+	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
 }

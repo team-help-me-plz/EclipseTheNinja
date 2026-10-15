@@ -6,6 +6,7 @@
 #include "Widgets/EnemyAwarenessWidget.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 #include "TimerManager.h"
@@ -65,10 +66,13 @@ void UEnemyDetectionComponent::NotifyDamaged(AActor* DamageInstigator)
     AEnemy* OwnerEnemy = Owner.Get();
     if (!OwnerEnemy || !OwnerEnemy->IsReadyForAI()) return;
 
-    // 공격자를 알 수 없거나 플레이어가 아니면 로컬 플레이어를 공격자로 본다.
+    // 투사체의 실제 공격자도 확인한다. 알 수 없다면 본체를 무조건 지목하지 않고
+    // 현재 보이는 플레이어/분신 중 같은 기준으로 대상을 고른다.
     APawn* Attacker = Cast<APawn>(DamageInstigator);
     if (!OwnerEnemy->IsValidAITarget(Attacker))
-        Attacker = UGameplayStatics::GetPlayerPawn(this, 0);
+        Attacker = IsValid(DamageInstigator) ? DamageInstigator->GetInstigator() : nullptr;
+    if (!OwnerEnemy->IsValidAITarget(Attacker))
+        Attacker = FindVisibleTarget(GetCurrentDetectionRadius());
     if (!OwnerEnemy->IsValidAITarget(Attacker)) return;
 
     const EEnemyAlertLevel PreviousLevel = AlertLevel;
@@ -120,6 +124,37 @@ void UEnemyDetectionComponent::ResetDetection()
 
     UpdateBlackboard();
     OnAwarenessChanged.Broadcast(AlertGauge, AlertLevel);
+}
+
+APawn* UEnemyDetectionComponent::FindVisibleTarget(float Radius) const
+{
+    const AEnemy* OwnerEnemy = Owner.Get();
+    if (!OwnerEnemy || !GetWorld()) return nullptr;
+
+    APawn* BestTarget = nullptr;
+    double BestDistanceSquared = TNumericLimits<double>::Max();
+    bool bBestDiscovered = false;
+    for (TActorIterator<APawn> It(GetWorld()); It; ++It)
+    {
+        APawn* Candidate = *It;
+        if (!OwnerEnemy->IsValidAITarget(Candidate) || !CanSeeTarget(Candidate, Radius)) continue;
+
+        const FVector Offset = Candidate->GetActorLocation() - OwnerEnemy->GetActorLocation();
+        const double DistanceSquared = Offset.SizeSquared();
+        const bool bFacing = FMath::Abs(Offset.X) <= 10.0f
+            || OwnerEnemy->GetActorForwardVector().X * Offset.X > 0.0f;
+        const bool bDiscovered = bFacing && DistanceSquared <= FMath::Square(GetCurrentDiscoveryRadius());
+        // 등 뒤의 가까운 대상이 정면 발각 영역의 다른 대상을 가리지 않게 한다.
+        // 같은 발각 조건이면 종류와 무관하게 가까운 대상을 선택한다.
+        if (!BestTarget || (bDiscovered && !bBestDiscovered)
+            || (bDiscovered == bBestDiscovered && DistanceSquared < BestDistanceSquared))
+        {
+            BestTarget = Candidate;
+            BestDistanceSquared = DistanceSquared;
+            bBestDiscovered = bDiscovered;
+        }
+    }
+    return BestTarget;
 }
 
 bool UEnemyDetectionComponent::CanSeeTarget(const AActor* Target, float Radius) const
@@ -218,15 +253,14 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
     // 소유한 액터의 BeginPlay가 호출되고, 죽지 않은 경우
     else if (OwnerEnemy->IsReadyForAI())
     {
-        APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
-
         // 시야 거리: 전투 중에는 발각 원(빨간 원)까지만 보고, 일반/경계 상태에서는 감지 원까지 본다.
         // 전투 중 발각 원 밖으로 나가면 놓친 것으로 처리해 마지막 목격 위치로 이동하고, 10초 후 복귀한다.
         const float SightRadius = AlertLevel == EEnemyAlertLevel::Combat
             ? GetCurrentDiscoveryRadius() : GetCurrentDetectionRadius();
+        APawn* Player = FindVisibleTarget(SightRadius);
 
         // 플레이어가 유효하고, 플레이어가 시야 거리 안에서 보이면
-        if (OwnerEnemy->IsValidAITarget(Player) && CanSeeTarget(Player, SightRadius))
+        if (Player)
         {
             // 현재 감지한 타겟을 플레이어로 지정
             VisibleTarget = Player;

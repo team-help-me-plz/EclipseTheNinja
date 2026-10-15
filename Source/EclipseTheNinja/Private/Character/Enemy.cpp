@@ -2,6 +2,7 @@
 
 
 #include "Character/Enemy.h"
+#include "Clone/CloneCharacter.h"
 #include "Component/EnemyDetectionComponent.h"
 #include "GAS/StatAttributeSet.h"
 #include "AbilitySystemComponent.h"
@@ -295,7 +296,9 @@ void AEnemy::Tick(float DeltaTime)
 
 bool AEnemy::IsLivingPlayer(const APawn* Player) const
 {
-	if (!IsValid(Player) || Player == this || !Player->IsPlayerControlled())
+	// Keep the Blueprint-facing function name; clones do not have a player controller.
+	if (!IsValid(Player) || Player->IsActorBeingDestroyed() || Player == this
+		|| (!Player->IsPlayerControlled() && !Player->IsA<ACloneCharacter>()))
 	{
 		return false;
 	}

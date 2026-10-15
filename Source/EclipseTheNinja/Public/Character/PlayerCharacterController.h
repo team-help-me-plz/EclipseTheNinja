@@ -58,6 +58,7 @@ protected:
 
 	/** Pawn initialization */
 	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnUnPossess() override;
 
 	/** Called if the possessed pawn is destroyed */
 	UFUNCTION()

@@ -109,6 +109,8 @@ protected:
     float DetectionInterval = 0.1f;
 
 private:
+    // 플레이어와 분신을 같은 기준으로 검사하고 가장 가까운 가시 대상을 선택한다.
+    APawn* FindVisibleTarget(float Radius) const;
     // 소유한 액터가 파라미터로 들어온 타겟을 볼 수 있는지 반환하는 함수
     bool CanSeeTarget(const AActor* Target, float Radius) const;
     // 감지 로직 업데이트 함수
