@@ -2,7 +2,9 @@
 
 
 #include "Clone/CloneCharacter.h"
+
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Engine/TargetPoint.h"
 
 // Sets default values
 ACloneCharacter::ACloneCharacter()
@@ -132,9 +134,10 @@ bool ACloneCharacter::bIsInteractReady_Implementation()
 	return (true);
 }
 
-void ACloneCharacter::RegisterSafePoint_Implementation(const FVector& InSafePoint)
+void ACloneCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)
 {
-	this->SafePointLocation = InSafePoint;
+	this->SafePointLocation = InSafePoint->GetActorLocation();
+	this->SafePointRotate = InSafePoint->GetActorRotation();
 }
 
 void ACloneCharacter::ReturnToSafePoint_Implementation()
@@ -151,6 +154,7 @@ void ACloneCharacter::ReturnToSafePoint_Implementation()
 	// 데미지 입는 애니메이션
 	// 데미지 입는 애니메이션 끝나면 부활하는 애니메이션
 	this->SetActorLocation(this->SafePointLocation);
+	this->SetActorRotation(this->SafePointRotate);
 }
 
 void	ACloneCharacter::ResetInteractionCooldown()

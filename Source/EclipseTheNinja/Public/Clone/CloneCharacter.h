@@ -37,7 +37,7 @@ public:
 	virtual void	HideInteractionIndicator_Implementation() override;
 	virtual bool	bIsInteractReady_Implementation() override;
 
-	virtual void	RegisterSafePoint_Implementation(const FVector& InSafePoint) override;
+	virtual void	RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void	ReturnToSafePoint_Implementation() override;
 
 protected:
@@ -62,4 +62,5 @@ private:
 	float			InteractInterval = 0.5f;
 
 	FVector	SafePointLocation = FVector::ZeroVector;
+	FRotator	SafePointRotate = FRotator::ZeroRotator;
 };

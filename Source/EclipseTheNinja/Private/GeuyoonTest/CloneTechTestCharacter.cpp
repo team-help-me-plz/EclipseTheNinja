@@ -8,6 +8,7 @@
 #include "AbilitySystemComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
+#include "Engine/TargetPoint.h"
 
 ACloneTechTestCharacter::ACloneTechTestCharacter()
 {
@@ -24,9 +25,10 @@ UAbilitySystemComponent* ACloneTechTestCharacter::GetAbilitySystemComponent() co
 	return (this->AbilitySystemComponent);
 }
 
-void ACloneTechTestCharacter::RegisterSafePoint_Implementation(const FVector& InSafePoint)
+void ACloneTechTestCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)
 {
-	this->SafePointLocation = InSafePoint;
+	this->SafePointLocation = InSafePoint->GetActorLocation();
+	this->SafePointRotate = InSafePoint->GetActorRotation();
 }
 
 void ACloneTechTestCharacter::ReturnToSafePoint_Implementation()
@@ -43,6 +45,7 @@ void ACloneTechTestCharacter::ReturnToSafePoint_Implementation()
 	// 데미지 입는 애니메이션 + 페이드 아웃
 	// 데미지 입는 애니메이션 끝나면 부활하는 애니메이션 + 페이드 인
 	this->SetActorLocation(this->SafePointLocation);
+	this->SetActorRotation(this->SafePointRotate);
 }
 
 void ACloneTechTestCharacter::BeginPlay()
