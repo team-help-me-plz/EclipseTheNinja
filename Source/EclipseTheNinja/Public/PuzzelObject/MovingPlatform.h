@@ -28,8 +28,11 @@ protected:
 
 	void	PlatformMovement(float DeltaTime);
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<USceneComponent>			RootScene = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<UChildActorComponent>	MeshAssembly = nullptr;
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Movement")
 	TArray<ATargetPoint*>	TargetPoint;

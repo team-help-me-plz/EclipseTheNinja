@@ -29,9 +29,9 @@ APressureSwitch::APressureSwitch()
 	this->PressureTrigger->SetGenerateOverlapEvents(true);
 	SetRootComponent(this->PressureTrigger);
 
-	this->Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	this->Mesh->SetMobility(EComponentMobility::Movable);
-	this->Mesh->SetupAttachment(this->PressureTrigger);
+	this->MeshAssembly = CreateDefaultSubobject<UChildActorComponent>(TEXT("MeshAssembly"));
+	this->MeshAssembly->SetMobility(EComponentMobility::Movable);
+	this->MeshAssembly->SetupAttachment(this->PressureTrigger);
 
 }
 

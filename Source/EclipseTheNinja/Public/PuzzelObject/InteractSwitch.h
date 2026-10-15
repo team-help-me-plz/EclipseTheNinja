@@ -8,6 +8,7 @@
 #include "GameFramework/Actor.h"
 #include "InteractSwitch.generated.h"
 
+class AMeshAssembly;
 class USphereComponent;
 
 UCLASS()
@@ -33,9 +34,11 @@ public:
 	virtual bool	bIsInteractReady_Implementation() override;
 
 protected:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<USceneComponent>			RootScene = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
+	TObjectPtr<UChildActorComponent>	MeshAssembly = nullptr;
 	
 	//UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	//TObjectPtr<USphereComponent>	InteractSphere = nullptr;

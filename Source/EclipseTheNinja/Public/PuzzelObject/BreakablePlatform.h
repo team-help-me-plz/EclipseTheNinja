@@ -61,9 +61,9 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	TObjectPtr<UBoxComponent>			CollisionBox = nullptr;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
-	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<UChildActorComponent>	MeshAssembly = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Break|Timer")
 	float	BreakTime = 0.5f;
