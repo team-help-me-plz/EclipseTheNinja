@@ -43,6 +43,9 @@ public:
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
+	virtual void	RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
+	virtual void	ReturnToSafePoint_Implementation() override;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void PostInitializeComponents() override;
@@ -100,6 +103,9 @@ private:
 	TArray<AActor*>	OverlappedInteractActor;
 	int32			OverlappedInteractActorTargetIndex = 0;
 	TMap<int32, FGameplayAbilitySpecHandle>	AbilityHandles;
+
+	FVector	SafePointLocation = FVector::ZeroVector;
+	FRotator	SafePointRotate = FRotator::ZeroRotator;
 
 	//static constexpr int32 InteractInputID = 100;
 	static constexpr int32 CloneTechInputID = 100;

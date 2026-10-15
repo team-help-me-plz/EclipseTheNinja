@@ -37,6 +37,9 @@ public:
 	virtual void	HideInteractionIndicator_Implementation() override;
 	virtual bool	bIsInteractReady_Implementation() override;
 
+	virtual void	RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
+	virtual void	ReturnToSafePoint_Implementation() override;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Margin")
 	float	TargetLocationMargin = 49.f;
@@ -57,4 +60,7 @@ private:
 	FTimerHandle	InteractionCooldownTimer;
 	bool			bIsInteractCooldown = false;
 	float			InteractInterval = 0.5f;
+
+	FVector	SafePointLocation = FVector::ZeroVector;
+	FRotator	SafePointRotate = FRotator::ZeroRotator;
 };
