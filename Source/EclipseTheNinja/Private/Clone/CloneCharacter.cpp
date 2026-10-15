@@ -132,6 +132,27 @@ bool ACloneCharacter::bIsInteractReady_Implementation()
 	return (true);
 }
 
+void ACloneCharacter::RegisterSafePoint_Implementation(const FVector& InSafePoint)
+{
+	this->SafePointLocation = InSafePoint;
+}
+
+void ACloneCharacter::ReturnToSafePoint_Implementation()
+{
+	if (this->SafePointLocation.IsNearlyZero())
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[ACloneCharacter::ReturnToSafePoint] SafePoint가 등록되지 않았습니다.")
+		);
+		return;
+	}
+	// 데미지 입는 애니메이션
+	// 데미지 입는 애니메이션 끝나면 부활하는 애니메이션
+	this->SetActorLocation(this->SafePointLocation);
+}
+
 void	ACloneCharacter::ResetInteractionCooldown()
 {
 	this->bIsInteractCooldown = false;
