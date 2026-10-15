@@ -30,7 +30,22 @@ AInteractSwitch::AInteractSwitch()
 void AInteractSwitch::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
+	if (!IsValid(AssemblyActor))
+	{
+		return;
+	}
+
+	TArray<UStaticMeshComponent*> Meshes;
+	AssemblyActor->GetComponents<UStaticMeshComponent>(Meshes);
+
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		Mesh->SetCollisionObjectType(ECC_WorldDynamic);
+
+		Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	}
 }
 
 // Called every frame
