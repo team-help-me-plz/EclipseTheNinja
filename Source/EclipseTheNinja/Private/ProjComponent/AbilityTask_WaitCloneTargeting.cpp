@@ -185,6 +185,10 @@ void UAbilityTask_WaitCloneTargeting::UpdateTargetCandidate()
 
 	AActor* HitActor = CursorHit.GetActor();
 
+	while (IsValid(HitActor) && !HitActor->Implements<UInteractable>())
+	{
+		HitActor = HitActor->GetParentActor();
+	}
 	if (IsValid(HitActor) && HitActor->Implements<UInteractable>() && IInteractable::Execute_bIsInteractReady(HitActor))
 	{
 		FVector	TraceStart = HitActor->GetActorLocation();
