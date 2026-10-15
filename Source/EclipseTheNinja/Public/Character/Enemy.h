@@ -10,6 +10,7 @@ class UStatAttributeSet;
 class UWidgetComponent;
 class UAnimMontage;
 class UGABaseAttack;
+class UEnemyDetectionComponent;
 struct FOnAttributeChangeData;
 
 /** 적의 순찰, 추적, 공격, 사망 상태. */
@@ -20,7 +21,17 @@ enum class EEnemyBehaviorState : uint8
 	Patrol,
 	Chase,
 	Attack,
-	Dead
+	Dead,
+	Investigate
+};
+
+/** 적의 경계 수준 */
+UENUM(BlueprintType)
+enum class EEnemyAlertLevel : uint8
+{
+	Normal,
+	Alert,
+	Combat,
 };
 
 /** 공통 전투 기능에 AI 행동, 피격/사망 처리, 머리 위 UI를 추가한다. */
@@ -45,6 +56,34 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Patrol")
 	void StartPatrol();
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Patrol")
+	FVector ChooseNextPatrolLocation();
+
+	UFUNCTION(BlueprintPure, Category = "AI")
+	bool IsReadyForAI() const { return HasActorBegunPlay() && !bIsDead; }
+
+	// 감지/추적/공격 판정용. 생존한 플레이어인지만 확인하고 활동 영역은 검사하지 않는다.
+	UFUNCTION(BlueprintPure, Category = "AI|Target")
+	bool IsValidAITarget(AActor* Target) const;
+
+	UFUNCTION(BlueprintPure, Category = "AI|Combat")
+	bool IsWithinAttackRange(AActor* Target) const;
+
+	UFUNCTION(BlueprintPure, Category = "AI|Movement")
+	float GetAIChaseSpeed() const { return ChaseSpeed; }
+
+	UFUNCTION(BlueprintCallable, Category = "AI|State")
+	void SetBehaviorState(EEnemyBehaviorState NewState);
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Combat")
+	bool TryStartAIBaseAttack(AActor* Target);
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Combat")
+	void CancelAIBaseAttack();
+
+	UFUNCTION(BlueprintCallable, Category = "AI|Movement")
+	void FaceLocation(const FVector& Location);
 
 protected:
 	// Called when the game starts or when spawned
@@ -71,24 +110,12 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
 	void Die();
 
-	// 상태기반 로직 처리용 함수
-	void UpdateBehavior(float DeltaTime);
-
-	// 순찰 상태 업데이트용 함수
-	void UpdatePatrol(float DeltaTime);
-
-	// 상태 업데이트 함수
-	void SetBehaviorState(EEnemyBehaviorState NewState);
-
-	// 타겟이 공격 범위에서 벗어날 때 호출되는 함수
-	UFUNCTION(BlueprintCallable, Category = "AI|Target")
-	void LoseCombatTarget();
-
 	// 폰이 살아있는지 확인하는 함수
 	UFUNCTION(BlueprintPure, Category = "AI|Target")
 	bool IsLivingPlayer(const APawn* Player) const;
 	
-	// 전투범위에 들어있는지 확인하는 함수
+public:
+	// BehaviorOrigin을 중심으로 활동영역 안에 있는지 확인하는 함수
 	UFUNCTION(BlueprintPure, Category = "AI|Detection")
 	bool IsInsideCombatArea(const FVector& Location) const;
 
@@ -113,6 +140,10 @@ protected:
 	void MoveAlongX(float DestinationX, float Speed, float DeltaTime);
 
 protected:
+	/** 시야 감지와 Blackboard 갱신을 담당한다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Detection")
+	TObjectPtr<UEnemyDetectionComponent> EnemyDetectComponent;
+
 	/** 시작 위치를 기준으로 한 X축 순찰 범위(cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Patrol")
 	float PatrolMinOffset = -300.0f;
@@ -120,21 +151,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Patrol")
 	float PatrolMaxOffset = 300.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Patrol", meta = (ClampMin = "0.0", Units = "s"))
-	float PatrolWaitTime = 0.5f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Patrol", meta = (ClampMin = "1.0"))
-	float PatrolSpeed = 150.0f;
-
-	/** 시야 가림 검사 없이 거리로 플레이어를 감지한다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Detection", meta = (ClampMin = "1.0"))
-	float DetectionRadius = 500.0f;
-
-	/** 추적 유지 거리. 실행 시 감지 반경 이상으로 보정한다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Detection", meta = (ClampMin = "1.0"))
-	float LoseTargetRadius = 650.0f;
-
-	/** 시작 위치 중심의 전투 영역. 영역 밖 플레이어는 추적하지 않는다. */
+	/** 시작 위치 중심의 활동 영역. 순찰 구간과 경계 수색 지점을 제한한다. 추적/공격은 제한하지 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Detection", meta = (ClampMin = "1.0"))
 	float CombatAreaRadius = 1000.0f;
 
@@ -160,7 +177,6 @@ protected:
 	float PatrolMinX = 0.0f;
 	float PatrolMaxX = 0.0f;
 	bool bPatrolTowardsMax = true;
-	float PatrolWaitRemaining = 0.0f;
 	double NextAttackTime = 0.0;
 
 	/** 사망 몽타주 종료 후 시체를 유지하는 시간(초). */
