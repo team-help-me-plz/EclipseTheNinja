@@ -35,6 +35,16 @@ void AMovingPlatform::PlatformMovement(float DeltaTime)
 	{
 		return ;
 	}
+	if (this->TargetPointTravelTime == 0.f)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[AMovingPlatform::PlatformMovement] %s의 TargetPointTravelTime이 0입니다"),
+			*this->GetName()
+		);
+		return ;
+	}
 	const float	Step = DeltaTime / this->TargetPointTravelTime;
 	if (this->bIsMovement)
 	{

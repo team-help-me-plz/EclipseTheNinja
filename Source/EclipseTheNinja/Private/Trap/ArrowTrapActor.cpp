@@ -52,9 +52,9 @@ void AArrowTrapActor::ToggleActivate_Implementation()
 
 void AArrowTrapActor::SpawnArrow()
 {
-	const FVector	SpawnDir = this->GetActorForwardVector();
+	const FVector	SpawnDir = this->ArrowSpawnPos->GetForwardVector();
 	const FVector	SpawnPos = this->ArrowSpawnPos->GetComponentLocation();
-	const FRotator	SpawnRot = this->GetActorRotation();
+	const FRotator	SpawnRot = SpawnDir.Rotation();
 
 	FActorSpawnParameters	Params;
 	Params.Owner = this;
