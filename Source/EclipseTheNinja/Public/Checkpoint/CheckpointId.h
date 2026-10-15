@@ -1,0 +1,23 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "CheckpointId.generated.h"
+
+/**
+ * 체크포인트 식별자.
+ *  - 레벨이 선형이므로 선언 순서 = 진행 순서. (값이 클수록 이후에 위치한 체크포인트)
+ *  - 중간에 끼워 넣는 것은 괜찮지만, 디스크 저장을 도입한 뒤에는 기존 값의 순서를 바꾸면 안 된다.
+ */
+UENUM(BlueprintType)
+enum class ECheckpointId : uint8
+{
+    None = 0                UMETA(Hidden),
+
+    // Lvl_CheckpointTest
+    CheckpointTest_Start,       // 압력 발판 + 슬라이딩 문 + 밀 수 있는 상자
+    CheckpointTest_Trap,        // 화살 함정 + 낙사 구덩이
+    CheckpointTest_Clone,       // 분신으로 발판을 누르고 있어야 열리는 문
+    CheckpointTest_Final,       // 상호작용 스위치 + 힌지 문 + 상자
+};
