@@ -2,6 +2,7 @@
 
 #include "PuzzelObject/BaseDoor.h"
 #include "Interface/Interactor.h"
+#include "Checkpoint/CheckpointBoundComponent.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -22,6 +23,8 @@ ABaseDoor::ABaseDoor()
 	this->LeftDoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LeftDoorMesh"));
 	this->LeftDoorMesh->SetMobility(EComponentMobility::Movable);
 	this->LeftDoorMesh->SetupAttachment(GetRootComponent());
+
+	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 }
 
 void ABaseDoor::BeginPlay()
@@ -31,6 +34,22 @@ void ABaseDoor::BeginPlay()
 	//this->CloseLocation = GetActorLocation();
 	//this->OpenLocation = GetActorLocation() + this->OpenOffset;
 	this->OpenAlpha = 0.0;
+	this->bInitialIsOpen = this->bIsOpen;
+}
+
+void ABaseDoor::ResetToInitial_Implementation()
+{
+	this->bIsOpen = this->bInitialIsOpen;
+	this->OpenAlpha = this->bInitialIsOpen ? 1.0 : 0.0;
+
+	GetWorldTimerManager().ClearTimer(this->InteractionCooldownTimer);
+	this->bIsInteractCooldown = false;
+}
+
+void ABaseDoor::OnAfterReset_Implementation()
+{
+	// DeltaTime 0 으로 호출하면 OpenAlpha는 그대로 두고 메시 위치/회전만 갱신된다
+	this->DoorMovement(0.f);
 }
 
 void ABaseDoor::Tick(float DeltaTime)

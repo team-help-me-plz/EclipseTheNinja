@@ -4,14 +4,16 @@
 
 #include "CoreMinimal.h"
 #include "Interface/Interactable.h"
+#include "Interface/CheckpointResettable.h"
 
 #include "GameFramework/Actor.h"
 #include "InteractSwitch.generated.h"
 
 class USphereComponent;
+class UCheckpointBoundComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API AInteractSwitch : public AActor, public IInteractable
+class ECLIPSETHENINJA_API AInteractSwitch : public AActor, public IInteractable, public ICheckpointResettable
 {
 	GENERATED_BODY()
 	
@@ -30,13 +32,20 @@ public:
 	virtual void	Interact_Implementation(AActor* InActor) override;
 	virtual void	ShowInteractionIndicator_Implementation() override;
 	virtual void	HideInteractionIndicator_Implementation() override;
+
+	// 체크포인트 리스폰: 한 번도 상호작용하지 않은 상태로 되돌린다
+	virtual void	ResetToInitial_Implementation() override;
+	virtual void	OnAfterReset_Implementation() override {}
 	virtual bool	bIsInteractReady_Implementation() override;
 
 protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
-	
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
+
 	//UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	//TObjectPtr<USphereComponent>	InteractSphere = nullptr;
 

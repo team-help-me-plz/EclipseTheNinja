@@ -2,6 +2,7 @@
 
 #include "PuzzelObject/PressureSwitch.h"
 #include "Interface/Interactor.h"
+#include "Checkpoint/CheckpointBoundComponent.h"
 
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -33,6 +34,12 @@ APressureSwitch::APressureSwitch()
 	this->Mesh->SetMobility(EComponentMobility::Movable);
 	this->Mesh->SetupAttachment(this->PressureTrigger);
 
+	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+}
+
+void APressureSwitch::ResetToInitial_Implementation()
+{
+	this->bIsInteracted = false;
 }
 
 void APressureSwitch::Tick(float DeltaTime)

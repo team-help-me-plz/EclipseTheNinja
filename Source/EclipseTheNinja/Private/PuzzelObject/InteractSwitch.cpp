@@ -4,6 +4,7 @@
 #include "PuzzelObject/InteractSwitch.h"
 #include "Interface/Interactor.h"
 #include "Interface/Activatable.h"
+#include "Checkpoint/CheckpointBoundComponent.h"
 
 #include "Components/SphereComponent.h"
 
@@ -21,6 +22,15 @@ AInteractSwitch::AInteractSwitch()
 	SetRootComponent(this->Mesh);
 	//this->Mesh->SetupAttachment(GetRootComponent());
 
+	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+}
+
+void AInteractSwitch::ResetToInitial_Implementation()
+{
+	this->bIsInteracted = false;
+
+	GetWorldTimerManager().ClearTimer(this->InteractionCooldownTimer);
+	this->bIsInteractCooldown = false;
 }
 
 // Called when the game starts or when spawned
