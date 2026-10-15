@@ -133,19 +133,47 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cursor Look", meta = (ClampMin = "1", Units = "deg/s"))
 	float CursorBodyTurnSpeed = 360.0f;
 
+	// A/D를 짧게 눌러 회전이 중간에 끊겼을 때, 남은 각도가 이 값 이상이면 턴 클립의 남은 구간으로 마무리한다.
+	// 이보다 작으면 이동 회전 속도로 돌린다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Turn In Place", meta = (ClampMin = "0", ClampMax = "180", Units = "deg"))
+	float MoveTurnClipMinYaw = 30.0f;
+
+	// 이동 입력으로 턴 클립을 끊을 때의 블렌드 시간.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Turn In Place", meta = (ClampMin = "0", Units = "s"))
+	float MoveTurnBlendOutTime = 0.15f;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
+	// 커서의 위치 갱신
 	void UpdateCursorTarget();
+	// 캐릭터가 커서를 바라보도록 업데이트하는 함수
 	void UpdateCursorFacing(float DeltaSeconds);
 	void SetCursorFacingActive(bool bActive);
+	// 입력이 끊겨 중간에 멈춘 회전을 FacingTargetYaw까지 마저 돌린다.
+	void SettleFacing(float DeltaSeconds);
+	// FacingTargetYaw로 즉시 맞춘다. 공격처럼 방향이 바로 정해져야 할 때 사용한다.
+	void SnapToFacingTarget();
+	// A/D 입력이 들어오면 진행 중인 턴 클립을 끊는다.
+	void CancelMoveTurn();
+
+	// 현재 제자리 턴이 회전 마무리(SettleFacing)로 시작되었는지. 커서 회전 종료 처리가 이 턴을 끊지 않게 한다.
+	bool bMoveTurnActive = false;
+
+	// 좌우 중 최종으로 바라봐야 할 방향(0 또는 180). 이동 입력, 커서, 벽 점프가 갱신한다.
+	float FacingTargetYaw = 0.0f;
 
 	FVector CursorWorldLocation = FVector::ZeroVector;
+	// 유효한 커서 위치가 있는지 확인하는 변수
 	bool bHasCursorTarget = false;
+	// 현재 커서를 바라보는 기능이 켜져 있는지
 	bool bCursorFacingActive = false;
+	// 현재 카메라 탐색모드가 켜져 켜지 있는지
+	bool bIsExploring = false;
 	float CursorFacingYaw = 0.0f;
+
 	bool bSavedOrientRotationToMovement = false;
 	bool bSavedUseControllerDesiredRotation = false;
 	bool bSavedUseControllerRotationYaw = false;

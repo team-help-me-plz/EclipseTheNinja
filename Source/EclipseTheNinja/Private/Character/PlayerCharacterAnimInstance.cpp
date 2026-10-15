@@ -65,6 +65,86 @@ bool UPlayerCharacterAnimInstance::TryStartTurnInPlace(float TargetYaw)
 	return ActiveTurnMontage != nullptr;
 }
 
+void UPlayerCharacterAnimInstance::CacheTurnYawCurve()
+{
+	if (CachedTurnAnimation.Get() == TurnInPlaceAnimation && TurnYawCurve.Num() > 0)
+	{
+		return;
+	}
+
+	TurnYawCurve.Reset();
+	CachedTurnAnimation = TurnInPlaceAnimation;
+	if (!TurnInPlaceAnimation)
+	{
+		return;
+	}
+
+	// 구간별 회전을 더해 누적 곡선을 만든다. 180도 회전은 한 번에 뽑으면 부호가 모호하기 때문이다.
+	constexpr int32 SampleCount = 64;
+	const float Length = TurnInPlaceAnimation->GetPlayLength();
+	TurnYawCurveStep = Length / SampleCount;
+	const FAnimExtractContext Context;
+	TurnYawCurve.Add(0.0f);
+	for (int32 Index = 1; Index <= SampleCount; ++Index)
+	{
+		const FTransform Delta = TurnInPlaceAnimation->ExtractRootMotionFromRange(
+			(Index - 1) * TurnYawCurveStep, Index * TurnYawCurveStep, Context);
+		TurnYawCurve.Add(TurnYawCurve.Last() + Delta.GetRotation().Rotator().Yaw);
+	}
+}
+
+bool UPlayerCharacterAnimInstance::TryStartTurnInPlaceRemaining(float TargetYaw, float RemainingDeltaYaw)
+{
+	if (!bEnableTurnInPlace || !TurnInPlaceAnimation || !TurnInPlaceAnimation->HasRootMotion()
+		|| IsAnyMontagePlaying())
+	{
+		return false;
+	}
+
+	CacheTurnYawCurve();
+	if (TurnYawCurve.Num() < 2)
+	{
+		return false;
+	}
+
+	const float TotalYaw = TurnYawCurve.Last();
+	if (FMath::IsNearlyZero(TotalYaw) || FMath::Abs(RemainingDeltaYaw) > FMath::Abs(TotalYaw))
+	{
+		return false;
+	}
+
+	// 클립과 같은 방향: 이미 돈 만큼 지난 지점부터 정재생하면 남은 회전만 적용된다.
+	// 클립과 반대 방향: 누적 회전이 남은 각도와 같은 지점부터 처음까지 역재생하면 반대로 그만큼 돈다.
+	const bool bReverse = FMath::Sign(TotalYaw) != FMath::Sign(RemainingDeltaYaw);
+	const float StartYaw = bReverse
+		? FMath::Abs(RemainingDeltaYaw)
+		: FMath::Abs(TotalYaw) - FMath::Abs(RemainingDeltaYaw);
+	float StartTime = 0.0f;
+	for (int32 Index = 0; Index < TurnYawCurve.Num(); ++Index)
+	{
+		if (FMath::Abs(TurnYawCurve[Index]) >= StartYaw)
+		{
+			StartTime = Index * TurnYawCurveStep;
+			break;
+		}
+	}
+
+	FMontageBlendSettings BlendIn(FMath::Max(0.0f, TurnInPlaceBlendInTime));
+	FMontageBlendSettings BlendOut(FMath::Max(0.0f, TurnInPlaceBlendOutTime));
+	BlendIn.BlendMode = EMontageBlendMode::Inertialization;
+	BlendOut.BlendMode = EMontageBlendMode::Inertialization;
+	ActiveTurnMontage = PlaySlotAnimationAsDynamicMontage_WithBlendSettings(
+		TurnInPlaceAnimation, TurnInPlaceSlotName, BlendIn, BlendOut,
+		FMath::Max(0.1f, TurnInPlacePlayRate), 1, 0.0f, StartTime);
+	if (ActiveTurnMontage && bReverse)
+	{
+		// 우클릭 턴의 방향 전환과 같은 방식으로 역재생한다.
+		Montage_SetPlayRate(ActiveTurnMontage, -FMath::Max(0.1f, TurnInPlacePlayRate));
+	}
+	TurnTargetYaw = TargetYaw;
+	return ActiveTurnMontage != nullptr;
+}
+
 void UPlayerCharacterAnimInstance::UpdateTurnInPlaceTarget(float TargetYaw)
 {
 	if (!IsTurningInPlace()
@@ -95,6 +175,17 @@ void UPlayerCharacterAnimInstance::StopTurnInPlace()
 			MontageInstance->PushDisableRootMotion();
 		}
 		FMontageBlendSettings BlendOut(FMath::Max(0.0f, TurnInPlaceBlendOutTime));
+		BlendOut.BlendMode = EMontageBlendMode::Inertialization;
+		Montage_StopWithBlendSettings(BlendOut, ActiveTurnMontage);
+	}
+	ActiveTurnMontage = nullptr;
+}
+
+void UPlayerCharacterAnimInstance::CancelTurnInPlace(float BlendOutTime)
+{
+	if (ActiveTurnMontage && Montage_IsActive(ActiveTurnMontage))
+	{
+		FMontageBlendSettings BlendOut(FMath::Max(0.0f, BlendOutTime));
 		BlendOut.BlendMode = EMontageBlendMode::Inertialization;
 		Montage_StopWithBlendSettings(BlendOut, ActiveTurnMontage);
 	}

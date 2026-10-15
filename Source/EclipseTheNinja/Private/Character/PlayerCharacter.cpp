@@ -20,6 +20,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "InputCoreTypes.h"
 #include "GAS/StatAttributeSet.h"
+#include "GAS/Ability/GABaseAttack.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -64,6 +65,7 @@ void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
+	FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
 	// 체력 변화 델리게이트 바인딩
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
@@ -91,7 +93,7 @@ void APlayerCharacter::UpdateCursorTarget()
 	APlayerController* PlayerController = Cast<APlayerController>(GetController());
 	// 우클릭을 놓으면 몸 회전을 끄고 고개는 정면으로 복귀한다.
 	if (!PlayerController || !PlayerController->IsLocalPlayerController()
-		|| !PlayerController->IsInputKeyDown(EKeys::RightMouseButton))
+		|| !bIsExploring)
 	{
 		return;
 	}
@@ -120,11 +122,22 @@ void APlayerCharacter::UpdateCursorFacing(float DeltaSeconds)
 	const bool bShouldFaceCursor = bFaceCursor && bHasCursorTarget;
 	SetCursorFacingActive(bShouldFaceCursor);
 	UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance());
+	if (bMoveTurnActive && !(Animation && Animation->IsTurningInPlace()))
+	{
+		bMoveTurnActive = false;
+	}
+
 	if (!bShouldFaceCursor || bHasWallJumped)
 	{
-		if (Animation)
+		// A/D로 시작한 제자리 턴은 끝까지 재생한다.
+		if (Animation && !bMoveTurnActive)
 		{
 			Animation->StopTurnInPlace();
+		}
+		// 우클릭 해제나 짧은 A/D 입력으로 회전이 중간에 끊겨도 좌우 방향까지 마저 돌린다.
+		if (!bHasWallJumped)
+		{
+			SettleFacing(DeltaSeconds);
 		}
 		return;
 	}
@@ -134,6 +147,9 @@ void APlayerCharacter::UpdateCursorFacing(float DeltaSeconds)
 	{
 		CursorFacingYaw = HorizontalDistance > 0.0f ? 0.0f : 180.0f;
 	}
+	FacingTargetYaw = CursorFacingYaw;
+	// 커서 회전이 켜지면 진행 중인 턴도 커서 기준으로 이어서 처리한다.
+	bMoveTurnActive = false;
 
 	const UCharacterMovementComponent* Movement = GetCharacterMovement();
 	const bool bCanContinueTurn = Movement->IsMovingOnGround()
@@ -161,6 +177,68 @@ void APlayerCharacter::UpdateCursorFacing(float DeltaSeconds)
 	const FRotator NewRotation = FMath::RInterpConstantTo(
 		GetActorRotation(), TargetRotation, DeltaSeconds, FMath::Max(0.0f, CursorBodyTurnSpeed));
 	SetActorRotation(NewRotation);
+}
+
+void APlayerCharacter::SettleFacing(float DeltaSeconds)
+{
+	// 이동 입력 중에는 CMC의 bOrientRotationToMovement가 회전을 맡는다.
+	// 입력이 없으면 CMC는 회전을 멈추므로, 남은 회전을 여기서 이어서 돌린다.
+	const UCharacterMovementComponent* Movement = GetCharacterMovement();
+	if (!Movement->GetCurrentAcceleration().IsNearlyZero())
+	{
+		return;
+	}
+
+	// 제자리 턴 중에는 턴 클립의 루트 모션이 회전을 맡는다.
+	UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance());
+	if (Animation && Animation->IsTurningInPlace())
+	{
+		return;
+	}
+
+	const float RemainingYaw = FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, FacingTargetYaw);
+	if (FMath::IsNearlyZero(RemainingYaw, 0.5f))
+	{
+		return;
+	}
+
+	// 땅에 서 있고 남은 회전이 크면, 턴 클립의 남은 구간을 재생해 발을 디디며 마무리한다.
+	if (Animation && Movement->IsMovingOnGround() && FMath::Abs(RemainingYaw) >= MoveTurnClipMinYaw
+		&& Animation->TryStartTurnInPlaceRemaining(FacingTargetYaw, RemainingYaw))
+	{
+		bMoveTurnActive = true;
+		return;
+	}
+
+	// 클립으로 마무리할 수 없으면(작은 각도, 공중, 클립 회전 방향이 반대) 이동 회전과 같은 속도로 돌린다.
+	const float TurnSpeed = Movement->RotationRate.Yaw > 0.0f ? Movement->RotationRate.Yaw : CursorBodyTurnSpeed;
+	SetActorRotation(FMath::RInterpConstantTo(
+		GetActorRotation(), FRotator(0.0f, FacingTargetYaw, 0.0f), DeltaSeconds, TurnSpeed));
+}
+
+void APlayerCharacter::SnapToFacingTarget()
+{
+	// 루트 모션을 끄지 않고 즉시 끊어야 턴 클립의 루트 회전이 공격 포즈에 남지 않는다.
+	if (UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
+		Animation->CancelTurnInPlace(0.0f);
+	}
+	bMoveTurnActive = false;
+	SetActorRotation(FRotator(0.0f, FacingTargetYaw, 0.0f));
+}
+
+void APlayerCharacter::CancelMoveTurn()
+{
+	// A/D 입력이 다시 들어오면 턴 클립을 끊고 바로 이동한다. 서 있다가 움직일 때 지연이 없게 하기 위함이다.
+	if (!bMoveTurnActive)
+	{
+		return;
+	}
+	if (UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
+		Animation->CancelTurnInPlace(MoveTurnBlendOutTime);
+	}
+	bMoveTurnActive = false;
 }
 
 void APlayerCharacter::SetCursorFacingActive(bool bActive)
@@ -198,24 +276,28 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
+		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveEnd);
 		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
 
 		// Jumping
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveEnd);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoJumpStart);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoJumpEnd);
 
 		// Interacting
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoCameraMoveEnd);
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoInteract);
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoCameraMoveEnd);
 
 		// Dropping from platform
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Drop);
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Completed, this, &APlayerCharacter::DropReleased);
 
-		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCameraMoveEnd);
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
 	}
 }
 
@@ -370,11 +452,15 @@ void APlayerCharacter::Die()
 
 void APlayerCharacter::DoBasicAttack()
 {
-	// 우클릭 중에는 새 공격과 콤보 입력을 모두 막는다.
-	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	if (PlayerController && PlayerController->IsInputKeyDown(EKeys::RightMouseButton))
+	if (bIsDead) return;
+	if (!ASC) return;
+	if (!BasicAttackAbilityClass) return;
+	if (!BasicAttackMontage) return;
+
+	// 첫 공격 전에만 방향을 확정하고, 콤보 추가 입력은 기존 공격 방향을 유지한다.
+	if (!ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
 	{
-		return;
+		SnapToFacingTarget();
 	}
 
 	Super::DoBasicAttack();
@@ -387,6 +473,15 @@ void APlayerCharacter::DoMove(float Forward)
 	{
 		// save the movement values
 		ActionValueY = Forward;
+
+		// 입력이 짧게 끊겨도 이 방향까지 회전을 마무리한다.
+		if (!FMath::IsNearlyZero(Forward))
+		{
+			FacingTargetYaw = Forward > 0.0f ? 0.0f : 180.0f;
+
+			// 이동 입력은 지연 없이 바로 적용한다. 진행 중인 턴 클립은 끊는다.
+			CancelMoveTurn();
+		}
 
 		// figure out the movement direction
 		const FVector MoveDir = FVector(1.0f, Forward > 0.0f ? 0.1f : -0.1f, 0.0f);
@@ -452,6 +547,7 @@ void APlayerCharacter::DoCameraMoveStart()
 	}
 
 	APC->StartCameraMove();
+	bIsExploring = true;
 }
 
 void APlayerCharacter::DoCameraMoveEnd()
@@ -464,6 +560,7 @@ void APlayerCharacter::DoCameraMoveEnd()
 	}
 
 	APC->StopCameraMove();
+	bIsExploring = false;
 }
 
 void APlayerCharacter::MultiJump()
@@ -505,6 +602,8 @@ void APlayerCharacter::MultiJump()
 			// rotate to the bounce direction
 			const FRotator BounceRot = UKismetMathLibrary::MakeRotFromX(OutHit.ImpactNormal);
 			SetActorRotation(FRotator(0.0f, BounceRot.Yaw, 0.0f));
+			// 벽 점프 후에는 튕겨 나간 방향을 바라본다.
+			FacingTargetYaw = FMath::Abs(FRotator::NormalizeAxis(BounceRot.Yaw)) < 90.0f ? 0.0f : 180.0f;
 
 			// calculate the impulse vector
 			FVector WallJumpImpulse = OutHit.ImpactNormal * WallJumpHorizontalImpulse;

@@ -319,7 +319,7 @@ void UGABaseAttack::OnComboInput(FGameplayEventData Payload)
 
 void UGABaseAttack::OnComboCheck(FGameplayEventData Payload)
 {
-	UAbilitySystemComponent* SourceASC =GetAbilitySystemComponentFromActorInfo();
+	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
 
 	// 콤보를 재생 하려면 ASC도 있어야 하지만
 	// 현재 재생중인 몽타주의 어빌리티가 반드시 '나'여야 함
@@ -351,7 +351,7 @@ void UGABaseAttack::OnComboCheck(FGameplayEventData Payload)
 
 void UGABaseAttack::OnAttackStart(FGameplayEventData Payload)
 {
-	UAbilitySystemComponent* SourceASC =GetAbilitySystemComponentFromActorInfo();
+	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
 
 	// 콤보를 재생 하려면 ASC도 있어야 하지만
 	// 현재 재생중인 몽타주의 어빌리티가 반드시 '나'여야 함
