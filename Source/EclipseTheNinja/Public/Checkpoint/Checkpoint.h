@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Checkpoint/CheckpointId.h"
 #include "Checkpoint.generated.h"
 
 class UBoxComponent;
@@ -11,8 +12,9 @@ class UArrowComponent;
 
 /**
  * 체크포인트 액터.
- *  - ActivationTrigger : 플레이어가 닿으면 활성화(커밋)
+ *  - ActivationTrigger : 플레이어가 닿으면 CheckpointId로 갱신 요청
  *  - RespawnPoint      : 리스폰 위치/방향
+ *  - BeginPlay 시 CheckpointSubsystem에 등록 (리스폰 위치 조회용). 같은 CheckpointId는 레벨에 하나만 배치할 것
  */
 UCLASS()
 class ECLIPSETHENINJA_API ACheckpoint : public AActor
@@ -22,11 +24,12 @@ class ECLIPSETHENINJA_API ACheckpoint : public AActor
 public:
     ACheckpoint();
 
-    int32 GetCheckpointOrder() const { return this->CheckpointOrder; }
+    ECheckpointId GetCheckpointId() const { return this->CheckpointId; }
     FTransform GetRespawnTransform() const;
 
 protected:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     UFUNCTION()
     void OnTriggerBeginOverlap(
@@ -47,9 +50,9 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UArrowComponent> RespawnPoint = nullptr;
 
-    // 체크포인트 순서. 이보다 낮거나 같은 체크포인트로 되돌아가 활성화(재커밋)되는 것을 막는다
+    // 이 체크포인트의 식별자. Enum 순서가 진행 순서이므로, 이미 지나온 체크포인트는 다시 활성화되지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint")
-    int32 CheckpointOrder = 0;
+    ECheckpointId CheckpointId = ECheckpointId::None;
 
     // 레벨 시작 체크포인트용 변수. BeginPlay에서 자동 활성화
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint")

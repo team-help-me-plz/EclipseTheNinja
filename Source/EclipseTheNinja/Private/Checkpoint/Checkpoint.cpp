@@ -33,13 +33,28 @@ void ACheckpoint::BeginPlay()
 
     this->ActivationTrigger->OnComponentBeginOverlap.AddDynamic(this, &ACheckpoint::OnTriggerBeginOverlap);
 
-    if (this->bActivateOnBeginPlay)
+    if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
     {
-        if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
+        Subsystem->RegisterCheckpoint(this);
+
+        if (this->bActivateOnBeginPlay)
         {
-            Subsystem->ActivateCheckpoint(this);
+            Subsystem->ActivateCheckpoint(this->CheckpointId);
         }
     }
+}
+
+void ACheckpoint::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (UWorld* World = GetWorld())
+    {
+        if (UCheckpointSubsystem* Subsystem = World->GetSubsystem<UCheckpointSubsystem>())
+        {
+            Subsystem->UnregisterCheckpoint(this);
+        }
+    }
+
+    Super::EndPlay(EndPlayReason);
 }
 
 FTransform ACheckpoint::GetRespawnTransform() const
@@ -63,7 +78,7 @@ void ACheckpoint::OnTriggerBeginOverlap(
 
     if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
     {
-        UE_LOG(LogTemp, Log, TEXT("[%d]번 체크포인트 활성화."), this->CheckpointOrder);
-        Subsystem->ActivateCheckpoint(this);
+        // 실제 갱신 여부는 Subsystem에서 로그로 출력
+        Subsystem->ActivateCheckpoint(this->CheckpointId);
     }
 }
