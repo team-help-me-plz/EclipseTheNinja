@@ -4,15 +4,17 @@
 
 #include "CoreMinimal.h"
 #include "Interface/Activatable.h"
+#include "Interface/CheckpointResettable.h"
 
 #include "Engine/TargetPoint.h"
 #include "GameFramework/Actor.h"
 #include "MovingPlatform.generated.h"
 
 class UStaticMeshComponent;
+class UCheckpointBoundComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API AMovingPlatform : public AActor, public IActivatable
+class ECLIPSETHENINJA_API AMovingPlatform : public AActor, public IActivatable, public ICheckpointResettable
 {
 	GENERATED_BODY()
 
@@ -22,6 +24,9 @@ public:
 	virtual void	Tick(float DeltaTime) override;
 
 	virtual void	ToggleActivate_Implementation() override;
+
+	virtual void ResetToInitial_Implementation() override;
+	virtual void OnAfterReset_Implementation() override;
 
 protected:
 	virtual void	BeginPlay() override;
@@ -40,6 +45,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.1"))
 	float					TargetPointTravelTime;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
+
 	// 트리거로 움직임을 제어할 수 있는지 설정하는 값
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|State")
 	bool	bIsActivatable = false;
@@ -57,7 +65,7 @@ private:
 	float	EndPointFloat = 0.0;
 	float	CycleLength = 0.0;
 	
-	int32	CurrentTargetPoint = 0;
-	int32	NextTargetPoint = 1;
 	bool	bIsMoveForward = true;
+
+	bool	bIsMovementUse = true;
 };

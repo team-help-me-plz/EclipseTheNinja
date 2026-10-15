@@ -10,7 +10,7 @@
 ABreakablePlatform::ABreakablePlatform()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 
 	this->RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
 	SetRootComponent(this->RootScene);
@@ -20,9 +20,17 @@ ABreakablePlatform::ABreakablePlatform()
 	this->CollisionBox->SetupAttachment(GetRootComponent());
 
 	this->MeshAssembly = CreateDefaultSubobject<UChildActorComponent>(TEXT("MeshAssembly"));
-	//this->MeshAssembly->(ECollisionResponse::ECR_Block);
 	this->MeshAssembly->SetupAttachment(GetRootComponent());
 
+	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+}
+
+void ABreakablePlatform::ResetToInitial_Implementation()
+{
+	GetWorldTimerManager().ClearTimer(this->PlatformBreakTimer);
+	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTimer);
+	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTryTimer);
+	this->RestorePlatform();
 }
 
 // Called when the game starts or when spawned
@@ -116,8 +124,6 @@ void ABreakablePlatform::BreakPlatform()
 
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
-		Mesh->SetCollisionObjectType(ECC_WorldDynamic);
-
 		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	}
 	GetWorldTimerManager().SetTimer(
@@ -161,8 +167,6 @@ void ABreakablePlatform::RestorePlatform()
 
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
-		Mesh->SetCollisionObjectType(ECC_WorldDynamic);
-
 		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 	}
 }
