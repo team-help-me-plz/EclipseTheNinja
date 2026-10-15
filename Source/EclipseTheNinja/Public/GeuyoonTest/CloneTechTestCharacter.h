@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Interface/Interactor.h"
+#include "Interface/CheckpointResettable.h"
 
 #include "GameplayAbilitySpecHandle.h"
 #include "GameplayEffectTypes.h"
@@ -34,7 +35,7 @@ struct FAbilityInfo
  * 
  */
 UCLASS()
-class ECLIPSETHENINJA_API ACloneTechTestCharacter : public ASideScrollingCharacter, public IAbilitySystemInterface, public IInteractor
+class ECLIPSETHENINJA_API ACloneTechTestCharacter : public ASideScrollingCharacter, public IAbilitySystemInterface, public IInteractor, public ICheckpointResettable
 {
 	GENERATED_BODY()
 	
@@ -45,6 +46,9 @@ public:
 
 	virtual void	RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void	ReturnToSafePoint_Implementation() override;
+
+	virtual void ResetToInitial_Implementation() override;
+	virtual void OnAfterReset_Implementation() override;
 
 protected:
 	virtual void BeginPlay() override;

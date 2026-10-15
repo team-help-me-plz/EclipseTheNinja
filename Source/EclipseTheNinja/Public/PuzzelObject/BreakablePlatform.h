@@ -3,11 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Interface/CheckpointResettable.h"
+
 #include "GameFramework/Actor.h"
 #include "BreakablePlatform.generated.h"
 
 class UBoxComponent;
 class UStaticMeshComponent;
+class UCheckpointBoundComponent;
 
 enum class EBreakablePlatformState
 {
@@ -17,13 +20,16 @@ enum class EBreakablePlatformState
 };
 
 UCLASS()
-class ECLIPSETHENINJA_API ABreakablePlatform : public AActor
+class ECLIPSETHENINJA_API ABreakablePlatform : public AActor, public ICheckpointResettable
 {
 	GENERATED_BODY()
 	
 public:	
 	// Sets default values for this actor's properties
 	ABreakablePlatform();
+
+	virtual void ResetToInitial_Implementation() override;
+	virtual void OnAfterReset_Implementation() override {}
 
 protected:
 	// Called when the game starts or when spawned
@@ -64,6 +70,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UChildActorComponent>	MeshAssembly = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Break|Timer")
 	float	BreakTime = 0.5f;

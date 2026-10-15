@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "PuzzelObject/MovingPlatform.h"
+#include "Checkpoint/CheckpointBoundComponent.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -18,6 +19,7 @@ AMovingPlatform::AMovingPlatform()
 	this->MeshAssembly->SetMobility(EComponentMobility::Movable);
 	this->MeshAssembly->SetupAttachment(GetRootComponent());
 
+	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 }
 
 void AMovingPlatform::BeginPlay()
@@ -27,6 +29,7 @@ void AMovingPlatform::BeginPlay()
 	//this->ElapsedTime = 0.0;
 	this->EndPointFloat = static_cast<float>(this->TargetPoint.Num());
 	this->CycleLength = EndPointFloat * 2.0f;
+	this->bIsMovementUse = this->bIsMovement;
 }
 
 void AMovingPlatform::PlatformMovement(float DeltaTime)
@@ -35,7 +38,7 @@ void AMovingPlatform::PlatformMovement(float DeltaTime)
 	{
 		return ;
 	}
-	if (!this->bIsMovement && !this->bIsResetable)
+	if (!this->bIsMovementUse && !this->bIsResetable)
 	{
 		return ;
 	}
@@ -50,7 +53,7 @@ void AMovingPlatform::PlatformMovement(float DeltaTime)
 		return ;
 	}
 	const float	Step = DeltaTime / this->TargetPointTravelTime;
-	if (this->bIsMovement)
+	if (this->bIsMovementUse)
 	{
 		float	Phase = this->bIsMoveForward
 			? this->RouteProgress
@@ -88,7 +91,21 @@ void AMovingPlatform::ToggleActivate_Implementation()
 	{
 		return;
 	}
-	this->bIsMovement = !this->bIsMovement;
+	this->bIsMovementUse = !this->bIsMovementUse;
+}
+
+void AMovingPlatform::ResetToInitial_Implementation()
+{
+	this->bIsMovementUse = this->bIsMovement;
+	this->RouteProgress = 0.f;
+	if (this->TargetPoint.Num())
+	{
+		this->SetActorLocation(this->TargetPoint[0]->GetActorLocation());
+	}
+}
+
+void AMovingPlatform::OnAfterReset_Implementation()
+{
 }
 
 
