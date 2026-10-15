@@ -91,7 +91,7 @@ void APlayerCharacter::UpdateCursorTarget()
 	APlayerController* PlayerController = Cast<APlayerController>(GetController());
 	// 우클릭을 놓으면 몸 회전을 끄고 고개는 정면으로 복귀한다.
 	if (!PlayerController || !PlayerController->IsLocalPlayerController()
-		|| !PlayerController->IsInputKeyDown(EKeys::RightMouseButton))
+		|| !bIsExploring)
 	{
 		return;
 	}
@@ -198,24 +198,28 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
+		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveEnd);
 		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
 
 		// Jumping
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveEnd);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoJumpStart);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoJumpEnd);
 
 		// Interacting
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoCameraMoveEnd);
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoInteract);
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoCameraMoveEnd);
 
 		// Dropping from platform
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Drop);
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Completed, this, &APlayerCharacter::DropReleased);
 
-		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCameraMoveEnd);
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
 	}
 }
 
@@ -370,13 +374,6 @@ void APlayerCharacter::Die()
 
 void APlayerCharacter::DoBasicAttack()
 {
-	// 우클릭 중에는 새 공격과 콤보 입력을 모두 막는다.
-	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	if (PlayerController && PlayerController->IsInputKeyDown(EKeys::RightMouseButton))
-	{
-		return;
-	}
-
 	Super::DoBasicAttack();
 }
 
@@ -452,6 +449,7 @@ void APlayerCharacter::DoCameraMoveStart()
 	}
 
 	APC->StartCameraMove();
+	bIsExploring = true;
 }
 
 void APlayerCharacter::DoCameraMoveEnd()
@@ -464,6 +462,7 @@ void APlayerCharacter::DoCameraMoveEnd()
 	}
 
 	APC->StopCameraMove();
+	bIsExploring = false;
 }
 
 void APlayerCharacter::MultiJump()

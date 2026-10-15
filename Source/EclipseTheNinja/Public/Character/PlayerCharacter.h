@@ -138,14 +138,21 @@ protected:
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
+	// 커서의 위치 갱신
 	void UpdateCursorTarget();
+	// 캐릭터가 커서를 바라보도록 업데이트하는 함수
 	void UpdateCursorFacing(float DeltaSeconds);
 	void SetCursorFacingActive(bool bActive);
 
 	FVector CursorWorldLocation = FVector::ZeroVector;
+	// 유효한 커서 위치가 있는지 확인하는 변수
 	bool bHasCursorTarget = false;
+	// 현재 커서를 바라보는 기능이 켜져 있는지
 	bool bCursorFacingActive = false;
+	// 현재 카메라 탐색모드가 켜져 켜지 있는지
+	bool bIsExploring = false;
 	float CursorFacingYaw = 0.0f;
+
 	bool bSavedOrientRotationToMovement = false;
 	bool bSavedUseControllerDesiredRotation = false;
 	bool bSavedUseControllerRotationYaw = false;
