@@ -46,12 +46,12 @@ protected:
 		UPrimitiveComponent* OtherComp,
 		int32 OtherBodyIndex);
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UBoxComponent>	PressureTrigger = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<UChildActorComponent>	MeshAssembly = nullptr;
+	
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|Target")
 	TObjectPtr<AActor>			TargetActor = nullptr;
 

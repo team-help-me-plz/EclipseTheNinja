@@ -4,6 +4,7 @@
 #include "PuzzelObject/InteractSwitch.h"
 #include "Interface/Interactor.h"
 #include "Interface/Activatable.h"
+#include "Util/MeshAssembly.h"
 
 #include "Components/SphereComponent.h"
 
@@ -17,9 +18,11 @@ AInteractSwitch::AInteractSwitch()
 	//this->InteractSphere->SetSphereRadius(this->InteractRadius);
 	//SetRootComponent(this->InteractSphere);
 
-	this->Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	SetRootComponent(this->Mesh);
-	//this->Mesh->SetupAttachment(GetRootComponent());
+	this->RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
+	SetRootComponent(this->RootScene);
+
+	this->MeshAssembly = CreateDefaultSubobject<UChildActorComponent>(TEXT("MeshAssembly"));
+	this->MeshAssembly->SetupAttachment(GetRootComponent());
 
 }
 

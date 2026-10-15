@@ -19,9 +19,10 @@ ABreakablePlatform::ABreakablePlatform()
 	this->CollisionBox->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Overlap);
 	this->CollisionBox->SetupAttachment(GetRootComponent());
 
-	this->Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	this->Mesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
-	this->Mesh->SetupAttachment(GetRootComponent());
+	this->MeshAssembly = CreateDefaultSubobject<UChildActorComponent>(TEXT("MeshAssembly"));
+	//this->MeshAssembly->(ECollisionResponse::ECR_Block);
+	this->MeshAssembly->SetupAttachment(GetRootComponent());
+
 }
 
 // Called when the game starts or when spawned
@@ -29,6 +30,21 @@ void ABreakablePlatform::BeginPlay()
 {
 	Super::BeginPlay();
 	
+	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
+	if (!IsValid(AssemblyActor))
+	{
+		return;
+	}
+
+	TArray<UStaticMeshComponent*> Meshes;
+	AssemblyActor->GetComponents<UStaticMeshComponent>(Meshes);
+
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		Mesh->SetCollisionObjectType(ECC_WorldDynamic);
+
+		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	}
 }
 
 // Called every frame
@@ -87,8 +103,23 @@ void ABreakablePlatform::OnCollisionEndOverlap(UPrimitiveComponent* OverlappedCo
 void ABreakablePlatform::BreakPlatform()
 {
 	this->State = EBreakablePlatformState::Broken;
-	this->Mesh->SetVisibility(false);
-	this->Mesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+	this->MeshAssembly->SetVisibility(false);
+
+	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
+	if (!IsValid(AssemblyActor))
+	{
+		return;
+	}
+
+	TArray<UStaticMeshComponent*> Meshes;
+	AssemblyActor->GetComponents<UStaticMeshComponent>(Meshes);
+
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		Mesh->SetCollisionObjectType(ECC_WorldDynamic);
+
+		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	}
 	GetWorldTimerManager().SetTimer(
 		this->PlatformRestoreTimer,
 		this,
@@ -117,7 +148,22 @@ void ABreakablePlatform::TryRestore()
 void ABreakablePlatform::RestorePlatform()
 {
 	this->State = EBreakablePlatformState::Ready;
-	this->Mesh->SetVisibility(true);
-	this->Mesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
+	this->MeshAssembly->SetVisibility(true);
+
+	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
+	if (!IsValid(AssemblyActor))
+	{
+		return;
+	}
+
+	TArray<UStaticMeshComponent*> Meshes;
+	AssemblyActor->GetComponents<UStaticMeshComponent>(Meshes);
+
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		Mesh->SetCollisionObjectType(ECC_WorldDynamic);
+
+		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	}
 }
 

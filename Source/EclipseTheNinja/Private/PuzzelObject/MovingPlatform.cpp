@@ -11,9 +11,13 @@ AMovingPlatform::AMovingPlatform()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
 
-	this->Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	this->Mesh->SetMobility(EComponentMobility::Movable);
-	SetRootComponent(this->Mesh);
+	this->RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
+	SetRootComponent(this->RootScene);
+
+	this->MeshAssembly = CreateDefaultSubobject<UChildActorComponent>(TEXT("MeshAssembly"));
+	this->MeshAssembly->SetMobility(EComponentMobility::Movable);
+	this->MeshAssembly->SetupAttachment(GetRootComponent());
+
 }
 
 void AMovingPlatform::BeginPlay()
