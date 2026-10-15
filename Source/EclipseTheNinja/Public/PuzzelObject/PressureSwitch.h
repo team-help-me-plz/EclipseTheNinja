@@ -5,15 +5,17 @@
 #include "CoreMinimal.h"
 #include "Interface/Interactable.h"
 #include "Interface/Activatable.h"
+#include "Interface/CheckpointResettable.h"
 
 #include "GameFramework/Actor.h"
 #include "PressureSwitch.generated.h"
 
 class UBoxComponent;
 class UStaticMeshComponent;
+class UCheckpointBoundComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API APressureSwitch : public AActor, public IInteractable
+class ECLIPSETHENINJA_API APressureSwitch : public AActor, public IInteractable, public ICheckpointResettable
 {
 	GENERATED_BODY()
 
@@ -26,6 +28,10 @@ public:
 	virtual void	ShowInteractionIndicator_Implementation() override;
 	virtual void	HideInteractionIndicator_Implementation() override;
 	virtual bool	bIsInteractReady_Implementation() override;
+
+	// 체크포인트 리스폰: 한 번도 밟히지 않은 상태로 되돌린다
+	virtual void	ResetToInitial_Implementation() override;
+	virtual void	OnAfterReset_Implementation() override {}
 
 protected:
 	virtual void PostInitializeComponents() override;
@@ -52,6 +58,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UChildActorComponent>	MeshAssembly = nullptr;
 	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
+
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|Target")
 	TObjectPtr<AActor>			TargetActor = nullptr;
 

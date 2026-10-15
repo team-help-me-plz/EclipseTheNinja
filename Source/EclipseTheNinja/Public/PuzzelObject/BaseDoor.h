@@ -5,14 +5,16 @@
 #include "CoreMinimal.h"
 #include "Interface/Activatable.h"
 #include "Interface/Interactable.h"
+#include "Interface/CheckpointResettable.h"
 
 #include "GameFramework/Actor.h"
 #include "BaseDoor.generated.h"
 
 class UStaticMeshComponent;
+class UCheckpointBoundComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API ABaseDoor : public AActor, public IActivatable, public IInteractable
+class ECLIPSETHENINJA_API ABaseDoor : public AActor, public IActivatable, public IInteractable, public ICheckpointResettable
 {
 	GENERATED_BODY()
 
@@ -28,6 +30,11 @@ public:
 	virtual void	HideInteractionIndicator_Implementation() override;
 	virtual bool	bIsInteractReady_Implementation() override;
 
+	// 체크포인트 리스폰: 열림 상태와 쿨다운을 BeginPlay 시점으로 되돌린다
+	virtual void	ResetToInitial_Implementation() override;
+	// 체크포인트 리스폰: 문 메시를 즉시 현재 상태 위치로 맞춘다 (열리고 닫히는 연출 없이)
+	virtual void	OnAfterReset_Implementation() override;
+
 	virtual void	DoorMovement(float DeltaTime);
 
 protected:
@@ -41,6 +48,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UStaticMeshComponent>	LeftDoorMesh = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.01"))
 	float	DoorMoveTime = 3.0;
@@ -61,4 +71,7 @@ private:
 	FTimerHandle	InteractionCooldownTimer;
 	bool			bIsInteractCooldown = false;
 	float			InteractInterval = 0.5f;
+
+	// 체크포인트 리셋용 초기 상태
+	bool			bInitialIsOpen = false;
 };

@@ -4,15 +4,17 @@
 
 #include "CoreMinimal.h"
 #include "Interface/Activatable.h"
+#include "Interface/CheckpointResettable.h"
 
 #include "GameFramework/Actor.h"
 #include "ArrowTrapActor.generated.h"
 
 class UStaticMeshComponent;
 class ATrapArrowActor;
+class UCheckpointBoundComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API AArrowTrapActor : public AActor, public IActivatable
+class ECLIPSETHENINJA_API AArrowTrapActor : public AActor, public IActivatable, public ICheckpointResettable
 {
 	GENERATED_BODY()
 	
@@ -29,7 +31,11 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void	ToggleActivate_Implementation() override;
-	
+
+	// 체크포인트 리스폰: 발사 쿨다운 초기화 (날아가던 화살은 Subsystem이 런타임 스폰 액터로 파괴)
+	virtual void	ResetToInitial_Implementation() override;
+	virtual void	OnAfterReset_Implementation() override {}
+
 protected:
 	void	SpawnArrow();
 
@@ -41,6 +47,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	TObjectPtr<USceneComponent>			ArrowSpawnPos = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Trap")
 	TSubclassOf<ATrapArrowActor>		ArrowClass = nullptr;

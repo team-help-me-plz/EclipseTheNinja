@@ -6,6 +6,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Interface/Interactable.h"
+#include "Checkpoint/CheckpointSubsystem.h"
 
 UGACloneTech::UGACloneTech()
 {
@@ -170,6 +171,12 @@ void UGACloneTech::HandleTargetAccepted(const FCloneCommandType& InCommand)
 	this->SpawnedClone->SetCommand(InCommand);
 	this->SpawnedClone->OnDestroyed.AddDynamic(this, &UGACloneTech::HandleCloneDestroyed);
 	this->SpawnedClone->SetLifeSpan(FMath::Max(this->CloneLifeTime, 0.01f));
+
+	// 체크포인트 리스폰 시 분신 제거 (HandleCloneDestroyed에서 어빌리티가 정리됨)
+	if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
+	{
+		Subsystem->RegisterRuntimeSpawnedActor(this->SpawnedClone.Get());
+	}
 }
 
 void UGACloneTech::HandleTargetCancelled()

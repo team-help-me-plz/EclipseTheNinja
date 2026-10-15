@@ -3,6 +3,8 @@
 
 #include "Trap/ArrowTrapActor.h"
 #include "Trap/TrapArrowActor.h"
+#include "Checkpoint/CheckpointSubsystem.h"
+#include "Checkpoint/CheckpointBoundComponent.h"
 
 #include "Components/StaticMeshComponent.h"
 
@@ -20,6 +22,14 @@ AArrowTrapActor::AArrowTrapActor()
 
 	this->ArrowSpawnPos = CreateDefaultSubobject<USceneComponent>(TEXT("ArrowSpawnPos"));
 	this->ArrowSpawnPos->SetupAttachment(GetRootComponent());
+
+	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+}
+
+void AArrowTrapActor::ResetToInitial_Implementation()
+{
+	GetWorldTimerManager().ClearTimer(this->ActivateCooldownTimer);
+	this->bIsActivateCooldown = false;
 }
 
 // Called when the game starts or when spawned
@@ -71,6 +81,12 @@ void AArrowTrapActor::SpawnArrow()
 	if (SpawnedArrow)
 	{
 		SpawnedArrow->SetLaunch(this->ArrowSpeed);
+
+		// 체크포인트 리스폰 시 날아가던 화살 제거
+		if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
+		{
+			Subsystem->RegisterRuntimeSpawnedActor(SpawnedArrow);
+		}
 	}
 }
 

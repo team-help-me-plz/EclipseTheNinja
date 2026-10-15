@@ -5,6 +5,7 @@
 #include "Interface/Interactor.h"
 #include "Interface/Activatable.h"
 #include "Util/MeshAssembly.h"
+#include "Checkpoint/CheckpointBoundComponent.h"
 
 #include "Components/SphereComponent.h"
 
@@ -24,6 +25,15 @@ AInteractSwitch::AInteractSwitch()
 	this->MeshAssembly = CreateDefaultSubobject<UChildActorComponent>(TEXT("MeshAssembly"));
 	this->MeshAssembly->SetupAttachment(GetRootComponent());
 
+	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+}
+
+void AInteractSwitch::ResetToInitial_Implementation()
+{
+	this->bIsInteracted = false;
+
+	GetWorldTimerManager().ClearTimer(this->InteractionCooldownTimer);
+	this->bIsInteractCooldown = false;
 }
 
 // Called when the game starts or when spawned
