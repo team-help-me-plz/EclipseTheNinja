@@ -9,6 +9,7 @@
 #include "GameFramework/Actor.h"
 #include "InteractSwitch.generated.h"
 
+class AMeshAssembly;
 class USphereComponent;
 class UCheckpointBoundComponent;
 
@@ -39,10 +40,12 @@ public:
 	virtual bool	bIsInteractReady_Implementation() override;
 
 protected:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<USceneComponent>			RootScene = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
-
+	TObjectPtr<UChildActorComponent>	MeshAssembly = nullptr;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
 

@@ -2,8 +2,10 @@
 
 
 #include "Character/Enemy.h"
+#include "Component/EnemyDetectionComponent.h"
 #include "GAS/StatAttributeSet.h"
 #include "AbilitySystemComponent.h"
+#include "GameplayEffectExtension.h"
 #include "Components/WidgetComponent.h"
 #include "Widgets/OverheadWidget.h"
 #include "Kismet/GameplayStatics.h"
@@ -22,6 +24,7 @@ AEnemy::AEnemy()
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+	EnemyDetectComponent = CreateDefaultSubobject<UEnemyDetectionComponent>(TEXT("EnemyDetectionComp"));
 	AIControllerClass = AAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 	GetCharacterMovement()->bOrientRotationToMovement = false;
@@ -86,6 +89,11 @@ void AEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 	if (Data.NewValue < Data.OldValue)
 	{
 		PlayHitReaction();
+
+		// 공격받으면 감지 상태와 무관하게 즉시 전투 상태로 전환한다.
+		AActor* DamageInstigator = Data.GEModData
+			? Data.GEModData->EffectSpec.GetContext().GetInstigator() : nullptr;
+		EnemyDetectComponent->NotifyDamaged(DamageInstigator);
 	}
 }
 
@@ -172,12 +180,6 @@ void AEnemy::Tick(float DeltaTime)
 	{
 		UpdateOverheadWidgetRotation();
 	}
-
-	// State에 따른 행동
-	if (!bIsDead)
-	{
-		UpdateBehavior(DeltaTime);
-	}
 }
 
 
@@ -202,14 +204,9 @@ bool AEnemy::IsInsideCombatArea(const FVector& Location) const
 
 AActor* AEnemy::GetCombatTarget() const
 {
-	const APawn* Target = CombatTarget.Get();
-	const float RetainRadius = FMath::Max(FMath::Max(1.0f, DetectionRadius), LoseTargetRadius);
-	if (bIsDead || !IsLivingPlayer(Target) || !IsInsideCombatArea(Target->GetActorLocation())
-		|| FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) > FMath::Square(RetainRadius))
-	{
-		return nullptr;
-	}
-	return CombatTarget.Get();
+	// 공격을 시작한 타겟이 여전히 추적 가능한 경우에만 반환한다.
+	APawn* Target = CombatTarget.Get();
+	return IsValidAITarget(Target) ? Target : nullptr;
 }
 
 bool AEnemy::IsAttackActive() const
@@ -275,13 +272,6 @@ void AEnemy::SetBehaviorState(EEnemyBehaviorState NewState)
 	StopHorizontalMovement();
 }
 
-void AEnemy::LoseCombatTarget()
-{
-	// 목표를 잃으면 순찰 상태로 돌아간다.
-	SetBehaviorState(EEnemyBehaviorState::Patrol);
-	CombatTarget.Reset();
-}
-
 void AEnemy::StartPatrol()
 {
 	if (bIsDead)
@@ -290,108 +280,62 @@ void AEnemy::StartPatrol()
 	}
 	SetBehaviorState(EEnemyBehaviorState::Patrol);
 	CombatTarget.Reset();
-	PatrolWaitRemaining = 0.0f;
 }
 
-void AEnemy::UpdatePatrol(float DeltaTime)
+FVector AEnemy::ChooseNextPatrolLocation()
 {
-	// 양 끝에서 잠시 대기한 뒤 반대 방향으로 왕복한다.
-	if (PatrolWaitRemaining > 0.0f)
-	{
-		PatrolWaitRemaining = FMath::Max(0.0f, PatrolWaitRemaining - DeltaTime);
-		StopHorizontalMovement();
-		return;
-	}
-	if (PatrolMaxX - PatrolMinX <= 10.0f)
-	{
-		StopHorizontalMovement();
-		return;
-	}
-	const float CurrentX = GetActorLocation().X;
-	const float DestinationX = bPatrolTowardsMax ? PatrolMaxX : PatrolMinX;
-	if ((bPatrolTowardsMax && CurrentX >= DestinationX - 5.0f)
-		|| (!bPatrolTowardsMax && CurrentX <= DestinationX + 5.0f))
-	{
-		bPatrolTowardsMax = !bPatrolTowardsMax;
-		PatrolWaitRemaining = FMath::Max(0.0f, PatrolWaitTime);
-		StopHorizontalMovement();
-		return;
-	}
-	MoveAlongX(DestinationX, PatrolSpeed, DeltaTime);
+	if (!IsReadyForAI()) 
+		return GetActorLocation();
+
+	StartPatrol();
+	const float X = GetActorLocation().X;
+	if (bPatrolTowardsMax && X >= PatrolMaxX - 10.0f) 
+		bPatrolTowardsMax = false;
+	else if (!bPatrolTowardsMax && X <= PatrolMinX + 10.0f) 
+		bPatrolTowardsMax = true;
+
+	FVector Location = BehaviorOrigin;
+	Location.X = bPatrolTowardsMax ? PatrolMaxX : PatrolMinX;
+	return Location;
 }
 
-void AEnemy::UpdateBehavior(float DeltaTime)
+bool AEnemy::IsValidAITarget(AActor* Target) const
 {
-	// 전투 영역과 목표 유효성을 확인한 뒤 순찰, 추적, 공격을 선택한다.
-	if (!IsInsideCombatArea(GetActorLocation()))
-	{
-		LoseCombatTarget();
-		return;
-	}
-	APawn* Target = CombatTarget.Get();
-	if (Target || BehaviorState == EEnemyBehaviorState::Chase || BehaviorState == EEnemyBehaviorState::Attack)
-	{
-		const float RetainRadius = FMath::Max(FMath::Max(1.0f, DetectionRadius), LoseTargetRadius);
-		if (!IsLivingPlayer(Target) || !IsInsideCombatArea(Target->GetActorLocation())
-			|| FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) > FMath::Square(RetainRadius))
-		{
-			LoseCombatTarget();
-			return;
-		}
-	}
-	else
-	{
-		APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
-		if (IsLivingPlayer(Player) && IsInsideCombatArea(Player->GetActorLocation())
-			&& FVector::DistSquared(GetActorLocation(), Player->GetActorLocation()) <= FMath::Square(FMath::Max(1.0f, DetectionRadius)))
-		{
-			CombatTarget = Player;
-			Target = Player;
-			SetBehaviorState(EEnemyBehaviorState::Chase);
-		}
-	}
-	if (IsPlayingHitReaction())
-	{
-		StopHorizontalMovement();
-		return;
-	}
-	if (!Target)
-	{
-		if (BehaviorState == EEnemyBehaviorState::Patrol)
-		{
-			UpdatePatrol(DeltaTime);
-		}
-		else
-		{
-			StopHorizontalMovement();
-		}
-		return;
-	}
-	// 진행 중인 공격이 끝난 뒤 방향 전환과 추적을 재개한다.
-	if (IsAttackActive())
-	{
-		StopHorizontalMovement();
-		return;
-	}
-	const float Distance = FVector::Distance(GetActorLocation(), Target->GetActorLocation());
-	const float DirectionX = Target->GetActorLocation().X - GetActorLocation().X;
-	if (Distance > FMath::Max(1.0f, AttackDistance))
-	{
-		SetBehaviorState(EEnemyBehaviorState::Chase);
-		MoveAlongX(Target->GetActorLocation().X, ChaseSpeed, DeltaTime);
-		return;
-	}
+	// 활동 영역은 검사하지 않는다. 시야를 잃으면 마지막 목격 위치를 거쳐 순찰 구간으로 돌아온다.
+	return IsReadyForAI() && IsLivingPlayer(Cast<APawn>(Target));
+}
+
+bool AEnemy::IsWithinAttackRange(AActor* Target) const
+{
+	return IsValidAITarget(Target)
+		&& FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) <= FMath::Square(FMath::Max(1.0f, AttackDistance));
+}
+
+void AEnemy::FaceLocation(const FVector& Location)
+{
+	FaceDirection(Location.X - GetActorLocation().X);
+}
+
+bool AEnemy::TryStartAIBaseAttack(AActor* Target)
+{
+	if (!IsWithinAttackRange(Target) || IsPlayingHitReaction() || !ASC || IsAttackActive()) return false;
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextAttackTime) return false;
+	CombatTarget = Cast<APawn>(Target);
 	SetBehaviorState(EEnemyBehaviorState::Attack);
 	StopHorizontalMovement();
-	FaceDirection(DirectionX);
-	const double Now = GetWorld()->GetTimeSeconds();
-	if (Now >= NextAttackTime)
+	FaceLocation(Target->GetActorLocation());
+	NextAttackTime = Now + FMath::Max(0.1f, AttackInterval);
+	return BasicAttackAbilityClass && BasicAttackMontage && ASC->TryActivateAbilityByClass(BasicAttackAbilityClass);
+}
+
+void AEnemy::CancelAIBaseAttack()
+{
+	if (ASC && BasicAttackAbilityClass)
 	{
-		// Also throttle failed activation (e.g. no montage assigned).
-		NextAttackTime = Now + FMath::Max(0.1f, AttackInterval);
-		if (BasicAttackAbilityClass)
+		if (const FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass))
 		{
-			ASC->TryActivateAbilityByClass(BasicAttackAbilityClass);
+			ASC->CancelAbilityHandle(Spec->Handle);
 		}
 	}
 }

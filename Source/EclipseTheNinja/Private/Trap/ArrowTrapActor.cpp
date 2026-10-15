@@ -14,8 +14,11 @@ AArrowTrapActor::AArrowTrapActor()
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
-	this->Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	SetRootComponent(this->Mesh);
+	this->RootScene = CreateDefaultSubobject<USceneComponent>(TEXT("RootScene"));
+	SetRootComponent(this->RootScene);
+
+	this->MeshAssembly = CreateDefaultSubobject<UChildActorComponent>(TEXT("MeshAssembly"));
+	this->MeshAssembly->SetupAttachment(GetRootComponent());
 
 	this->ArrowSpawnPos = CreateDefaultSubobject<USceneComponent>(TEXT("ArrowSpawnPos"));
 	this->ArrowSpawnPos->SetupAttachment(GetRootComponent());

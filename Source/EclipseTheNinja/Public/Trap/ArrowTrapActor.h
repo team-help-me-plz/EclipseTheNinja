@@ -39,8 +39,11 @@ public:
 protected:
 	void	SpawnArrow();
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
-	TObjectPtr<UStaticMeshComponent>	Mesh = nullptr;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<USceneComponent>			RootScene = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<UChildActorComponent>	MeshAssembly = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	TObjectPtr<USceneComponent>			ArrowSpawnPos = nullptr;
