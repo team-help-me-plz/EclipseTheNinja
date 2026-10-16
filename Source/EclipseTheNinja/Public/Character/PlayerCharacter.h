@@ -277,7 +277,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoCameraMoveEnd();
 
+	/** 분신술 타게팅 상태 설정. 타게팅 중에는 카메라 시점을 유지하고, 종료되면 중앙으로 복귀한다. */
+	void SetCloneTargeting(bool bTargeting);
+
 protected:
+
+	/** 입력으로 카메라 시점 전환을 종료한다. 분신술 타게팅 중에는 무시한다. */
+	void OnCameraMoveEndInput();
+
+	/** 분신술 타게팅 중인지 여부 */
+	bool bIsCloneTargeting = false;
 
 	/** 발판 내려가기, 지상 점프, 벽 점프, 코요테 점프를 처리한다. */
 	void MultiJump();

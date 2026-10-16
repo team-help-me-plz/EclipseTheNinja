@@ -27,693 +27,717 @@
 
 APlayerCharacter::APlayerCharacter()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	InteractBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractCollision"));
-	InteractBox->SetupAttachment(RootComponent);
-	InteractBox->SetBoxExtent(InteractBoxSize);
-	InteractBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	InteractBox->SetCollisionResponseToAllChannels(ECR_Overlap);
-	InteractBox->SetGenerateOverlapEvents(true);
+    PrimaryActorTick.bCanEverTick = true;
+    InteractBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractCollision"));
+    InteractBox->SetupAttachment(RootComponent);
+    InteractBox->SetBoxExtent(InteractBoxSize);
+    InteractBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    InteractBox->SetCollisionResponseToAllChannels(ECR_Overlap);
+    InteractBox->SetGenerateOverlapEvents(true);
 
-	// create the camera component
-	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
-	Camera->SetupAttachment(RootComponent);
+    // create the camera component
+    Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
+    Camera->SetupAttachment(RootComponent);
 
-	Camera->SetRelativeLocationAndRotation(FVector(0.0f, 300.0f, 0.0f), FRotator(0.0f, -90.0f, 0.0f));
+    Camera->SetRelativeLocationAndRotation(FVector(0.0f, 300.0f, 0.0f), FRotator(0.0f, -90.0f, 0.0f));
 
-	// configure the collision capsule
-	GetCapsuleComponent()->SetCapsuleSize(35.0f, 90.0f);
+    // configure the collision capsule
+    GetCapsuleComponent()->SetCapsuleSize(35.0f, 90.0f);
 
-	// configure the character movement component
-	GetCharacterMovement()->GravityScale = 1.75f;
-	GetCharacterMovement()->MaxAcceleration = 1500.0f;
-	GetCharacterMovement()->BrakingFrictionFactor = 1.0f;
-	GetCharacterMovement()->bUseSeparateBrakingFriction = true;
-	GetCharacterMovement()->Mass = 500.0f;
+    // configure the character movement component
+    GetCharacterMovement()->GravityScale = 1.75f;
+    GetCharacterMovement()->MaxAcceleration = 1500.0f;
+    GetCharacterMovement()->BrakingFrictionFactor = 1.0f;
+    GetCharacterMovement()->bUseSeparateBrakingFriction = true;
+    GetCharacterMovement()->Mass = 500.0f;
 
-	GetCharacterMovement()->SetWalkableFloorAngle(75.0f);
-	GetCharacterMovement()->MaxWalkSpeed = 500.0f;
-	GetCharacterMovement()->MinAnalogWalkSpeed = 20.0f;
-	GetCharacterMovement()->BrakingDecelerationWalking = 2000.0f;
-	GetCharacterMovement()->bIgnoreBaseRotation = true;
+    GetCharacterMovement()->SetWalkableFloorAngle(75.0f);
+    GetCharacterMovement()->MaxWalkSpeed = 500.0f;
+    GetCharacterMovement()->MinAnalogWalkSpeed = 20.0f;
+    GetCharacterMovement()->BrakingDecelerationWalking = 2000.0f;
+    GetCharacterMovement()->bIgnoreBaseRotation = true;
 
-	GetCharacterMovement()->PerchRadiusThreshold = 15.0f;
-	GetCharacterMovement()->LedgeCheckThreshold = 6.0f;
+    GetCharacterMovement()->PerchRadiusThreshold = 15.0f;
+    GetCharacterMovement()->LedgeCheckThreshold = 6.0f;
 
-	GetCharacterMovement()->JumpZVelocity = 750.0f;
-	GetCharacterMovement()->AirControl = 1.0f;
+    GetCharacterMovement()->JumpZVelocity = 750.0f;
+    GetCharacterMovement()->AirControl = 1.0f;
 
-	GetCharacterMovement()->RotationRate = FRotator(0.0f, 750.0f, 0.0f);
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+    GetCharacterMovement()->RotationRate = FRotator(0.0f, 750.0f, 0.0f);
+    GetCharacterMovement()->bOrientRotationToMovement = true;
 
-	// 일반 점프는 1회만 허용하고, 벽 점프는 LaunchCharacter로 처리한다.
-	JumpMaxCount = 1;
+    // 일반 점프는 1회만 허용하고, 벽 점프는 LaunchCharacter로 처리한다.
+    JumpMaxCount = 1;
 }
 
 void APlayerCharacter::BeginPlay()
 {
-	Super::BeginPlay();
-	InteractBox->SetBoxExtent(InteractBoxSize);
-	InteractBox->SetAbsolute(false, true, true);
-	GiveInitAbility();
-	JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
-	FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
+    Super::BeginPlay();
+    InteractBox->SetBoxExtent(InteractBoxSize);
+    InteractBox->SetAbsolute(false, true, true);
+    GiveInitAbility();
+    JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
+    FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
-	// 체력 변화 델리게이트 바인딩
-	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
-		.AddUObject(this, &APlayerCharacter::OnHealthChanged);
+    // 체력 변화 델리게이트 바인딩
+    HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
+        .AddUObject(this, &APlayerCharacter::OnHealthChanged);
 }
 
 void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
-	SetCursorFacingActive(false);
-	// clear the wall jump timer
-	GetWorld()->GetTimerManager().ClearTimer(WallJumpTimer);
-	Super::EndPlay(EndPlayReason);
+    SetCursorFacingActive(false);
+    // clear the wall jump timer
+    GetWorld()->GetTimerManager().ClearTimer(WallJumpTimer);
+    Super::EndPlay(EndPlayReason);
 }
 
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
-	Super::Tick(DeltaSeconds);
-	UpdateCursorTarget();
-	UpdateCursorFacing(DeltaSeconds);
+    Super::Tick(DeltaSeconds);
+    UpdateCursorTarget();
+    UpdateCursorFacing(DeltaSeconds);
 }
 
 void APlayerCharacter::UpdateCursorTarget()
 {
-	bHasCursorTarget = false;
-	APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	// 우클릭을 놓으면 몸 회전을 끄고 고개는 정면으로 복귀한다.
-	if (!PlayerController || !PlayerController->IsLocalPlayerController()
-		|| !bIsExploring)
-	{
-		return;
-	}
+    bHasCursorTarget = false;
+    APlayerController* PlayerController = Cast<APlayerController>(GetController());
+    // 우클릭을 놓으면 몸 회전을 끄고 고개는 정면으로 복귀한다.
+    if (!PlayerController || !PlayerController->IsLocalPlayerController()
+        || !bIsExploring)
+    {
+        return;
+    }
 
-	FVector RayOrigin;
-	FVector RayDirection;
-	if (!PlayerController->DeprojectMousePositionToWorld(RayOrigin, RayDirection)
-		|| FMath::IsNearlyZero(RayDirection.Y))
-	{
-		return;
-	}
+    FVector RayOrigin;
+    FVector RayDirection;
+    if (!PlayerController->DeprojectMousePositionToWorld(RayOrigin, RayDirection)
+        || FMath::IsNearlyZero(RayDirection.Y))
+    {
+        return;
+    }
 
-	// 커서 광선과 캐릭터가 서 있는 XZ 평면의 교점을 구한다.
-	const float Distance = (GetActorLocation().Y - RayOrigin.Y) / RayDirection.Y;
-	if (Distance < 0.0f)
-	{
-		return;
-	}
+    // 커서 광선과 캐릭터가 서 있는 XZ 평면의 교점을 구한다.
+    const float Distance = (GetActorLocation().Y - RayOrigin.Y) / RayDirection.Y;
+    if (Distance < 0.0f)
+    {
+        return;
+    }
 
-	CursorWorldLocation = RayOrigin + RayDirection * Distance;
-	bHasCursorTarget = true;
+    CursorWorldLocation = RayOrigin + RayDirection * Distance;
+    bHasCursorTarget = true;
 }
 
 void APlayerCharacter::UpdateCursorFacing(float DeltaSeconds)
 {
-	const bool bShouldFaceCursor = bFaceCursor && bHasCursorTarget;
-	SetCursorFacingActive(bShouldFaceCursor);
-	UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance());
-	if (bMoveTurnActive && !(Animation && Animation->IsTurningInPlace()))
-	{
-		bMoveTurnActive = false;
-	}
+    const bool bShouldFaceCursor = bFaceCursor && bHasCursorTarget;
+    SetCursorFacingActive(bShouldFaceCursor);
+    UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance());
+    if (bMoveTurnActive && !(Animation && Animation->IsTurningInPlace()))
+    {
+        bMoveTurnActive = false;
+    }
 
-	if (!bShouldFaceCursor || bHasWallJumped)
-	{
-		// A/D로 시작한 제자리 턴은 끝까지 재생한다.
-		if (Animation && !bMoveTurnActive)
-		{
-			Animation->StopTurnInPlace();
-		}
-		// 우클릭 해제나 짧은 A/D 입력으로 회전이 중간에 끊겨도 좌우 방향까지 마저 돌린다.
-		if (!bHasWallJumped)
-		{
-			SettleFacing(DeltaSeconds);
-		}
-		return;
-	}
+    if (!bShouldFaceCursor || bHasWallJumped)
+    {
+        // A/D로 시작한 제자리 턴은 끝까지 재생한다.
+        if (Animation && !bMoveTurnActive)
+        {
+            Animation->StopTurnInPlace();
+        }
+        // 우클릭 해제나 짧은 A/D 입력으로 회전이 중간에 끊겨도 좌우 방향까지 마저 돌린다.
+        if (!bHasWallJumped)
+        {
+            SettleFacing(DeltaSeconds);
+        }
+        return;
+    }
 
-	const float HorizontalDistance = CursorWorldLocation.X - GetActorLocation().X;
-	if (FMath::Abs(HorizontalDistance) > CursorFacingDeadZone)
-	{
-		CursorFacingYaw = HorizontalDistance > 0.0f ? 0.0f : 180.0f;
-	}
-	FacingTargetYaw = CursorFacingYaw;
-	// 커서 회전이 켜지면 진행 중인 턴도 커서 기준으로 이어서 처리한다.
-	bMoveTurnActive = false;
+    const float HorizontalDistance = CursorWorldLocation.X - GetActorLocation().X;
+    if (FMath::Abs(HorizontalDistance) > CursorFacingDeadZone)
+    {
+        CursorFacingYaw = HorizontalDistance > 0.0f ? 0.0f : 180.0f;
+    }
+    FacingTargetYaw = CursorFacingYaw;
+    // 커서 회전이 켜지면 진행 중인 턴도 커서 기준으로 이어서 처리한다.
+    bMoveTurnActive = false;
 
-	const UCharacterMovementComponent* Movement = GetCharacterMovement();
-	const bool bCanContinueTurn = Movement->IsMovingOnGround()
-		&& Movement->GetCurrentAcceleration().IsNearlyZero();
-	const bool bCanTurnInPlace = bCanContinueTurn && GetVelocity().SizeSquared2D() < FMath::Square(20.0f);
-	if (Animation && Animation->IsTurningInPlace())
-	{
-		if (bCanContinueTurn)
-		{
-			Animation->UpdateTurnInPlaceTarget(CursorFacingYaw);
-			return; // 턴 클립이 회전하므로 코드 회전은 적용하지 않는다.
-		}
-		Animation->StopTurnInPlace();
-	}
+    const UCharacterMovementComponent* Movement = GetCharacterMovement();
+    const bool bCanContinueTurn = Movement->IsMovingOnGround()
+        && Movement->GetCurrentAcceleration().IsNearlyZero();
+    const bool bCanTurnInPlace = bCanContinueTurn && GetVelocity().SizeSquared2D() < FMath::Square(20.0f);
+    if (Animation && Animation->IsTurningInPlace())
+    {
+        if (bCanContinueTurn)
+        {
+            Animation->UpdateTurnInPlaceTarget(CursorFacingYaw);
+            return; // 턴 클립이 회전하므로 코드 회전은 적용하지 않는다.
+        }
+        Animation->StopTurnInPlace();
+    }
 
-	const float RemainingYaw = FMath::Abs(FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, CursorFacingYaw));
-	if (Animation && bCanTurnInPlace && RemainingYaw >= 175.0f
-		&& Animation->TryStartTurnInPlace(CursorFacingYaw))
-	{
-		return;
-	}
+    const float RemainingYaw = FMath::Abs(FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, CursorFacingYaw));
+    if (Animation && bCanTurnInPlace && RemainingYaw >= 175.0f
+        && Animation->TryStartTurnInPlace(CursorFacingYaw))
+    {
+        return;
+    }
 
-	// 중심 여유 구간에 들어와도 마지막 방향까지 부드럽게 회전한다.
-	const FRotator TargetRotation(0.0f, CursorFacingYaw, 0.0f);
-	const FRotator NewRotation = FMath::RInterpConstantTo(
-		GetActorRotation(), TargetRotation, DeltaSeconds, FMath::Max(0.0f, CursorBodyTurnSpeed));
-	SetActorRotation(NewRotation);
+    // 중심 여유 구간에 들어와도 마지막 방향까지 부드럽게 회전한다.
+    const FRotator TargetRotation(0.0f, CursorFacingYaw, 0.0f);
+    const FRotator NewRotation = FMath::RInterpConstantTo(
+        GetActorRotation(), TargetRotation, DeltaSeconds, FMath::Max(0.0f, CursorBodyTurnSpeed));
+    SetActorRotation(NewRotation);
 }
 
 void APlayerCharacter::SettleFacing(float DeltaSeconds)
 {
-	// 이동 입력 중에는 CMC의 bOrientRotationToMovement가 회전을 맡는다.
-	// 입력이 없으면 CMC는 회전을 멈추므로, 남은 회전을 여기서 이어서 돌린다.
-	const UCharacterMovementComponent* Movement = GetCharacterMovement();
-	if (!Movement->GetCurrentAcceleration().IsNearlyZero())
-	{
-		return;
-	}
+    // 이동 입력 중에는 CMC의 bOrientRotationToMovement가 회전을 맡는다.
+    // 입력이 없으면 CMC는 회전을 멈추므로, 남은 회전을 여기서 이어서 돌린다.
+    const UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (!Movement->GetCurrentAcceleration().IsNearlyZero())
+    {
+        return;
+    }
 
-	// 제자리 턴 중에는 턴 클립의 루트 모션이 회전을 맡는다.
-	UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance());
-	if (Animation && Animation->IsTurningInPlace())
-	{
-		return;
-	}
+    // 제자리 턴 중에는 턴 클립의 루트 모션이 회전을 맡는다.
+    UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance());
+    if (Animation && Animation->IsTurningInPlace())
+    {
+        return;
+    }
 
-	const float RemainingYaw = FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, FacingTargetYaw);
-	if (FMath::IsNearlyZero(RemainingYaw, 0.5f))
-	{
-		return;
-	}
+    const float RemainingYaw = FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, FacingTargetYaw);
+    if (FMath::IsNearlyZero(RemainingYaw, 0.5f))
+    {
+        return;
+    }
 
-	// 땅에 서 있고 남은 회전이 크면, 턴 클립의 남은 구간을 재생해 발을 디디며 마무리한다.
-	if (Animation && Movement->IsMovingOnGround() && FMath::Abs(RemainingYaw) >= MoveTurnClipMinYaw
-		&& Animation->TryStartTurnInPlaceRemaining(FacingTargetYaw, RemainingYaw))
-	{
-		bMoveTurnActive = true;
-		return;
-	}
+    // 땅에 서 있고 남은 회전이 크면, 턴 클립의 남은 구간을 재생해 발을 디디며 마무리한다.
+    if (Animation && Movement->IsMovingOnGround() && FMath::Abs(RemainingYaw) >= MoveTurnClipMinYaw
+        && Animation->TryStartTurnInPlaceRemaining(FacingTargetYaw, RemainingYaw))
+    {
+        bMoveTurnActive = true;
+        return;
+    }
 
-	// 클립으로 마무리할 수 없으면(작은 각도, 공중, 클립 회전 방향이 반대) 이동 회전과 같은 속도로 돌린다.
-	const float TurnSpeed = Movement->RotationRate.Yaw > 0.0f ? Movement->RotationRate.Yaw : CursorBodyTurnSpeed;
-	SetActorRotation(FMath::RInterpConstantTo(
-		GetActorRotation(), FRotator(0.0f, FacingTargetYaw, 0.0f), DeltaSeconds, TurnSpeed));
+    // 클립으로 마무리할 수 없으면(작은 각도, 공중, 클립 회전 방향이 반대) 이동 회전과 같은 속도로 돌린다.
+    const float TurnSpeed = Movement->RotationRate.Yaw > 0.0f ? Movement->RotationRate.Yaw : CursorBodyTurnSpeed;
+    SetActorRotation(FMath::RInterpConstantTo(
+        GetActorRotation(), FRotator(0.0f, FacingTargetYaw, 0.0f), DeltaSeconds, TurnSpeed));
 }
 
 void APlayerCharacter::SnapToFacingTarget()
 {
-	// 루트 모션을 끄지 않고 즉시 끊어야 턴 클립의 루트 회전이 공격 포즈에 남지 않는다.
-	if (UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance()))
-	{
-		Animation->CancelTurnInPlace(0.0f);
-	}
-	bMoveTurnActive = false;
-	SetActorRotation(FRotator(0.0f, FacingTargetYaw, 0.0f));
+    // 루트 모션을 끄지 않고 즉시 끊어야 턴 클립의 루트 회전이 공격 포즈에 남지 않는다.
+    if (UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance()))
+    {
+        Animation->CancelTurnInPlace(0.0f);
+    }
+    bMoveTurnActive = false;
+    SetActorRotation(FRotator(0.0f, FacingTargetYaw, 0.0f));
 }
 
 void APlayerCharacter::CancelMoveTurn()
 {
-	// A/D 입력이 다시 들어오면 턴 클립을 끊고 바로 이동한다. 서 있다가 움직일 때 지연이 없게 하기 위함이다.
-	if (!bMoveTurnActive)
-	{
-		return;
-	}
-	if (UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance()))
-	{
-		Animation->CancelTurnInPlace(MoveTurnBlendOutTime);
-	}
-	bMoveTurnActive = false;
+    // A/D 입력이 다시 들어오면 턴 클립을 끊고 바로 이동한다. 서 있다가 움직일 때 지연이 없게 하기 위함이다.
+    if (!bMoveTurnActive)
+    {
+        return;
+    }
+    if (UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance()))
+    {
+        Animation->CancelTurnInPlace(MoveTurnBlendOutTime);
+    }
+    bMoveTurnActive = false;
 }
 
 void APlayerCharacter::SetCursorFacingActive(bool bActive)
 {
-	if (bCursorFacingActive == bActive)
-	{
-		return;
-	}
+    if (bCursorFacingActive == bActive)
+    {
+        return;
+    }
 
-	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	if (bActive)
-	{
-		CursorFacingYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
-		// 커서 회전이 이동 및 컨트롤러 회전과 충돌하지 않게 한다.
-		bSavedOrientRotationToMovement = Movement->bOrientRotationToMovement;
-		bSavedUseControllerDesiredRotation = Movement->bUseControllerDesiredRotation;
-		bSavedUseControllerRotationYaw = bUseControllerRotationYaw;
-		Movement->bOrientRotationToMovement = false;
-		Movement->bUseControllerDesiredRotation = false;
-		bUseControllerRotationYaw = false;
-	}
-	else
-	{
-		Movement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
-		Movement->bUseControllerDesiredRotation = bSavedUseControllerDesiredRotation;
-		bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
-	}
-	bCursorFacingActive = bActive;
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (bActive)
+    {
+        CursorFacingYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
+        // 커서 회전이 이동 및 컨트롤러 회전과 충돌하지 않게 한다.
+        bSavedOrientRotationToMovement = Movement->bOrientRotationToMovement;
+        bSavedUseControllerDesiredRotation = Movement->bUseControllerDesiredRotation;
+        bSavedUseControllerRotationYaw = bUseControllerRotationYaw;
+        Movement->bOrientRotationToMovement = false;
+        Movement->bUseControllerDesiredRotation = false;
+        bUseControllerRotationYaw = false;
+    }
+    else
+    {
+        Movement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
+        Movement->bUseControllerDesiredRotation = bSavedUseControllerDesiredRotation;
+        bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+    }
+    bCursorFacingActive = bActive;
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
+    Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	// Set up action bindings
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
-	{
-		if (CloneTechAction)
-		{
-			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneTech);
-			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCloneTechEnd);
-			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Canceled, this, &APlayerCharacter::DoCloneTechEnd);
-		}
-		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveEnd);
-		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
+    // Set up action bindings
+    if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+    {
+        if (CloneTechAction)
+        {
+            EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneTech);
+            EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCloneTechEnd);
+            EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Canceled, this, &APlayerCharacter::DoCloneTechEnd);
+        }
+        EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::OnCameraMoveEndInput);
+        EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
 
-		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveEnd);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoJumpStart);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoJumpEnd);
+        // Jumping
+        EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::OnCameraMoveEndInput);
+        EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::DoJumpStart);
+        EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoJumpEnd);
 
-		// Interacting
-		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoCameraMoveEnd);
-		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoInteract);
+        // Interacting
+        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::OnCameraMoveEndInput);
+        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoInteract);
 
-		// Moving
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoCameraMoveEnd);
+        // Moving
+        EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
+        EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::OnCameraMoveEndInput);
 
-		// Dropping from platform
-		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Drop);
-		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Completed, this, &APlayerCharacter::DropReleased);
+        // Dropping from platform
+        EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Drop);
+        EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Completed, this, &APlayerCharacter::DropReleased);
 
-		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCameraMoveEnd);
-		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
-	}
+        EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APlayerCharacter::OnCameraMoveEndInput);
+        EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
+    }
 }
 
 void APlayerCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
 {
-	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
+    Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
 
-	// only apply push impulse if we're falling
-	if (!GetCharacterMovement()->IsFalling())
-	{
-		return;
-	}
+    // only apply push impulse if we're falling
+    if (!GetCharacterMovement()->IsFalling())
+    {
+        return;
+    }
 
-	// ensure the colliding component is valid
-	if (OtherComp)
-	{
-		// ensure the component is movable and simulating physics
-		if (OtherComp->Mobility == EComponentMobility::Movable && OtherComp->IsSimulatingPhysics())
-		{
-			const FVector PushDir = FVector(ActionValueY > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f);
+    // ensure the colliding component is valid
+    if (OtherComp)
+    {
+        // ensure the component is movable and simulating physics
+        if (OtherComp->Mobility == EComponentMobility::Movable && OtherComp->IsSimulatingPhysics())
+        {
+            const FVector PushDir = FVector(ActionValueY > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f);
 
-			// push the component away
-			OtherComp->AddImpulse(PushDir * JumpPushImpulse, NAME_None, true);
-		}
-	}
+            // push the component away
+            OtherComp->AddImpulse(PushDir * JumpPushImpulse, NAME_None, true);
+        }
+    }
 }
 
 void APlayerCharacter::Landed(const FHitResult& Hit)
 {
-	Super::Landed(Hit);
-	bCanCoyoteJump = false;
+    Super::Landed(Hit);
+    bCanCoyoteJump = false;
 }
 
 void APlayerCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode /*= 0*/)
 {
-	Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
+    Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
 
-	// are we falling?
-	if (GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Falling)
-	{
-		// save the game time when we started falling, so we can check it later for coyote time jumps
-		LastFallTime = GetWorld()->GetTimeSeconds();
-		bCanCoyoteJump = PrevMovementMode == MOVE_Walking && JumpCurrentCount == 0 && !bPressedJump;
-	}
+    // are we falling?
+    if (GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Falling)
+    {
+        // save the game time when we started falling, so we can check it later for coyote time jumps
+        LastFallTime = GetWorld()->GetTimeSeconds();
+        bCanCoyoteJump = PrevMovementMode == MOVE_Walking && JumpCurrentCount == 0 && !bPressedJump;
+    }
 }
 
 void APlayerCharacter::PossessedBy(AController* NewController)
 {
-	Super::PossessedBy(NewController);
-	GiveInitAbility();
+    Super::PossessedBy(NewController);
+    GiveInitAbility();
 
-	if (IsValid(ASC))
-	{
-		//TODO 테스트용 함수로 추후에 기본 어빌리티 주는 함수 들어오면 삭제
-		GiveTestAbility();
-	}
+    if (IsValid(ASC))
+    {
+        //TODO 테스트용 함수로 추후에 기본 어빌리티 주는 함수 들어오면 삭제
+        GiveTestAbility();
+    }
 }
 
 void APlayerCharacter::PawnClientRestart()
 {
-	// 재빙의 시 GAS 정보를 갱신하고 로컬 공격 입력을 다시 연결한다.
-	Super::PawnClientRestart();
-	ASC->InitAbilityActorInfo(this, this);
+    // 재빙의 시 GAS 정보를 갱신하고 로컬 공격 입력을 다시 연결한다.
+    Super::PawnClientRestart();
+    ASC->InitAbilityActorInfo(this, this);
 
 }
 
 void APlayerCharacter::UnPossessed()
 {
-	DoCameraMoveEnd();
-	DoCloneTechEnd();
-	bHasCursorTarget = false;
-	SetCursorFacingActive(false);
-	ASC->CancelAllAbilities();
-	Super::UnPossessed();
+    DoCameraMoveEnd();
+    DoCloneTechEnd();
+    bHasCursorTarget = false;
+    SetCursorFacingActive(false);
+    ASC->CancelAllAbilities();
+    Super::UnPossessed();
 }
 
 void APlayerCharacter::Move(const FInputActionValue& Value)
 {
-	FVector2D MoveVector = Value.Get<FVector2D>();
+    FVector2D MoveVector = Value.Get<FVector2D>();
 
-	// route the input
-	DoMove(MoveVector.Y);
+    // route the input
+    DoMove(MoveVector.Y);
 }
 
 void APlayerCharacter::Drop(const FInputActionValue& Value)
 {
-	// route the input
-	DoDrop(Value.Get<float>());
+    // route the input
+    DoDrop(Value.Get<float>());
 }
 
 void APlayerCharacter::DropReleased(const FInputActionValue& Value)
 {
-	// reset the input
-	DoDrop(0.0f);
+    // reset the input
+    DoDrop(0.0f);
 }
 
 void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
-	// 체력이 0이면 사망하고, 살아 있는 상태의 체력 감소는 피격으로 처리한다.
-	if (bIsDead)
-	{
-		return;
-	}
-	if (Data.NewValue <= 0.0f)
-	{
-		Die();
-		return;
-	}
-	if (Data.NewValue < Data.OldValue)
-	{
-		PlayHitReaction();
-	}
+    // 체력이 0이면 사망하고, 살아 있는 상태의 체력 감소는 피격으로 처리한다.
+    if (bIsDead)
+    {
+        return;
+    }
+    if (Data.NewValue <= 0.0f)
+    {
+        Die();
+        return;
+    }
+    if (Data.NewValue < Data.OldValue)
+    {
+        PlayHitReaction();
+    }
 }
 
 void APlayerCharacter::Die()
 {
-	// 사망은 한 번만 처리하고 공격, AI, 이동과 충돌을 정리한다.
-	if (bIsDead)
-	{
-		return;
-	}
+    // 사망은 한 번만 처리하고 공격, AI, 이동과 충돌을 정리한다.
+    if (bIsDead)
+    {
+        return;
+    }
 
-	//사망 처리
-	bIsDead = true;
-	DoCameraMoveEnd();
-	DoCloneTechEnd();
-	ASC->CancelAllAbilities();
+    //사망 처리
+    bIsDead = true;
+    DoCameraMoveEnd();
+    DoCloneTechEnd();
+    ASC->CancelAllAbilities();
 
-	// 정지 후 움직이지 못하게 세팅
-	GetCharacterMovement()->StopMovementImmediately();
-	GetCharacterMovement()->DisableMovement();
+    // 정지 후 움직이지 못하게 세팅
+    GetCharacterMovement()->StopMovementImmediately();
+    GetCharacterMovement()->DisableMovement();
 
-	// 사망 몽타주 재생
-	float MontageDuration = 0.0f;
-	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
-	{
-		if (DeathMontage)
-		{
-			MontageDuration = AnimInstance->Montage_Play(DeathMontage, 1.0f, EMontagePlayReturnType::Duration);
-			if (MontageDuration > 0.0f)
-			{
-				FOnMontageBlendingOutStarted BlendOutDelegate;
-				BlendOutDelegate.BindUObject(this, &APlayerCharacter::OnDeathMontageBlendingOut);
-				AnimInstance->Montage_SetBlendingOutDelegate(BlendOutDelegate, DeathMontage);
-			}
-		}
-	}
+    // 사망 몽타주 재생
+    float MontageDuration = 0.0f;
+    if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+    {
+        if (DeathMontage)
+        {
+            MontageDuration = AnimInstance->Montage_Play(DeathMontage, 1.0f, EMontagePlayReturnType::Duration);
+            if (MontageDuration > 0.0f)
+            {
+                FOnMontageBlendingOutStarted BlendOutDelegate;
+                BlendOutDelegate.BindUObject(this, &APlayerCharacter::OnDeathMontageBlendingOut);
+                AnimInstance->Montage_SetBlendingOutDelegate(BlendOutDelegate, DeathMontage);
+            }
+        }
+    }
 
-	if (MontageDuration <= 0.0f)
-	{
-		// A missing/incompatible montage must not leave an immortal corpse.
-		GetMesh()->bPauseAnims = true;
-		UE_LOG(LogTemp, Warning, TEXT("%s: Death montage was not set or could not be played."), *GetName());
-	}
-	// SetLifeSpan(0) cancels destruction, so keep a small positive minimum.
-	SetLifeSpan(FMath::Max(0.01f, MontageDuration));
+    if (MontageDuration <= 0.0f)
+    {
+        // A missing/incompatible montage must not leave an immortal corpse.
+        GetMesh()->bPauseAnims = true;
+        UE_LOG(LogTemp, Warning, TEXT("%s: Death montage was not set or could not be played."), *GetName());
+    }
+    // SetLifeSpan(0) cancels destruction, so keep a small positive minimum.
+    SetLifeSpan(FMath::Max(0.01f, MontageDuration));
 }
 
 void APlayerCharacter::DoBasicAttack()
 {
-	if (bIsDead) return;
-	if (!ASC) return;
-	if (!BasicAttackAbilityClass) return;
-	if (!BasicAttackMontage) return;
+    if (bIsDead) return;
+    if (!ASC) return;
+    if (!BasicAttackAbilityClass) return;
+    if (!BasicAttackMontage) return;
 
-	// 첫 공격 전에만 방향을 확정하고, 콤보 추가 입력은 기존 공격 방향을 유지한다.
-	if (!ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
-	{
-		SnapToFacingTarget();
-	}
+    // 첫 공격 전에만 방향을 확정하고, 콤보 추가 입력은 기존 공격 방향을 유지한다.
+    if (!ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
+    {
+        SnapToFacingTarget();
+    }
 
-	Super::DoBasicAttack();
+    Super::DoBasicAttack();
 }
 
 void APlayerCharacter::DoMove(float Forward)
 {
-	// is movement temporarily disabled after wall jumping?
-	if (!bHasWallJumped)
-	{
-		// save the movement values
-		ActionValueY = Forward;
+    // is movement temporarily disabled after wall jumping?
+    if (!bHasWallJumped)
+    {
+        // save the movement values
+        ActionValueY = Forward;
 
-		// 입력이 짧게 끊겨도 이 방향까지 회전을 마무리한다.
-		if (!FMath::IsNearlyZero(Forward))
-		{
-			FacingTargetYaw = Forward > 0.0f ? 0.0f : 180.0f;
+        // 입력이 짧게 끊겨도 이 방향까지 회전을 마무리한다.
+        if (!FMath::IsNearlyZero(Forward))
+        {
+            FacingTargetYaw = Forward > 0.0f ? 0.0f : 180.0f;
 
-			// 이동 입력은 지연 없이 바로 적용한다. 진행 중인 턴 클립은 끊는다.
-			CancelMoveTurn();
-		}
+            // 이동 입력은 지연 없이 바로 적용한다. 진행 중인 턴 클립은 끊는다.
+            CancelMoveTurn();
+        }
 
-		// figure out the movement direction
-		const FVector MoveDir = FVector(1.0f, Forward > 0.0f ? 0.1f : -0.1f, 0.0f);
+        // figure out the movement direction
+        const FVector MoveDir = FVector(1.0f, Forward > 0.0f ? 0.1f : -0.1f, 0.0f);
 
-		// apply the movement input
-		AddMovementInput(MoveDir, Forward);
-	}
+        // apply the movement input
+        AddMovementInput(MoveDir, Forward);
+    }
 }
 
 void APlayerCharacter::DoDrop(float Value)
 {
-	// save the movement value
-	DropValue = Value;
+    // save the movement value
+    DropValue = Value;
 }
 
 void APlayerCharacter::DoJumpStart()
 {
-	// 입력 상태에 따라 점프 또는 발판 내려가기를 선택한다.
-	MultiJump();
+    // 입력 상태에 따라 점프 또는 발판 내려가기를 선택한다.
+    MultiJump();
 }
 
 void APlayerCharacter::DoJumpEnd()
 {
-	StopJumping();
+    StopJumping();
 }
 
 void APlayerCharacter::DoInteract()
 {
-	if (bIsDead) return;
+    if (bIsDead) return;
 
-	// Clone-tech interactables (levers, clone launch, traps) use a separate interface.
-	TArray<AActor*> Candidates;
-	InteractBox->GetOverlappingActors(Candidates);
-	for (AActor* Candidate : Candidates)
-	{
-		if (IsValid(Candidate) && Candidate != this && Candidate->Implements<UInteractable>()
-			&& IInteractable::Execute_bIsInteractReady(Candidate))
-		{
-			IInteractable::Execute_Interact(Candidate, this);
-			return;
-		}
-	}
+    // Clone-tech interactables (levers, clone launch, traps) use a separate interface.
+    TArray<AActor*> Candidates;
+    InteractBox->GetOverlappingActors(Candidates);
+    for (AActor* Candidate : Candidates)
+    {
+        if (IsValid(Candidate) && Candidate != this && Candidate->Implements<UInteractable>()
+            && IInteractable::Execute_bIsInteractReady(Candidate))
+        {
+            IInteractable::Execute_Interact(Candidate, this);
+            return;
+        }
+    }
 
-	// do a sphere trace to look for interactive objects
-	FHitResult OutHit;
+    // do a sphere trace to look for interactive objects
+    FHitResult OutHit;
 
-	const FVector Start = GetActorLocation();
-	const FVector End = Start + FVector(100.0f, 0.0f, 0.0f);
+    const FVector Start = GetActorLocation();
+    const FVector End = Start + FVector(100.0f, 0.0f, 0.0f);
 
-	FCollisionShape ColSphere;
-	ColSphere.SetSphere(InteractionRadius);
+    FCollisionShape ColSphere;
+    ColSphere.SetSphere(InteractionRadius);
 
-	FCollisionObjectQueryParams ObjectParams;
-	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+    FCollisionObjectQueryParams ObjectParams;
+    ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+    ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this);
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
 
-	if (GetWorld()->SweepSingleByObjectType(OutHit, Start, End, FQuat::Identity, ObjectParams, ColSphere, QueryParams))
-	{
-		// have we hit an interactable?
-		if (ISideScrollingInteractable* Interactable = Cast<ISideScrollingInteractable>(OutHit.GetActor()))
-		{
-			// interact
-			Interactable->Interaction(this);
-		}
-	}
+    if (GetWorld()->SweepSingleByObjectType(OutHit, Start, End, FQuat::Identity, ObjectParams, ColSphere, QueryParams))
+    {
+        // have we hit an interactable?
+        if (ISideScrollingInteractable* Interactable = Cast<ISideScrollingInteractable>(OutHit.GetActor()))
+        {
+            // interact
+            Interactable->Interaction(this);
+        }
+    }
 }
 
 void APlayerCharacter::DoCameraMoveStart()
 {
-	APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController());
-	if (!APC)
-	{
-		UE_LOG(LogTemp, Log, TEXT("[APlayerCharacter::DoCameraMoveStart] : APC Was nullptr"));
-		return;
-	}
+    APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController());
+    if (!APC)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[APlayerCharacter::DoCameraMoveStart] : APC Was nullptr"));
+        return;
+    }
 
-	APC->StartCameraMove();
-	bIsExploring = true;
+    APC->StartCameraMove();
+    bIsExploring = true;
 }
 
 void APlayerCharacter::DoCameraMoveEnd()
 {
-	APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController());
-	if (!APC)
-	{
-		UE_LOG(LogTemp, Log, TEXT("[APlayerCharacter::DoCameraMoveStart] : APC Was nullptr"));
-		return;
-	}
+    APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController());
+    if (!APC)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[APlayerCharacter::DoCameraMoveStart] : APC Was nullptr"));
+        return;
+    }
 
-	APC->StopCameraMove();
-	bIsExploring = false;
+    APC->StopCameraMove();
+    bIsExploring = false;
+}
+
+void APlayerCharacter::OnCameraMoveEndInput()
+{
+    // 분신술 타게팅 IMC가 추가되면 눌려 있던 우클릭이 Completed 처리되므로, 타게팅 중에는 시점을 유지한다.
+    if (bIsCloneTargeting)
+    {
+        return;
+    }
+    DoCameraMoveEnd();
+}
+
+void APlayerCharacter::SetCloneTargeting(bool bTargeting)
+{
+    if (bIsCloneTargeting == bTargeting)
+    {
+        return;
+    }
+    bIsCloneTargeting = bTargeting;
+    // 분신 소환 또는 취소 시 카메라를 중앙으로 되돌린다.
+    if (!bTargeting && bIsExploring)
+    {
+        DoCameraMoveEnd();
+    }
 }
 
 void APlayerCharacter::MultiJump()
 {
-	// 아래 방향 입력 중에는 점프보다 발판 내려가기를 우선한다.
-	if (DropValue > 0.0f)
-	{
-		CheckForSoftCollision();
-		return;
-	}
+    // 아래 방향 입력 중에는 점프보다 발판 내려가기를 우선한다.
+    if (DropValue > 0.0f)
+    {
+        CheckForSoftCollision();
+        return;
+    }
 
-	// reset the drop value
-	DropValue = 0.0f;
+    // reset the drop value
+    DropValue = 0.0f;
 
-	// 지상에서는 일반 점프를 실행한다.
-	if (!GetCharacterMovement()->IsFalling())
-	{
-		Jump();
-		return;
-	}
+    // 지상에서는 일반 점프를 실행한다.
+    if (!GetCharacterMovement()->IsFalling())
+    {
+        Jump();
+        return;
+    }
 
-	// 공중에서 좌우 입력이 있으면 벽 점프를 먼저 시도한다.
-	if (!bHasWallJumped && !FMath::IsNearlyZero(ActionValueY))
-	{
-		// trace ahead of the character for walls
-		FHitResult OutHit;
+    // 공중에서 좌우 입력이 있으면 벽 점프를 먼저 시도한다.
+    if (!bHasWallJumped && !FMath::IsNearlyZero(ActionValueY))
+    {
+        // trace ahead of the character for walls
+        FHitResult OutHit;
 
-		const FVector Start = GetActorLocation();
-		const FVector End = Start + (FVector(ActionValueY > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f) * WallJumpTraceDistance);
+        const FVector Start = GetActorLocation();
+        const FVector End = Start + (FVector(ActionValueY > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f) * WallJumpTraceDistance);
 
-		FCollisionQueryParams QueryParams;
-		QueryParams.AddIgnoredActor(this);
+        FCollisionQueryParams QueryParams;
+        QueryParams.AddIgnoredActor(this);
 
-		GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, QueryParams);
+        GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, QueryParams);
 
-		if (OutHit.bBlockingHit)
-		{
-			bCanCoyoteJump = false;
-			// rotate to the bounce direction
-			const FRotator BounceRot = UKismetMathLibrary::MakeRotFromX(OutHit.ImpactNormal);
-			SetActorRotation(FRotator(0.0f, BounceRot.Yaw, 0.0f));
-			// 벽 점프 후에는 튕겨 나간 방향을 바라본다.
-			FacingTargetYaw = FMath::Abs(FRotator::NormalizeAxis(BounceRot.Yaw)) < 90.0f ? 0.0f : 180.0f;
+        if (OutHit.bBlockingHit)
+        {
+            bCanCoyoteJump = false;
+            // rotate to the bounce direction
+            const FRotator BounceRot = UKismetMathLibrary::MakeRotFromX(OutHit.ImpactNormal);
+            SetActorRotation(FRotator(0.0f, BounceRot.Yaw, 0.0f));
+            // 벽 점프 후에는 튕겨 나간 방향을 바라본다.
+            FacingTargetYaw = FMath::Abs(FRotator::NormalizeAxis(BounceRot.Yaw)) < 90.0f ? 0.0f : 180.0f;
 
-			// calculate the impulse vector
-			FVector WallJumpImpulse = OutHit.ImpactNormal * WallJumpHorizontalImpulse;
-			WallJumpImpulse.Z = GetCharacterMovement()->JumpZVelocity * WallJumpVerticalMultiplier;
+            // calculate the impulse vector
+            FVector WallJumpImpulse = OutHit.ImpactNormal * WallJumpHorizontalImpulse;
+            WallJumpImpulse.Z = GetCharacterMovement()->JumpZVelocity * WallJumpVerticalMultiplier;
 
-			// launch the character away from the wall
-			LaunchCharacter(WallJumpImpulse, true, true);
+            // launch the character away from the wall
+            LaunchCharacter(WallJumpImpulse, true, true);
 
-			// enable wall jump lockout for a bit
-			bHasWallJumped = true;
+            // enable wall jump lockout for a bit
+            bHasWallJumped = true;
 
-			// schedule wall jump lockout reset
-			GetWorld()->GetTimerManager().SetTimer(WallJumpTimer, this, &APlayerCharacter::ResetWallJump, DelayBetweenWallJumps, false);
+            // schedule wall jump lockout reset
+            GetWorld()->GetTimerManager().SetTimer(WallJumpTimer, this, &APlayerCharacter::ResetWallJump, DelayBetweenWallJumps, false);
 
-			return;
-		}
-	}
+            return;
+        }
+    }
 
 
 
-	// 발판에서 걸어 나온 직후에만 짧은 점프 유예를 허용한다. 2단 점프는 없다.
-	if (!bHasWallJumped && bCanCoyoteJump && !bPressedJump
-		&& GetWorld()->GetTimeSeconds() - LastFallTime < MaxCoyoteTime)
-	{
-		bCanCoyoteJump = false;
-		LaunchCharacter(FVector(0.0f, 0.0f, GetCharacterMovement()->JumpZVelocity), false, true);
-	}
+    // 발판에서 걸어 나온 직후에만 짧은 점프 유예를 허용한다. 2단 점프는 없다.
+    if (!bHasWallJumped && bCanCoyoteJump && !bPressedJump
+        && GetWorld()->GetTimeSeconds() - LastFallTime < MaxCoyoteTime)
+    {
+        bCanCoyoteJump = false;
+        LaunchCharacter(FVector(0.0f, 0.0f, GetCharacterMovement()->JumpZVelocity), false, true);
+    }
 }
 
 void APlayerCharacter::CheckForSoftCollision()
 {
-	// reset the drop value
-	DropValue = 0.0f;
+    // reset the drop value
+    DropValue = 0.0f;
 
-	// trace down 
-	FHitResult OutHit;
+    // trace down 
+    FHitResult OutHit;
 
-	const FVector Start = GetActorLocation();
-	const FVector End = Start + (FVector::DownVector * SoftCollisionTraceDistance);
+    const FVector Start = GetActorLocation();
+    const FVector End = Start + (FVector::DownVector * SoftCollisionTraceDistance);
 
-	FCollisionObjectQueryParams ObjectParams;
-	ObjectParams.AddObjectTypesToQuery(SoftCollisionObjectType);
+    FCollisionObjectQueryParams ObjectParams;
+    ObjectParams.AddObjectTypesToQuery(SoftCollisionObjectType);
 
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this);
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
 
-	GetWorld()->LineTraceSingleByObjectType(OutHit, Start, End, ObjectParams, QueryParams);
+    GetWorld()->LineTraceSingleByObjectType(OutHit, Start, End, ObjectParams, QueryParams);
 
-	// did we hit a soft floor?
-	if (OutHit.GetActor())
-	{
-		// drop through the floor
-		SetSoftCollision(true);
-	}
+    // did we hit a soft floor?
+    if (OutHit.GetActor())
+    {
+        // drop through the floor
+        SetSoftCollision(true);
+    }
 }
 
 void APlayerCharacter::ResetWallJump()
 {
-	// reset the wall jump flag
-	bHasWallJumped = false;
+    // reset the wall jump flag
+    bHasWallJumped = false;
 }
 
 void APlayerCharacter::SetSoftCollision(bool bEnabled)
 {
-	// enable or disable collision response to the soft collision channel
-	GetCapsuleComponent()->SetCollisionResponseToChannel(SoftCollisionObjectType, bEnabled ? ECR_Ignore : ECR_Block);
+    // enable or disable collision response to the soft collision channel
+    GetCapsuleComponent()->SetCollisionResponseToChannel(SoftCollisionObjectType, bEnabled ? ECR_Ignore : ECR_Block);
 }
 
 bool APlayerCharacter::HasWallJumped() const
 {
-	return bHasWallJumped;
+    return bHasWallJumped;
 }
 
 
@@ -722,54 +746,54 @@ bool APlayerCharacter::HasWallJumped() const
 =============================================================*/
 void APlayerCharacter::GiveTestAbility()
 {
-	if (!HasAuthority() || !ASC || !TestAbilityClass || ASC->FindAbilitySpecFromClass(TestAbilityClass)) return;
-	FGameplayAbilitySpec Spec(TestAbilityClass, TestAbilityLevel);
-	ASC->GiveAbility(Spec);
+    if (!HasAuthority() || !ASC || !TestAbilityClass || ASC->FindAbilitySpecFromClass(TestAbilityClass)) return;
+    FGameplayAbilitySpec Spec(TestAbilityClass, TestAbilityLevel);
+    ASC->GiveAbility(Spec);
 }
 
 void APlayerCharacter::GiveInitAbility()
 {
-	if (!HasAuthority() || !ASC) return;
-	for (const FAbilityInfo& Info : AbilityClassArray)
-	{
-		if (!Info.AbilityClass) continue;
-		if (FGameplayAbilitySpec* Existing = ASC->FindAbilitySpecFromClass(Info.AbilityClass))
-		{
-			Existing->InputID = Info.InputID;
-			Existing->Level = FMath::Max(1, Info.AbilityLevel);
-			ASC->MarkAbilitySpecDirty(*Existing);
-		}
-		else
-		{
-			ASC->GiveAbility(FGameplayAbilitySpec(Info.AbilityClass, FMath::Max(1, Info.AbilityLevel), Info.InputID, this));
-		}
-	}
+    if (!HasAuthority() || !ASC) return;
+    for (const FAbilityInfo& Info : AbilityClassArray)
+    {
+        if (!Info.AbilityClass) continue;
+        if (FGameplayAbilitySpec* Existing = ASC->FindAbilitySpecFromClass(Info.AbilityClass))
+        {
+            Existing->InputID = Info.InputID;
+            Existing->Level = FMath::Max(1, Info.AbilityLevel);
+            ASC->MarkAbilitySpecDirty(*Existing);
+        }
+        else
+        {
+            ASC->GiveAbility(FGameplayAbilitySpec(Info.AbilityClass, FMath::Max(1, Info.AbilityLevel), Info.InputID, this));
+        }
+    }
 }
 
 void APlayerCharacter::DoCloneTech()
 {
-	if (bIsDead || !ASC) return;
-	DoCameraMoveEnd();
-	ASC->AbilityLocalInputPressed(CloneTechInputID);
+    if (bIsDead || !ASC) return;
+    //DoCameraMoveEnd();
+    ASC->AbilityLocalInputPressed(CloneTechInputID);
 }
 
 void APlayerCharacter::DoCloneTechEnd()
 {
-	if (ASC) ASC->AbilityLocalInputReleased(CloneTechInputID);
+    if (ASC) ASC->AbilityLocalInputReleased(CloneTechInputID);
 }
 
 void APlayerCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)
 {
-	if (!IsValid(InSafePoint)) return;
-	SafePointTransform = InSafePoint->GetActorTransform();
-	bHasSafePoint = true;
+    if (!IsValid(InSafePoint)) return;
+    SafePointTransform = InSafePoint->GetActorTransform();
+    bHasSafePoint = true;
 }
 
 void APlayerCharacter::ReturnToSafePoint_Implementation()
 {
-	if (!bHasSafePoint || bIsDead) return;
-	GetCharacterMovement()->StopMovementImmediately();
-	GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
-	SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
-	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
+    if (!bHasSafePoint || bIsDead) return;
+    GetCharacterMovement()->StopMovementImmediately();
+    GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
+    SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
+    FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
 }

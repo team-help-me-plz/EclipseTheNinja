@@ -78,6 +78,9 @@ private:
 	UFUNCTION()
 	void HandleTargetCancelled();
 
+	/** 플레이어 캐릭터에 분신술 타게팅 상태를 알린다. */
+	void SetAvatarCloneTargeting(bool bTargeting) const;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitCloneTargeting>	TargetingTask;
 

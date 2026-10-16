@@ -7,6 +7,7 @@
 #include "InputMappingContext.h"
 #include "Interface/Interactable.h"
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "Character/PlayerCharacter.h"
 
 UGACloneTech::UGACloneTech()
 {
@@ -68,6 +69,7 @@ void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
 	this->TargetingTask->OnAccepted.AddDynamic(this, &UGACloneTech::HandleTargetAccepted);
 	this->TargetingTask->OnCancelled.AddDynamic(this, &UGACloneTech::HandleTargetCancelled);
+	SetAvatarCloneTargeting(true);
 	this->TargetingTask->ReadyForActivation();
 }
 
@@ -92,6 +94,7 @@ void UGACloneTech::HandleTargetAccepted(const FCloneCommandType& InCommand)
 		return ;
 	}
 	this->TargetingTask = nullptr;
+	SetAvatarCloneTargeting(false);
 
 	ACharacter*	Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
 
@@ -186,7 +189,16 @@ void UGACloneTech::HandleTargetCancelled()
 		return ;
 	}
 	this->TargetingTask = nullptr;
+	SetAvatarCloneTargeting(false);
 	EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, true);
+}
+
+void UGACloneTech::SetAvatarCloneTargeting(bool bTargeting) const
+{
+	if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetAvatarActorFromActorInfo()))
+	{
+		Player->SetCloneTargeting(bTargeting);
+	}
 }
 
 bool UGACloneTech::CheckCost(const FGameplayAbilitySpecHandle Handle,
@@ -266,6 +278,7 @@ void UGACloneTech::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		this->TargetingTask->EndTask();
 		this->TargetingTask = nullptr;
 	}
+	SetAvatarCloneTargeting(false);
 	if (ACloneCharacter* Clone = this->SpawnedClone.Get())
 	{
 		Clone->OnDestroyed.RemoveDynamic(this, &UGACloneTech::HandleCloneDestroyed);
