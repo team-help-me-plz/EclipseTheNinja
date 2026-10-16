@@ -1,9 +1,10 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Interface/Interactor.h"
+#include "Interface/CheckpointResettable.h"
 #include "Ability/AbilityInfo.h"
 
 #include "GameplayAbilitySpecHandle.h"
@@ -17,84 +18,87 @@ class UInputAction;
 class UBoxComponent;
 
 /**
- * 
+ *
  */
 UCLASS()
-class ECLIPSETHENINJA_API ACloneTechTestCharacter : public ASideScrollingCharacter, public IAbilitySystemInterface, public IInteractor
+class ECLIPSETHENINJA_API ACloneTechTestCharacter : public ASideScrollingCharacter, public IAbilitySystemInterface, public IInteractor, public ICheckpointResettable
 {
-	GENERATED_BODY()
-	
+    GENERATED_BODY()
+
 public:
-	ACloneTechTestCharacter();
+    ACloneTechTestCharacter();
 
-	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+    virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
-	virtual void	RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
-	virtual void	ReturnToSafePoint_Implementation() override;
+    virtual void	RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
+    virtual void	ReturnToSafePoint_Implementation() override;
+
+    virtual void ResetToInitial_Implementation() override;
+    virtual void OnAfterReset_Implementation() override;
 
 protected:
-	virtual void BeginPlay() override;
-	virtual void PostInitializeComponents() override;
-	virtual void PossessedBy(AController* NewController) override;
-	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+    virtual void BeginPlay() override;
+    virtual void PostInitializeComponents() override;
+    virtual void PossessedBy(AController* NewController) override;
+    virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
-	void	GiveInitAbility();
+    void	GiveInitAbility();
 
-	void	OnLocalInputStart(int32 InID);
-	void	OnLocalInputCompleted(int32 InID);
+    void	OnLocalInputStart(int32 InID);
+    void	OnLocalInputCompleted(int32 InID);
 
-	void			DoCloneTech();
-	virtual void	DoInteract() override;
+    void			DoCloneTech();
+    virtual void	DoInteract() override;
 
-	UFUNCTION()
-	void OnInteractBeginOverlap(
-		UPrimitiveComponent* OverlappedComponent,
-		AActor* OtherActor,
-		UPrimitiveComponent* OtherComp,
-		int32 OtherBodyIndex,
-		bool bFromSweep,
-		const FHitResult& SweepResult);
+    UFUNCTION()
+    void OnInteractBeginOverlap(
+        UPrimitiveComponent* OverlappedComponent,
+        AActor* OtherActor,
+        UPrimitiveComponent* OtherComp,
+        int32 OtherBodyIndex,
+        bool bFromSweep,
+        const FHitResult& SweepResult);
 
-	UFUNCTION()
-	void OnInteractEndOverlap(
-		UPrimitiveComponent* OverlappedComponent,
-		AActor* OtherActor,
-		UPrimitiveComponent* OtherComp,
-		int32 OtherBodyIndex);
+    UFUNCTION()
+    void OnInteractEndOverlap(
+        UPrimitiveComponent* OverlappedComponent,
+        AActor* OtherActor,
+        UPrimitiveComponent* OtherComp,
+        int32 OtherBodyIndex);
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	TObjectPtr<UBoxComponent>	InteractBox = nullptr;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    TObjectPtr<UBoxComponent>	InteractBox = nullptr;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Collision|Interact")
-	FVector						InteractBoxSize = FVector(80.f, 1000.f, 100.f);
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Collision|Interact")
+    FVector						InteractBoxSize = FVector(80.f, 1000.f, 100.f);
 
-	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sphere|Radius")
-	//float							InteractRadius = 100.f;
+    //UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sphere|Radius")
+    //float							InteractRadius = 100.f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
-	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent = nullptr;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+    TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
-	TArray<FAbilityInfo>		AbilityClassArray;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
+    TArray<FAbilityInfo>		AbilityClassArray;
 
-	//UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	//TObjectPtr<UInputAction> InteractAction;
+    //UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+    //TObjectPtr<UInputAction> InteractAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	TObjectPtr<UInputAction>	CloneTechAction;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+    TObjectPtr<UInputAction>	CloneTechAction;
 
-	TObjectPtr<AActor>			CloneTarget = nullptr;
+    TObjectPtr<AActor>			CloneTarget = nullptr;
 
 private:
-	TArray<AActor*>	OverlappedInteractActor;
-	int32			OverlappedInteractActorTargetIndex = 0;
-	TMap<int32, FGameplayAbilitySpecHandle>	AbilityHandles;
+    TArray<AActor*>	OverlappedInteractActor;
+    int32			OverlappedInteractActorTargetIndex = 0;
+    TMap<int32, FGameplayAbilitySpecHandle>	AbilityHandles;
 
-	FVector	SafePointLocation = FVector::ZeroVector;
-	FRotator	SafePointRotate = FRotator::ZeroRotator;
+    FVector	SafePointLocation = FVector::ZeroVector;
+    FRotator	SafePointRotate = FRotator::ZeroRotator;
 
-	//static constexpr int32 InteractInputID = 100;
-	static constexpr int32 CloneTechInputID = 100;
+    //static constexpr int32 InteractInputID = 100;
+    static constexpr int32 CloneTechInputID = 100;
 
 };
 

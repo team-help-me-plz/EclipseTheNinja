@@ -48,6 +48,24 @@ void ACloneTechTestCharacter::ReturnToSafePoint_Implementation()
 	this->SetActorRotation(this->SafePointRotate);
 }
 
+void ACloneTechTestCharacter::ResetToInitial_Implementation()
+{
+	if (!IsValid(this->AbilitySystemComponent))
+	{
+		return ;
+	}
+	this->AbilitySystemComponent->CancelAllAbilities();
+
+	FGameplayTagContainer 	CooldownTags;
+	CooldownTags.AddTag(FGameplayTag::RequestGameplayTag(TEXT("Test.GA.Cooldown.CloneTech")));
+
+	this->AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(CooldownTags);
+}
+
+void ACloneTechTestCharacter::OnAfterReset_Implementation()
+{
+}
+
 void ACloneTechTestCharacter::BeginPlay()
 {
 	Super::BeginPlay();
