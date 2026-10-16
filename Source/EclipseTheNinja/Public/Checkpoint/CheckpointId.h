@@ -24,4 +24,12 @@ enum class ECheckpointId : uint8
     // Lvl_CheckpointTest_Enemy
     CheckpointEnemy_Start,      // 첫 번째 몬스터 구간
     CheckpointEnemy_Second,     // 두 번째 몬스터 구간
+
+    // Lvl_Prototype
+    Proto_S1_Tutorial,          // 이동/점프 + 상자를 밀어 압력 발판 위에 올리면 열리는 미닫이문
+    Proto_S1_GuardPost,         // 지붕 아래를 순찰하는 경비병 (잠입 or 전투)
+    Proto_S1_CloneGate,         // 분신으로 발판을 누르고 있어야 열리는 여닫이문
+    Proto_S1_SpikeBridge,       // 가시 구덩이 + 분신 상호작용 스위치 + 이동 다리
+    Proto_S2_TrapGauntlet,      // 화살 함정 회랑 + 무너지는 판자
+    Proto_S2_Courtyard,         // 경비 2명 마당 + 가시밭 위치 교체 + 마지막 관문
 };
