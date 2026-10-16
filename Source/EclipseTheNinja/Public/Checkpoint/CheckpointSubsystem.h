@@ -43,6 +43,9 @@ public:
     UFUNCTION(BlueprintPure, Category = "Checkpoint")
     ECheckpointId GetCurrentCheckpoint() const { return this->CurrentCheckpoint; }
 
+    UFUNCTION(BlueprintCallable, Category = "Checkpoint")
+    bool HasValidCheckpoint() const { return this->CurrentCheckpoint != ECheckpointId::None; }
+
     // Bound 컴포넌트를 서브시스템에 등록하는 함수
     void RegisterBound(UCheckpointBoundComponent* InComponent);
 
