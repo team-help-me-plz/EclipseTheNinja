@@ -6,6 +6,8 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "GameFramework/Character.h"
+#include "Interface/Interactor.h"
 
 // Sets default values
 ATrapArrowActor::ATrapArrowActor()
@@ -45,6 +47,19 @@ void ATrapArrowActor::BeginPlay()
 void ATrapArrowActor::OnArrowBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	// 플레이어 혹은 분신이면 데미지 주기
+	if (OtherActor && OtherActor->Implements<UInteractor>())
+	{
+		ACharacter* InCharacter = Cast<ACharacter>(OtherActor);
+		if (InCharacter)
+		{
+			// 캡슐 등 다른 컴포넌트와 먼저 겹쳐도 화살이 사라지지 않도록 메시와 겹칠 때만 처리
+			if (OtherComp != InCharacter->GetMesh())
+			{
+				return ;
+			}
+			IInteractor::Execute_ReturnToSafePoint(OtherActor);
+		}
+	}
 	this->Destroy();
 }
 
