@@ -37,7 +37,12 @@ void AArrowTrapActor::ResetToInitial_Implementation()
 void AArrowTrapActor::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	// 이 함정이 쓸 화살을 미리 생성하도록 요청 (화살 풀이 등록되어 있을 때만 적용, 함정 수만큼 합산됨)
+	if (UObjectPoolSubsystem* PoolSubsystem = GetWorld()->GetSubsystem<UObjectPoolSubsystem>())
+	{
+		PoolSubsystem->RequestWarmupByClass(this->ArrowClass, this->ArrowWarmupCount);
+	}
 }
 
 // Called every frame

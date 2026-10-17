@@ -60,6 +60,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Trap")
 	float								ArrowSpawnDist = 100.f;
 
+	// 오브젝트 풀에 미리 생성을 요청할 화살 수 (동시에 날아가는 화살 수 기준, 화살 풀이 등록된 경우만 적용)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap|ObjectPool", meta = (ClampMin = "0"))
+	int32								ArrowWarmupCount = 5;
+
 private:
 	void	ResetActivateCooldown();
 

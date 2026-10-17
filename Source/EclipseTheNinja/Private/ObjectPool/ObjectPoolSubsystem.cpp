@@ -30,7 +30,8 @@ void UObjectPoolSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
 
-    // 프로젝트 세팅에 등록된 데이터 에셋으로 풀 등록 (실제 생성은 월드 BeginPlay 이후)
+    // 프로젝트 세팅에 등록된 데이터 에셋으로 풀 등록
+    // bWarmupInAllLevels인 풀만 미리 생성을 요청한다 (실제 생성은 월드 BeginPlay 이후)
     const UObjectPoolSettings* Settings = GetDefault<UObjectPoolSettings>();
     for (const TSoftObjectPtr<UObjectPoolDataAsset>& SoftDataAsset : Settings->PoolDataAssets)
     {
@@ -41,7 +42,7 @@ void UObjectPoolSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
         if (const UObjectPoolDataAsset* DataAsset = SoftDataAsset.LoadSynchronous())
         {
-            this->RegisterPool(DataAsset, false);
+            this->RegisterPool(DataAsset, DataAsset->bWarmupInAllLevels);
         }
         else
         {
@@ -113,12 +114,63 @@ bool UObjectPoolSubsystem::RegisterPool(const UObjectPoolDataAsset* InDataAsset,
     Pool.MaxSize = InDataAsset->MaxSize;
     Pool.OverflowPolicy = InDataAsset->OverflowPolicy;
 
-    if (bWarmup && this->bCanWarmup)
+    if (bWarmup)
     {
-        this->Warmup(ActorClass);
+        this->RequestWarmup(InDataAsset);
     }
 
     return true;
+}
+
+void UObjectPoolSubsystem::RequestWarmup(const UObjectPoolDataAsset* InDataAsset, int32 InCount)
+{
+    if (!InDataAsset || InDataAsset->ActorClass.IsNull())
+    {
+        return;
+    }
+
+    const TSubclassOf<AActor> ActorClass = InDataAsset->ActorClass.LoadSynchronous();
+    if (!ActorClass)
+    {
+        return;
+    }
+
+    // 프로젝트 세팅에 없는 레벨 전용 풀도 사용할 수 있도록 등록되지 않았으면 등록한다
+    if (!this->Pools.Contains(ActorClass) && !this->RegisterPool(InDataAsset, false))
+    {
+        return;
+    }
+
+    this->AddWarmupRequest(ActorClass, InCount);
+}
+
+bool UObjectPoolSubsystem::RequestWarmupByClass(TSubclassOf<AActor> InClass, int32 InCount)
+{
+    if (!InClass || !this->Pools.Contains(InClass))
+    {
+        return false;
+    }
+
+    this->AddWarmupRequest(InClass, InCount);
+    return true;
+}
+
+void UObjectPoolSubsystem::AddWarmupRequest(TSubclassOf<AActor> InClass, int32 InCount)
+{
+    FObjectPool* Pool = this->Pools.Find(InClass);
+    if (!Pool)
+    {
+        return;
+    }
+
+    // 여러 곳(전역 설정, 레벨 설정, 스포너들)의 요청을 합산한다
+    const int32 RequestedCount = (InCount < 0) ? Pool->InitialSize : InCount;
+    Pool->WarmupCount += RequestedCount;
+
+    if (this->bCanWarmup)
+    {
+        this->Warmup(InClass);
+    }
 }
 
 void UObjectPoolSubsystem::UnregisterPool(TSubclassOf<AActor> InClass)
@@ -156,7 +208,7 @@ void UObjectPoolSubsystem::Warmup(TSubclassOf<AActor> InClass)
 
     Pool->RemoveInvalidActors();
 
-    const int32 TargetSize = (Pool->MaxSize > 0) ? FMath::Min(Pool->InitialSize, Pool->MaxSize) : Pool->InitialSize;
+    const int32 TargetSize = (Pool->MaxSize > 0) ? FMath::Min(Pool->WarmupCount, Pool->MaxSize) : Pool->WarmupCount;
     const int32 NumToCreate = TargetSize - Pool->Num();
 
     for (int32 _ = 0; _ < NumToCreate; ++_)
@@ -209,7 +261,10 @@ AActor* UObjectPoolSubsystem::CreatePooledActor(TSubclassOf<AActor> InClass, con
     this->DeactivateActor(Actor);
 
 #if WITH_EDITOR
-    Actor->SetFolderPath(TEXT("ObjectPool"));
+    // 아웃라이너에서 풀별로 구분되도록 ObjectPool/<클래스 이름> 폴더에 넣는다 (BP 클래스의 _C 접미사 제거)
+    FString ClassName = InClass->GetName();
+    ClassName.RemoveFromEnd(TEXT("_C"));
+    Actor->SetFolderPath(*FString::Printf(TEXT("ObjectPool/%s"), *ClassName));
 #endif
 
     // 해당 액터의 풀을 찾는다
