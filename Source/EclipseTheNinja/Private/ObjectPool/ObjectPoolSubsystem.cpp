@@ -200,6 +200,12 @@ AActor* UObjectPoolSubsystem::CreatePooledActor(TSubclassOf<AActor> InClass, con
         return nullptr;
     }
 
+    // BeginPlay에서 시작된 AI, UI 등을 액터가 직접 정리할 수 있도록 반환과 동일하게 훅을 호출한다
+    if (Actor->Implements<UPoolable>())
+    {
+        IPoolable::Execute_OnReturnToPool(Actor);
+    }
+
     this->DeactivateActor(Actor);
 
 #if WITH_EDITOR

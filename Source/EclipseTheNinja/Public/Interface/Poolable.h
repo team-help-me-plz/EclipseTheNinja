@@ -30,7 +30,7 @@ public:
     void OnSpawnFromPool();
 
     // 풀로 반환될 때마다 호출된다.
-    // 호출 시점은 공통 비활성화 처리 이전
+    // 처음 생성되어 풀에 들어갈 때(BeginPlay 직후)에도 호출되며, 호출 시점은 공통 비활성화 처리 이전
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "ObjectPool")
     void OnReturnToPool();
 };

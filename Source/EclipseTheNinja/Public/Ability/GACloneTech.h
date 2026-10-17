@@ -37,8 +37,9 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		bool	bReplicateEndAbility, bool bWasCancelled) override;
 
+	// 분신이 풀에 반환되거나 파괴되면 어빌리티를 종료한다
 	UFUNCTION()
-	void HandleCloneDestroyed(AActor* DestroyedActor);
+	void HandleCloneDespawned(ACloneCharacter* DespawnedClone);
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Target")

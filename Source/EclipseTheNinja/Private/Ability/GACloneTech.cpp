@@ -7,6 +7,7 @@
 #include "InputMappingContext.h"
 #include "Interface/Interactable.h"
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Character/PlayerCharacter.h"
 
 UGACloneTech::UGACloneTech()
@@ -160,22 +161,33 @@ void UGACloneTech::HandleTargetAccepted(const FCloneCommandType& InCommand)
 	const FVector	ClonePos = Character->GetActorLocation() + this->CloneDist * CloneDir;
 	const FRotator	CloneRotate(0.0f, bIsRightDir ? 0.0f : 180.0f, 0.0f);
 
-	FActorSpawnParameters	Params;
-	Params.Owner = Character;
-	Params.Instigator = Character;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
+	// 기존 AdjustIfPossibleButDontSpawnIfColliding 스폰과 동일하게, 겹치면 위치를 보정하고 보정할 수 없으면 생성하지 않는다
+	// (풀에서 꺼낸 액터는 텔레포트로 배치되므로 직접 검사)
+	FVector	SpawnPos = ClonePos;
+	if (!GetWorld()->FindTeleportSpot(this->CloneClass->GetDefaultObject<ACloneCharacter>(), SpawnPos, CloneRotate))
+	{
+		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, true);
+		return ;
+	}
 
-	this->SpawnedClone = GetWorld()->SpawnActor<ACloneCharacter>(this->CloneClass, ClonePos, CloneRotate, Params);
+	// 분신 풀이 등록되어 있지 않으면 일반 스폰된다
+	UObjectPoolSubsystem*	PoolSubsystem = GetWorld()->GetSubsystem<UObjectPoolSubsystem>();
+	if (PoolSubsystem)
+	{
+		this->SpawnedClone = PoolSubsystem->SpawnActor<ACloneCharacter>(
+			this->CloneClass, FTransform(CloneRotate, SpawnPos), Character, Character);
+	}
 	if (!this->SpawnedClone.IsValid())
 	{
 		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, true);
 		return ;
 	}
 	this->SpawnedClone->SetCommand(InCommand);
-	this->SpawnedClone->OnDestroyed.AddDynamic(this, &UGACloneTech::HandleCloneDestroyed);
+	this->SpawnedClone->OnCloneDespawned.AddDynamic(this, &UGACloneTech::HandleCloneDespawned);
+	// 수명이 끝나면 ACloneCharacter::LifeSpanExpired에서 풀에 반환된다
 	this->SpawnedClone->SetLifeSpan(FMath::Max(this->CloneLifeTime, 0.01f));
 
-	// 체크포인트 리스폰 시 분신 제거 (HandleCloneDestroyed에서 어빌리티가 정리됨)
+	// 체크포인트 리스폰 시 분신 제거 (HandleCloneDespawned에서 어빌리티가 정리됨)
 	if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
 	{
 		Subsystem->RegisterRuntimeSpawnedActor(this->SpawnedClone.Get());
@@ -248,13 +260,13 @@ void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle,
 	this->SpawnedClone->SetActorLocation(PlayerLocation);
 }
 
-void UGACloneTech::HandleCloneDestroyed(AActor* DestroyedActor)
+void UGACloneTech::HandleCloneDespawned(ACloneCharacter* DespawnedClone)
 {
-	if (!DestroyedActor)
+	if (!DespawnedClone)
 	{
 		return ;
 	}
-	DestroyedActor->OnDestroyed.RemoveDynamic(this, &UGACloneTech::HandleCloneDestroyed);
+	DespawnedClone->OnCloneDespawned.RemoveDynamic(this, &UGACloneTech::HandleCloneDespawned);
 	this->SpawnedClone.Reset();
 	if (IsActive())
 	{
@@ -281,7 +293,7 @@ void UGACloneTech::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	SetAvatarCloneTargeting(false);
 	if (ACloneCharacter* Clone = this->SpawnedClone.Get())
 	{
-		Clone->OnDestroyed.RemoveDynamic(this, &UGACloneTech::HandleCloneDestroyed);
+		Clone->OnCloneDespawned.RemoveDynamic(this, &UGACloneTech::HandleCloneDespawned);
 	}
 	this->SpawnedClone.Reset();
 	this->bIsSwaped = false;

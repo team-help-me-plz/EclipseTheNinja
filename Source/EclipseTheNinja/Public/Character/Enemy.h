@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
 #include "Interface/CheckpointResettable.h"
+#include "Interface/Poolable.h"
 #include "Enemy.generated.h"
 
 class UStatAttributeSet;
@@ -38,7 +39,7 @@ enum class EEnemyAlertLevel : uint8
 
 /** 공통 전투 기능에 AI 행동, 피격/사망 처리, 머리 위 UI를 추가한다. */
 UCLASS()
-class ECLIPSETHENINJA_API AEnemy : public ABaseCharacter, public ICheckpointResettable
+class ECLIPSETHENINJA_API AEnemy : public ABaseCharacter, public ICheckpointResettable, public IPoolable
 {
 	GENERATED_BODY()
 
@@ -93,6 +94,13 @@ public:
 	// 체크포인트 리스폰 2단계: 블랙보드를 비우고 BT를 처음부터 다시 실행한다.
 	virtual void OnAfterReset_Implementation() override;
 
+	// 오브젝트 풀: 꺼낸 위치를 기준으로 활동 영역을 다시 잡고, 체크포인트 리셋과 같은 방식으로 상태와 AI를 초기화한다.
+	// (풀에서 스폰하는 적은 CheckpointBound의 BoundCheckpoint를 None으로 두고, 스포너가 런타임 스폰 액터로 등록할 것)
+	virtual void OnSpawnFromPool_Implementation() override;
+
+	// 오브젝트 풀: 공격, AI, 감지 UI를 정지한다. 풀 대기 중에는 사망 상태로 취급한다.
+	virtual void OnReturnToPool_Implementation() override;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -118,8 +126,12 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
 	void Die();
 
-	// 사망 연출이 끝난 뒤 숨김 처리하는 함수 (리스폰을 위해 Destroy하지 않는다)
+	// 사망 연출이 끝난 뒤 처리하는 함수
+	// 풀에서 스폰된 적은 풀에 반환하고, 레벨에 배치된 적은 체크포인트 리스폰을 위해 Destroy하지 않고 숨긴다
 	void DeactivateAfterDeath();
+
+	// 현재 위치를 기준으로 활동 영역(BehaviorOrigin, 순찰 구간, 이동 평면)을 설정하는 함수
+	void InitializeBehaviorArea();
 
 	// AI 컨트롤러의 블랙보드를 비우고 BT를 처음부터 다시 실행하는 함수
 	void RestartAI();

@@ -24,6 +24,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
 #include "GAS/Ability/GABaseAttack.h"
+#include "ObjectPool/ObjectPoolSubsystem.h"
 
 // Sets default values
 AEnemy::AEnemy()
@@ -51,13 +52,7 @@ void AEnemy::BeginPlay()
 {
 	Super::BeginPlay();
 
-	BehaviorOrigin = GetActorLocation();
-	GetCharacterMovement()->SetPlaneConstraintOrigin(BehaviorOrigin);
-
-	// 현재 위치를 기준으로 좌우 구간 설정
-	const float AreaRadius = FMath::Max(1.0f, CombatAreaRadius);
-	PatrolMinX = BehaviorOrigin.X + FMath::Clamp(FMath::Min(PatrolMinOffset, PatrolMaxOffset), -AreaRadius, AreaRadius);
-	PatrolMaxX = BehaviorOrigin.X + FMath::Clamp(FMath::Max(PatrolMinOffset, PatrolMaxOffset), -AreaRadius, AreaRadius);
+	InitializeBehaviorArea();
 
 	// 리스폰 시 복원할 충돌 설정 저장
 	InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
@@ -72,6 +67,17 @@ void AEnemy::BeginPlay()
 	{
 		Die();
 	}
+}
+
+void AEnemy::InitializeBehaviorArea()
+{
+	BehaviorOrigin = GetActorLocation();
+	GetCharacterMovement()->SetPlaneConstraintOrigin(BehaviorOrigin);
+
+	// 현재 위치를 기준으로 좌우 구간 설정
+	const float AreaRadius = FMath::Max(1.0f, CombatAreaRadius);
+	PatrolMinX = BehaviorOrigin.X + FMath::Clamp(FMath::Min(PatrolMinOffset, PatrolMaxOffset), -AreaRadius, AreaRadius);
+	PatrolMaxX = BehaviorOrigin.X + FMath::Clamp(FMath::Max(PatrolMinOffset, PatrolMaxOffset), -AreaRadius, AreaRadius);
 }
 
 void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -192,6 +198,15 @@ void AEnemy::DeactivateAfterDeath()
 		return;
 	}
 
+	// 풀에서 스폰된 적이면 풀에 반환한다. (레벨에 배치된 적은 풀이 관리하지 않으므로 false가 반환된다)
+	if (UObjectPoolSubsystem* PoolSubsystem = GetWorld()->GetSubsystem<UObjectPoolSubsystem>())
+	{
+		if (PoolSubsystem->ReturnToPool(this))
+		{
+			return;
+		}
+	}
+
 	// 충돌, 이동, 틱, AI는 Die()에서 이미 정지했으므로 외형만 숨긴다.
 	SetActorHiddenInGame(true);
 	GetMesh()->bPauseAnims = true;
@@ -244,6 +259,47 @@ void AEnemy::ResetToInitial_Implementation()
 void AEnemy::OnAfterReset_Implementation()
 {
 	RestartAI();
+}
+
+void AEnemy::OnSpawnFromPool_Implementation()
+{
+	// 트랜스폼은 풀이 이미 설정했다. 꺼낸 위치를 새 활동 영역의 중심으로 삼는다.
+	InitializeBehaviorArea();
+
+	// 체크포인트 리스폰과 같은 2단계 초기화 (BP 오버라이드 포함)
+	ICheckpointResettable::Execute_ResetToInitial(this);
+	ICheckpointResettable::Execute_OnAfterReset(this);
+}
+
+void AEnemy::OnReturnToPool_Implementation()
+{
+	GetWorldTimerManager().ClearTimer(DeathDeactivateTimer);
+
+	// 진행 중인 공격 어빌리티 정리
+	ASC->CancelAllAbilities();
+
+	// 풀 대기 중에는 AI 판정(IsReadyForAI)과 피격 처리에서 제외되도록 사망 상태로 둔다. (스폰 시 ResetToInitial에서 해제)
+	bIsDead = true;
+	BehaviorState = EEnemyBehaviorState::Dead;
+	CombatTarget.Reset();
+
+	// AI 컨트롤러는 별도 액터라 풀의 공통 비활성화 대상이 아니므로 직접 정지
+	if (AAIController* AIController = Cast<AAIController>(GetController()))
+	{
+		AIController->StopMovement();
+		if (UBrainComponent* Brain = AIController->GetBrainComponent())
+		{
+			Brain->StopLogic(TEXT("ReturnToPool"));
+		}
+	}
+
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->StopAllMontages(0.0f);
+	}
+
+	// 뷰포트에 붙은 발각 범위 UI는 액터 숨김으로 가려지지 않으므로 직접 제거
+	EnemyDetectComponent->StopDetection();
 }
 
 void AEnemy::RestartAI()

@@ -66,6 +66,9 @@ public:
     /** 체크포인트 리스폰용. 경계 게이지/단계와 마지막 목격 정보를 초기화하고, 사망 시 꺼진 틱과 UI를 되살린다. */
     void ResetDetection();
 
+    /** 오브젝트 풀 반환용. 감지 틱과 위젯 재시도 타이머를 멈추고 발각 범위 UI를 제거한다. (ResetDetection으로 다시 시작) */
+    void StopDetection();
+
     /** 현재 감지 상태를 Blackboard에 다시 기록한다. (BT 재시작 시 사용) */
     void RefreshBlackboard() { UpdateBlackboard(); }
 

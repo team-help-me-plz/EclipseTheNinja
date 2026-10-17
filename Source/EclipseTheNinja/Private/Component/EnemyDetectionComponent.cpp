@@ -126,6 +126,19 @@ void UEnemyDetectionComponent::ResetDetection()
     OnAwarenessChanged.Broadcast(AlertGauge, AlertLevel);
 }
 
+void UEnemyDetectionComponent::StopDetection()
+{
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(PresentationRetryTimer);
+    }
+
+    if (PresentationWidget)
+        PresentationWidget->RemoveFromParent();
+
+    SetComponentTickEnabled(false);
+}
+
 APawn* UEnemyDetectionComponent::FindVisibleTarget(float Radius) const
 {
     const AEnemy* OwnerEnemy = Owner.Get();
