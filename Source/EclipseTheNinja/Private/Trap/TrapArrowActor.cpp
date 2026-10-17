@@ -8,6 +8,7 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GameFramework/Character.h"
 #include "Interface/Interactor.h"
+#include "ObjectPool/ObjectPoolSubsystem.h"
 
 // Sets default values
 ATrapArrowActor::ATrapArrowActor()
@@ -60,7 +61,7 @@ void ATrapArrowActor::OnArrowBeginOverlap(UPrimitiveComponent* OverlappedCompone
 			IInteractor::Execute_ReturnToSafePoint(OtherActor);
 		}
 	}
-	this->Destroy();
+	UObjectPoolSubsystem::Release(this);
 }
 
 void ATrapArrowActor::PostInitializeComponents()
@@ -81,4 +82,15 @@ void ATrapArrowActor::SetLaunch(float InVelocity)
 {
 	this->ProjectileMovement->MaxSpeed = InVelocity;
 	this->ProjectileMovement->SetVelocityInLocalSpace(FVector(InVelocity, 0.f, 0.f));
+}
+
+void ATrapArrowActor::OnSpawnFromPool_Implementation()
+{
+	// 충돌로 시뮬레이션이 멈추면 UpdatedComponent가 해제되므로 다시 지정 (속도는 SetLaunch에서 설정)
+	this->ProjectileMovement->SetUpdatedComponent(this->SphereCollision);
+}
+
+void ATrapArrowActor::OnReturnToPool_Implementation()
+{
+	this->ProjectileMovement->StopMovementImmediately();
 }

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Interface/Poolable.h"
 #include "TrapArrowActor.generated.h"
 
 class USphereComponent;
@@ -11,7 +12,7 @@ class UStaticMeshComponent;
 class UProjectileMovementComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API ATrapArrowActor : public AActor
+class ECLIPSETHENINJA_API ATrapArrowActor : public AActor, public IPoolable
 {
 	GENERATED_BODY()
 	
@@ -39,6 +40,10 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	void	SetLaunch(float InVelocity);
+
+	// 오브젝트 풀: 발사체 이동 대상 복구 / 정지
+	virtual void	OnSpawnFromPool_Implementation() override;
+	virtual void	OnReturnToPool_Implementation() override;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)

@@ -3,6 +3,7 @@
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Checkpoint/Checkpoint.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
+#include "ObjectPool/ObjectPoolSubsystem.h"
 
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
@@ -74,11 +75,11 @@ void UCheckpointSubsystem::RespawnAtCheckpoint(APawn* PlayerPawn)
         return;
     }
 
-    // 순서 주의: 런타임 스폰 액터 파괴와 플레이어 이동을 리셋보다 먼저 한다.
+    // 순서 주의: 런타임 스폰 액터 정리와 플레이어 이동을 리셋보다 먼저 한다.
     // 분신/플레이어가 압력 발판에서 벗어나며 발생하는 EndOverlap(문 토글 등)이 리셋 이후에 끼어들지 않도록 하기 위함.
 
-    // 런타임 스폰 액터들 파괴
-    this->DestroyRuntimeSpawnedActors();
+    // 런타임 스폰 액터들 풀에 반환 (풀 액터가 아니면 파괴)
+    this->ReleaseRuntimeSpawnedActors();
 
     // 플레이어를 체크포인트로 이동
     const ACheckpoint* Checkpoint = this->Checkpoints.FindRef(CheckpointId).Get();
@@ -179,10 +180,11 @@ void UCheckpointSubsystem::RegisterRuntimeSpawnedActor(AActor* InActor)
             return !Weak.IsValid();
         });
 
-    this->RuntimeSpawnedActors.Add(InActor);
+    // 풀 액터는 재사용되며 여러 번 등록될 수 있으므로 중복 없이 추가
+    this->RuntimeSpawnedActors.AddUnique(InActor);
 }
 
-void UCheckpointSubsystem::DestroyRuntimeSpawnedActors()
+void UCheckpointSubsystem::ReleaseRuntimeSpawnedActors()
 {
     // 파괴 도중 등록/해제가 일어나도 순회가 깨지지 않도록 목록을 옮긴 뒤 순회
     TArray<TWeakObjectPtr<AActor>> Actors = MoveTemp(this->RuntimeSpawnedActors);
@@ -192,7 +194,7 @@ void UCheckpointSubsystem::DestroyRuntimeSpawnedActors()
     {
         if (AActor* Actor = Weak.Get())
         {
-            Actor->Destroy();
+            UObjectPoolSubsystem::Release(Actor);
         }
     }
 }
