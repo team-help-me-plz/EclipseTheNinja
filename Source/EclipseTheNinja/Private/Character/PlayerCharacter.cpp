@@ -18,12 +18,14 @@
 #include "Character/PlayerCharacterController.h"
 #include "Character/PlayerCharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "InputCoreTypes.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "Components/BoxComponent.h"
 #include "Engine/TargetPoint.h"
 #include "Interface/Interactable.h"
+#include "Component/AssassinationTargetingComponent.h"
+#include "Component/AssassinateTargetComponent.h"
+#include "GAS/Ability/GAAssassinate.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -34,6 +36,9 @@ APlayerCharacter::APlayerCharacter()
     InteractBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractBox->SetCollisionResponseToAllChannels(ECR_Overlap);
     InteractBox->SetGenerateOverlapEvents(true);
+
+    AssassinateTargetingComponent = CreateDefaultSubobject<UAssassinationTargetingComponent>(TEXT("AssassinateTargeting"));
+    AssassinationAbilityClass = UGAAssassinate::StaticClass();
 
     // create the camera component
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
@@ -95,6 +100,8 @@ void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    if (IsAssassinating()) return;
+
     UpdateCursorTarget();
     UpdateCursorFacing(DeltaSeconds);
 }
@@ -303,8 +310,8 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
         EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoJumpEnd);
 
         // Interacting
-        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::OnCameraMoveEndInput);
-        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoInteract);
+        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::OnCameraMoveEndInput);
+        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::DoInteract);
 
         // Moving
         EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
@@ -478,6 +485,8 @@ void APlayerCharacter::DoBasicAttack()
 {
     if (bIsDead) return;
     if (!ASC) return;
+    if (IsAssassinating()) return;
+
     if (!BasicAttackAbilityClass) return;
     if (!BasicAttackMontage) return;
 
@@ -490,8 +499,38 @@ void APlayerCharacter::DoBasicAttack()
     Super::DoBasicAttack();
 }
 
+void APlayerCharacter::DoAssassinate()
+{
+    if (bIsDead) return;
+    if (!IsValid(ASC)) return;
+    if (IsAssassinating()) return;
+    if (!AssassinationAbilityClass) return;
+    if (!IsValid(AssassinateTargetingComponent)) return;
+
+    UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
+    if (!IsValid(Target)) return;
+    if (!Target->CanAssassinate()) return;
+
+    ASC->TryActivateAbilityByClass(AssassinationAbilityClass);
+}
+
+bool APlayerCharacter::IsAssassinating() const
+{
+    if (!IsValid(ASC)) return false;
+    return ASC->HasMatchingGameplayTag(UGAAssassinate::GetAssassinatingTag());
+}
+
+void APlayerCharacter::SetAssassinationFacing(float Yaw)
+{
+    SetCursorFacingActive(false);
+    FacingTargetYaw = Yaw;
+    SnapToFacingTarget();
+}
+
 void APlayerCharacter::DoMove(float Forward)
 {
+    if (IsAssassinating()) return;
+
     // is movement temporarily disabled after wall jumping?
     if (!bHasWallJumped)
     {
@@ -517,12 +556,16 @@ void APlayerCharacter::DoMove(float Forward)
 
 void APlayerCharacter::DoDrop(float Value)
 {
+    if (IsAssassinating()) return;
+
     // save the movement value
     DropValue = Value;
 }
 
 void APlayerCharacter::DoJumpStart()
 {
+    if (IsAssassinating()) return;
+
     // 입력 상태에 따라 점프 또는 발판 내려가기를 선택한다.
     MultiJump();
 }
@@ -535,6 +578,18 @@ void APlayerCharacter::DoJumpEnd()
 void APlayerCharacter::DoInteract()
 {
     if (bIsDead) return;
+    if (IsAssassinating()) return;
+
+    // 상호작용보다 암살을 우선하고, 실패하더라도 같은 입력으로 상호작용하지 않는다.
+    if (IsValid(AssassinateTargetingComponent))
+    {
+        UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
+        if (IsValid(Target) && Target->CanAssassinate())
+        {
+            DoAssassinate();
+            return;
+        }
+    }
 
     // Clone-tech interactables (levers, clone launch, traps) use a separate interface.
     TArray<AActor*> Candidates;
@@ -754,6 +809,12 @@ void APlayerCharacter::GiveTestAbility()
 void APlayerCharacter::GiveInitAbility()
 {
     if (!HasAuthority() || !ASC) return;
+
+    if (AssassinationAbilityClass && !ASC->FindAbilitySpecFromClass(AssassinationAbilityClass))
+    {
+        ASC->GiveAbility(FGameplayAbilitySpec(AssassinationAbilityClass, 1, INDEX_NONE, this));
+    }
+
     for (const FAbilityInfo& Info : AbilityClassArray)
     {
         if (!Info.AbilityClass) continue;
@@ -772,6 +833,8 @@ void APlayerCharacter::GiveInitAbility()
 
 void APlayerCharacter::DoCloneTech()
 {
+    if (IsAssassinating()) return;
+
     if (bIsDead || !ASC) return;
     //DoCameraMoveEnd();
     ASC->AbilityLocalInputPressed(CloneTechInputID);

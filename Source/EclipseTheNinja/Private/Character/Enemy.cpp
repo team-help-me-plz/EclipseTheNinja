@@ -24,6 +24,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
 #include "GAS/Ability/GABaseAttack.h"
+#include "Component/AssassinateTargetComponent.h"
 
 // Sets default values
 AEnemy::AEnemy()
@@ -44,6 +45,7 @@ AEnemy::AEnemy()
 	OverHeadWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+	AssassinateTargetComt = CreateDefaultSubobject<UAssassinateTargetComponent>(TEXT("AssassinateTargetComp"));
 }
 
 // Called when the game starts or when spawned
@@ -122,6 +124,21 @@ void AEnemy::PlayHitReaction()
 	}
 }
 
+void AEnemy::ReceiveAssassination(UAnimMontage* Montage)
+{
+	if (bIsDead) return;
+	if (!IsValid(ASC)) return;
+
+	// 기존 체력/사망 경로를 사용하고 이번 사망 연출만 암살 몽타주로 바꾼다.
+	PendingAssassinationMontage = Montage;
+	ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 0.0f);
+	if (!bIsDead)
+	{
+		Die();
+	}
+	PendingAssassinationMontage = nullptr;
+}
+
 void AEnemy::Die()
 {
 	// 사망은 한 번만 처리하고 공격, AI, 이동과 충돌을 정리한다.
@@ -159,17 +176,28 @@ void AEnemy::Die()
 	SetActorTickEnabled(false);
 
 	// 사망 몽타주 재생
+	UAnimMontage* MontageToPlay = DeathMontage;
+	if (IsValid(PendingAssassinationMontage))
+	{
+		MontageToPlay = PendingAssassinationMontage;
+	}
+
 	float MontageDuration = 0.0f;
 	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
 	{
-		if (DeathMontage)
+		if (MontageToPlay)
 		{
-			MontageDuration = AnimInstance->Montage_Play(DeathMontage, 1.0f, EMontagePlayReturnType::Duration);
+			MontageDuration = AnimInstance->Montage_Play(MontageToPlay, 1.0f, EMontagePlayReturnType::Duration);
 			if (MontageDuration > 0.0f)
 			{
 				FOnMontageBlendingOutStarted BlendOutDelegate;
-				BlendOutDelegate.BindUObject(this, &AEnemy::OnDeathMontageBlendingOut);
-				AnimInstance->Montage_SetBlendingOutDelegate(BlendOutDelegate, DeathMontage);
+				BlendOutDelegate.BindWeakLambda(this, [this, MontageToPlay](UAnimMontage* Montage, bool bInterrupted)
+				{
+					if (!bIsDead) return;
+					if (Montage != MontageToPlay) return;
+					GetMesh()->bPauseAnims = true;
+				});
+				AnimInstance->Montage_SetBlendingOutDelegate(BlendOutDelegate, MontageToPlay);
 			}
 		}
 	}
