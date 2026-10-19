@@ -1,14 +1,20 @@
 #include "Ability/GACloneTech.h"
 #include "Clone/CloneCharacter.h"
 #include "ProjComponent/AbilityTask_WaitCloneTargeting.h"
+#include "Checkpoint/CheckpointSubsystem.h"
+#include "Character/PlayerCharacter.h"
+#include "Interface/Interactable.h"
+#include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Character/PlayerCharacter.h"
+
 #include "GameFramework/Character.h"
 #include "Engine/World.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
-#include "Interface/Interactable.h"
-#include "Checkpoint/CheckpointSubsystem.h"
-#include "ObjectPool/ObjectPoolSubsystem.h"
-#include "Character/PlayerCharacter.h"
+#include "Components/CapsuleComponent.h"
+#include "CollisionQueryParams.h"
+#include "CollisionShape.h"
+#include "AbilitySystemComponent.h"
 
 UGACloneTech::UGACloneTech()
 {
@@ -274,6 +280,32 @@ void UGACloneTech::HandleCloneDespawned(ACloneCharacter* DespawnedClone)
 	}
 }
 
+void UGACloneTech::OnRecallClone()
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC)
+	{
+		return;
+	}
+	// 남은 쿨타임 확인해 줄어들 쿨타임과 비교 후 적용
+	const float RemainingCooldown = GetCooldownTimeRemaining();
+	if (this->RecallCooldown < RemainingCooldown && CooldownEffectHandle.IsValid())
+	{
+		// -값이 들어가야 하는 것이 맞다
+		const float	ReduceCoolTime = this->RecallCooldown - RemainingCooldown;
+		
+		ASC->ModifyActiveEffectStartTime(
+			this->CooldownEffectHandle,
+			ReduceCoolTime
+		);
+	}
+	// 분신이 존재하면 Release 시키기
+	if (this->SpawnedClone.IsValid())
+	{
+		UObjectPoolSubsystem::Release(this->SpawnedClone.Get());
+	}
+}
+
 void UGACloneTech::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo,
@@ -297,5 +329,17 @@ void UGACloneTech::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	}
 	this->SpawnedClone.Reset();
 	this->bIsSwaped = false;
+	//this->CooldownEffectHandle = FActiveGameplayEffectHandle();
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UGACloneTech::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	this->CooldownEffectHandle = FActiveGameplayEffectHandle();
+
+	UGameplayEffect*	CooldownGE = GetCooldownGameplayEffect();
+	if (CooldownGE)
+	{
+		this->CooldownEffectHandle = ApplyGameplayEffectToOwner(Handle, ActorInfo, ActivationInfo, CooldownGE, GetAbilityLevel(Handle, ActorInfo));
+	}
 }

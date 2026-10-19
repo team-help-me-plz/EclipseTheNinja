@@ -70,6 +70,8 @@ void ACloneCharacter::OnSpawnFromPool_Implementation()
 
 void ACloneCharacter::OnReturnToPool_Implementation()
 {
+	// LifeTime 타이머 초기화
+	SetLifeSpan(0.f);
 	NotifyDespawned();
 
 	// 명령, 쿨다운, 안전 지점은 반환 시 정리한다

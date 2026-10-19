@@ -37,9 +37,15 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		bool	bReplicateEndAbility, bool bWasCancelled) override;
 
+	virtual void ApplyCooldown(const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo, 
+		const FGameplayAbilityActivationInfo ActivationInfo) const override;
+
 	// 분신이 풀에 반환되거나 파괴되면 어빌리티를 종료한다
 	UFUNCTION()
 	void HandleCloneDespawned(ACloneCharacter* DespawnedClone);
+
+	void	OnRecallClone();
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Target")
@@ -69,6 +75,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Targeting", meta = (ClampMin = "0.01", ClampMax = "1.0"))
 	float	TargetingTimeDilation = 0.2f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Despawn")
+	float	RecallCooldown = 1.f;
+
 	UPROPERTY(Transient)
 	TWeakObjectPtr<ACloneCharacter>	SpawnedClone;
 
@@ -86,4 +95,6 @@ private:
 	TObjectPtr<UAbilityTask_WaitCloneTargeting>	TargetingTask;
 
 	bool	bIsSwaped = false;
+
+	mutable FActiveGameplayEffectHandle	CooldownEffectHandle;
 };
