@@ -43,10 +43,17 @@ void UStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
             float FinalDamage = LocalDamage;	// 각종 계산 추가(방어력, 최소대미지보장, 쉴드, 피해 증가 등등)
             FinalDamage = FMath::Max(1.0f, FinalDamage);			// 최소대미지 보장
 
-            const float NewHealth = FMath::Clamp(GetHealth() - FinalDamage, 0.0f, GetMaxHealth());
+            const float OldHealth = GetHealth();
+            const float NewHealth = FMath::Clamp(OldHealth - FinalDamage, 0.0f, GetMaxHealth());
             SetHealth(NewHealth);
 
-            // 값에 따른 추가 처리
+            // SetHealth의 체력 변경 델리게이트에는 이 Damage GE의 GEModData가 전달되지 않는다.
+            // 원본 Context가 유효한 이 콜백에서 피해 출처를 별도로 알린다.
+            // 체력이 먼저 갱신되므로 수신자는 사망/비활성화 여부도 확인할 수 있다.
+            if (NewHealth < OldHealth)
+            {
+                OnDamageReceived.Broadcast(Data.EffectSpec.GetContext());
+            }
         }
     }
 }

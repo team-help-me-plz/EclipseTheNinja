@@ -64,6 +64,7 @@ void AEnemy::BeginPlay()
 	// 체력 변화 델리게이트 바인딩
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
 		.AddUObject(this, &AEnemy::OnHealthChanged);
+	StatAttributeSet->OnDamageReceived.AddUObject(this, &AEnemy::OnDamageReceived);
 
 	InitializeOverHeadWidget();
 	if (StatAttributeSet->GetHealth() <= 0.0f)
@@ -94,6 +95,11 @@ void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			.Remove(HealthChangedDelegateHandle);
 	}
 
+	if (StatAttributeSet)
+	{
+		StatAttributeSet->OnDamageReceived.RemoveAll(this);
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -113,11 +119,22 @@ void AEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 	{
 		PlayHitReaction();
 
-		// 공격받으면 감지 상태와 무관하게 즉시 전투 상태로 전환한다.
-		AActor* DamageInstigator = Data.GEModData
-			? Data.GEModData->EffectSpec.GetContext().GetInstigator() : nullptr;
-		EnemyDetectComponent->NotifyDamaged(DamageInstigator);
+		// Health를 직접 수정하는 GE도 지원한다. 메타 Damage -> SetHealth 경로는 별도 피해 이벤트로 받는다.
+		if (Data.GEModData)
+		{
+			OnDamageReceived(Data.GEModData->EffectSpec.GetContext());
+		}
 	}
+}
+
+void AEnemy::OnDamageReceived(const FGameplayEffectContextHandle& Context)
+{
+	// 치명타는 OnHealthChanged에서 이미 사망 처리했으므로 감지/AI를 다시 켜지 않는다.
+	if (!IsReadyForAI() || !EnemyDetectComponent) return;
+
+	AActor* DamageInstigator = Context.GetInstigator();
+	if (!IsValid(DamageInstigator)) DamageInstigator = Context.GetEffectCauser();
+	EnemyDetectComponent->NotifyDamaged(DamageInstigator);
 }
 
 void AEnemy::PlayHitReaction()
