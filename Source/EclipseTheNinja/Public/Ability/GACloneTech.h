@@ -75,11 +75,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Targeting", meta = (ClampMin = "0.01", ClampMax = "1.0"))
 	float	TargetingTimeDilation = 0.2f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Swap")
+	float	SwapMargin = 5.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Despawn")
 	float	RecallCooldown = 1.f;
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<ACloneCharacter>	SpawnedClone;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Despawn")
+	FText	CannotSwapText = FText::FromString(TEXT("위치를 교환할 수 없습니다."));
 
 private:
 	UFUNCTION()

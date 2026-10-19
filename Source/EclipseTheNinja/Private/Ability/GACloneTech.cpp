@@ -5,7 +5,7 @@
 #include "Character/PlayerCharacter.h"
 #include "Interface/Interactable.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
-#include "Character/PlayerCharacter.h"
+#include "Subsystem/UIMessageSubsystem.h"
 
 #include "GameFramework/Character.h"
 #include "Engine/World.h"
@@ -260,8 +260,42 @@ void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle,
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return ;
 	}
-	this->bIsSwaped = true;
 	const FVector	PlayerLocation = Character->GetActorLocation();
+	const FVector	CloneLocation = this->SpawnedClone->GetActorLocation();
+
+	const UCapsuleComponent*	Capsule = Character->GetCapsuleComponent();
+
+	float	Radius = 0.f;
+	float	HalfHeight = 0.f;
+	Capsule->GetScaledCapsuleSize(Radius, HalfHeight);
+	const float CheckRadius = Radius + FMath::Max(0.f, SwapMargin);
+
+	// 캡슐은 HalfHeight가 Radius보다 작을 수 없음
+	const float CheckHalfHeight = FMath::Max(HalfHeight, CheckRadius);
+
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(CloneSwapClearance),
+		false
+	);
+	// 두 액터는 충돌 검사에서 제외
+	QueryParams.AddIgnoredActor(Character);
+	QueryParams.AddIgnoredActor(SpawnedClone.Get());
+
+	// 교환 위치에서 충돌한다면
+	if (const bool bBlocked = GetWorld()->OverlapBlockingTestByChannel(
+		CloneLocation,
+		Capsule->GetComponentQuat(),
+		Capsule->GetCollisionObjectType(),
+		FCollisionShape::MakeCapsule(CheckRadius, CheckHalfHeight),
+		QueryParams,
+		FCollisionResponseParams(Capsule->GetCollisionResponseToChannels())
+	))
+	{
+		UUIMessageSubsystem::ShowMessage(ActorInfo->PlayerController.Get(), this->CannotSwapText);
+		return;
+	}
+
+	this->bIsSwaped = true;
 	Character->SetActorLocation(this->SpawnedClone->GetActorLocation());
 	this->SpawnedClone->SetActorLocation(PlayerLocation);
 }
