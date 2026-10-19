@@ -1,14 +1,20 @@
 #include "Ability/GACloneTech.h"
 #include "Clone/CloneCharacter.h"
 #include "ProjComponent/AbilityTask_WaitCloneTargeting.h"
+#include "Checkpoint/CheckpointSubsystem.h"
+#include "Character/PlayerCharacter.h"
+#include "Interface/Interactable.h"
+#include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Subsystem/UIMessageSubsystem.h"
+
 #include "GameFramework/Character.h"
 #include "Engine/World.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
-#include "Interface/Interactable.h"
-#include "Checkpoint/CheckpointSubsystem.h"
-#include "ObjectPool/ObjectPoolSubsystem.h"
-#include "Character/PlayerCharacter.h"
+#include "Components/CapsuleComponent.h"
+#include "CollisionQueryParams.h"
+#include "CollisionShape.h"
+#include "AbilitySystemComponent.h"
 
 UGACloneTech::UGACloneTech()
 {
@@ -254,8 +260,42 @@ void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle,
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return ;
 	}
-	this->bIsSwaped = true;
 	const FVector	PlayerLocation = Character->GetActorLocation();
+	const FVector	CloneLocation = this->SpawnedClone->GetActorLocation();
+
+	const UCapsuleComponent*	Capsule = Character->GetCapsuleComponent();
+
+	float	Radius = 0.f;
+	float	HalfHeight = 0.f;
+	Capsule->GetScaledCapsuleSize(Radius, HalfHeight);
+	const float CheckRadius = Radius + FMath::Max(0.f, SwapMargin);
+
+	// 캡슐은 HalfHeight가 Radius보다 작을 수 없음
+	const float CheckHalfHeight = FMath::Max(HalfHeight, CheckRadius);
+
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(CloneSwapClearance),
+		false
+	);
+	// 두 액터는 충돌 검사에서 제외
+	QueryParams.AddIgnoredActor(Character);
+	QueryParams.AddIgnoredActor(SpawnedClone.Get());
+
+	// 교환 위치에서 충돌한다면
+	if (const bool bBlocked = GetWorld()->OverlapBlockingTestByChannel(
+		CloneLocation,
+		Capsule->GetComponentQuat(),
+		Capsule->GetCollisionObjectType(),
+		FCollisionShape::MakeCapsule(CheckRadius, CheckHalfHeight),
+		QueryParams,
+		FCollisionResponseParams(Capsule->GetCollisionResponseToChannels())
+	))
+	{
+		UUIMessageSubsystem::ShowMessage(ActorInfo->PlayerController.Get(), this->CannotSwapText);
+		return;
+	}
+
+	this->bIsSwaped = true;
 	Character->SetActorLocation(this->SpawnedClone->GetActorLocation());
 	this->SpawnedClone->SetActorLocation(PlayerLocation);
 }
@@ -271,6 +311,32 @@ void UGACloneTech::HandleCloneDespawned(ACloneCharacter* DespawnedClone)
 	if (IsActive())
 	{
 		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, false);
+	}
+}
+
+void UGACloneTech::OnRecallClone()
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!ASC)
+	{
+		return;
+	}
+	// 남은 쿨타임 확인해 줄어들 쿨타임과 비교 후 적용
+	const float RemainingCooldown = GetCooldownTimeRemaining();
+	if (this->RecallCooldown < RemainingCooldown && CooldownEffectHandle.IsValid())
+	{
+		// -값이 들어가야 하는 것이 맞다
+		const float	ReduceCoolTime = this->RecallCooldown - RemainingCooldown;
+		
+		ASC->ModifyActiveEffectStartTime(
+			this->CooldownEffectHandle,
+			ReduceCoolTime
+		);
+	}
+	// 분신이 존재하면 Release 시키기
+	if (this->SpawnedClone.IsValid())
+	{
+		UObjectPoolSubsystem::Release(this->SpawnedClone.Get());
 	}
 }
 
@@ -297,5 +363,17 @@ void UGACloneTech::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	}
 	this->SpawnedClone.Reset();
 	this->bIsSwaped = false;
+	//this->CooldownEffectHandle = FActiveGameplayEffectHandle();
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UGACloneTech::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	this->CooldownEffectHandle = FActiveGameplayEffectHandle();
+
+	UGameplayEffect*	CooldownGE = GetCooldownGameplayEffect();
+	if (CooldownGE)
+	{
+		this->CooldownEffectHandle = ApplyGameplayEffectToOwner(Handle, ActorInfo, ActivationInfo, CooldownGE, GetAbilityLevel(Handle, ActorInfo));
+	}
 }

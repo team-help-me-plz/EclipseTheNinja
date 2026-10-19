@@ -35,9 +35,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
 	TArray<FAbilityInfo> AbilityClassArray;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	TObjectPtr<UInputAction> CloneTechAction;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
 	TObjectPtr<UBoxComponent> InteractBox;
 
@@ -68,7 +65,14 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> AimAction;
+	
+	/** CloneTech Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> CloneTechAction;
 
+	/** CloneDespawn Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> CloneRecallAction;
 
 	/** Impulse to manually push physics objects while we're in midair */
 	UPROPERTY(EditAnywhere, Category="Side Scrolling|Jump")
@@ -142,6 +146,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void DoCloneTechEnd();
+
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void DoCloneRecall();
 
 	bool HasCursorTarget() const { return bHasCursorTarget; }
 	bool IsFacingCursor() const { return bCursorFacingActive; }
