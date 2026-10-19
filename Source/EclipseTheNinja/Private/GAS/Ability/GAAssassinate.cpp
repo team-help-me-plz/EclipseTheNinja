@@ -2,7 +2,7 @@
 
 
 #include "GAS/Ability/GAAssassinate.h"
-#include "ProjComponent/AbilityTask_WalkToLocation.h"
+#include "GAS/Task/AbilityTask_WalkToLocation.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "AbilitySystemComponent.h"
 #include "AIController.h"
@@ -143,7 +143,21 @@ void UGAAssassinate::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	ApproachLocation.Y = Player->GetActorLocation().Y;
 	ApproachLocation.Z = Player->GetActorLocation().Z;
 
-	if (FVector::DistSquared2D(Player->GetActorLocation(), ApproachLocation) <= FMath::Square(5.0f))
+	// 이미 가까우면 뒤로 걷지 않고 연출 간격만 즉시 맞춘다. 벽은 통과하지 않는다.
+	if (FVector::DistSquared2D(Player->GetActorLocation(), Enemy->GetActorLocation()) <= FMath::Square(DistanceBehind))
+	{
+		Player->SetActorLocation(ApproachLocation, true);
+		if (FVector::DistSquared2D(Player->GetActorLocation(), ApproachLocation) > FMath::Square(1.0f))
+		{
+			OnInterrupted();
+			return;
+		}
+
+		OnApproachCompleted();
+		return;
+	}
+
+	if (FVector::DistSquared2D(Player->GetActorLocation(), ApproachLocation) <= FMath::Square(10.0f))
 	{
 		OnApproachCompleted();
 		return;
@@ -169,7 +183,7 @@ void UGAAssassinate::OnApproachCompleted()
 	if (Enemy->IsDead()) { OnInterrupted(); return; }
 
 	// 이동 태스크의 도착 판정보다 엄격히 확인해 벽에 막힌 채 처치하지 않는다.
-	if (FVector::DistSquared2D(Player->GetActorLocation(), ApproachLocation) > FMath::Square(10.0f))
+	if (FVector::DistSquared2D(Player->GetActorLocation(), ApproachLocation) > FMath::Square(20.f))
 	{
 		OnInterrupted();
 		return;

@@ -46,8 +46,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.05", Units = "s"))
 	float ApproachTimeout = 1.0f;
 
+	/** 암살 접근 후 적 뒤에 유지할 중심 간 거리. 캡슐이 겹치지 않는 최소 거리로 보정한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.0", Units = "cm"))
-	float BehindDistance = 100.0f;
+	float BehindDistance = 150.0f;
 
 private:
 	UFUNCTION()

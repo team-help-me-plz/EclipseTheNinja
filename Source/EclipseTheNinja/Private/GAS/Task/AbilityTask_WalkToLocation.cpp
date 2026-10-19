@@ -1,4 +1,4 @@
-#include "ProjComponent/AbilityTask_WalkToLocation.h"
+#include "GAS/Task/AbilityTask_WalkToLocation.h"
 
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -14,7 +14,7 @@ UAbilityTask_WalkToLocation* UAbilityTask_WalkToLocation::WalkToLocation(
 	UAbilityTask_WalkToLocation* Task = NewAbilityTask<UAbilityTask_WalkToLocation>(OwningAbility);
 	Task->TargetLocation = Destination;
 	Task->TimeLimit = FMath::Max(0.05f, Timeout);
-	Task->ArrivalRadius = FMath::Max(1.0f, AcceptanceRadius);
+	Task->ArrivalRadius = FMath::Square(FMath::Max(1.0f, AcceptanceRadius));
 	return Task;
 }
 
@@ -45,7 +45,7 @@ void UAbilityTask_WalkToLocation::TickTask(float DeltaTime)
 	if (!Movement->IsMovingOnGround()) { FinishWalk(false); return; }
 
 	const FVector ToTarget = TargetLocation - Walker->GetActorLocation();
-	const float Distance = ToTarget.Size2D();
+	const float Distance = ToTarget.SizeSquared2D();
 	if (Distance <= ArrivalRadius)
 	{
 		FinishWalk(true);
