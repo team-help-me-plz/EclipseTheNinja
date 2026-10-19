@@ -67,21 +67,27 @@ void ABaseCharacter::PostLoad()
 void ABaseCharacter::MigrateLegacyAbilities()
 {
     // 예전에는 BP 값이 없으면 C++ 기본 클래스로 부여했으므로 같은 규칙으로 옮긴다.
-    MigrateLegacyAbility(EAbilityInputID::BasicAttack, BasicAttackAbilityClass_DEPRECATED
-        ? TSubclassOf<UGameplayAbility>(BasicAttackAbilityClass_DEPRECATED)
-        : TSubclassOf<UGameplayAbility>(UGABaseAttack::StaticClass()));
+    MigrateLegacyAbility(EAbilityInputID::BasicAttack, BasicAttackAbilityClass_DEPRECATED, UGABaseAttack::StaticClass());
     BasicAttackAbilityClass_DEPRECATED = nullptr;
 }
 
-void ABaseCharacter::MigrateLegacyAbility(EAbilityInputID InputID, TSubclassOf<UGameplayAbility> AbilityClass)
+void ABaseCharacter::MigrateLegacyAbility(EAbilityInputID InputID, TSubclassOf<UGameplayAbility> LegacyClass,
+    TSubclassOf<UGameplayAbility> DefaultClass)
 {
-    if (!AbilityClass) return;
-
-    // 이미 같은 입력 ID가 지정돼 있으면 배열 설정을 우선한다.
-    for (const FAbilityInfo& Info : AbilityClassArray)
+    for (FAbilityInfo& Info : AbilityClassArray)
     {
-        if (Info.InputID == InputID) return;
+        if (Info.InputID != InputID) continue;
+
+        // BP에서 직접 지정했던 클래스는 상속받은 C++ 기본 항목보다 우선한다.
+        if (LegacyClass && Info.AbilityClass == DefaultClass)
+        {
+            Info.AbilityClass = LegacyClass;
+        }
+        return;
     }
+
+    const TSubclassOf<UGameplayAbility> AbilityClass = LegacyClass ? LegacyClass : DefaultClass;
+    if (!AbilityClass) return;
 
     FAbilityInfo& Info = AbilityClassArray.AddDefaulted_GetRef();
     Info.AbilityClass = AbilityClass;

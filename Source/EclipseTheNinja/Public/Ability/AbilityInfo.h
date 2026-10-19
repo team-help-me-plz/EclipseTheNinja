@@ -12,6 +12,8 @@ enum class EAbilityInputID : uint8
 	None = 0,
 	BasicAttack = 1,
 	Assassinate = 2,
+	AerialAssassinate = 3,
+	BelowAssassinate = 4,
 	CloneTech = 100,
 };
 

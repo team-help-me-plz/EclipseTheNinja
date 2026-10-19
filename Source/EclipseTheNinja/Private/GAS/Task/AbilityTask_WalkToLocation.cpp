@@ -47,8 +47,12 @@ void UAbilityTask_WalkToLocation::TickTask(float DeltaTime)
 
 	const FVector ToTarget = TargetLocation - Walker->GetActorLocation();
 	const float DistanceSquared = ToTarget.SizeSquared2D();
+
 	// 도착 반경 안이거나 목적지를 이미 지나쳤으면 도착으로 보고 목적지에 맞춘다.
 	// 프레임 시간과 감속에 따라 지나치더라도 왕복하다 시간 초과로 실패하지 않는다.
+
+	// 처음 방향과 지금 현재 타겟까지의 방향의 내적이 음수인지 (반대 방향인지)
+	// 반대 방향이면 이미 지나쳤다고 판단
 	const bool bPassedTarget = FVector::DotProduct(ToTarget.GetSafeNormal2D(), StartDirection) <= 0.0f;
 	if (DistanceSquared <= ArrivalRadius || bPassedTarget)
 	{

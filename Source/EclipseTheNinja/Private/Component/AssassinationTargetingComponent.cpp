@@ -7,6 +7,8 @@
 #include "TimerManager.h"
 #include "Character/PlayerCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "HAL/IConsoleManager.h"
+
 
 // Sets default values for this component's properties
 UAssassinationTargetingComponent::UAssassinationTargetingComponent()
@@ -31,13 +33,19 @@ void UAssassinationTargetingComponent::BeginPlay()
 
 void UAssassinationTargetingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	// 후보 선정 타이머 해제
 	GetWorld()->GetTimerManager().ClearTimer(SearchCandidateTimer);
+
+	// 현재 후보 변수 초기회
 	if (IsValid(CurrentTarget))
 	{
 		CurrentTarget->SetTargetHighlighted(false);
 	}
 
 	CurrentTarget = nullptr;
+	CurrentTargetType = EAssassinationType::None;
+
+	// 후보Set 초기화
 	TargetCandidate.Empty();
 	Super::EndPlay(EndPlayReason);
 }
@@ -53,30 +61,65 @@ void UAssassinationTargetingComponent::TickComponent(float DeltaTime, ELevelTick
 void UAssassinationTargetingComponent::SelectCandidate()
 {
 	APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(GetOwner());
-	if (!PlayerCharacter || !PlayerCharacter->GetCharacterMovement()->IsMovingOnGround())
+	if (!PlayerCharacter) return;
+	if (PlayerCharacter->IsAssassinating()) return;
+
+
+	// 적과 같은 바닥이면 등 뒤 암살, 적보다 높은 발판 위면 뛰어내리는 공중 암살이다.
+
+	// 서 있을 때만 타겟을 선정한다. 점프·낙하 중에는 표시하지 않는다.
+	const UCharacterMovementComponent* Movement = PlayerCharacter->GetCharacterMovement();
+	EAssassinationType SearchType = EAssassinationType::None;
+	if (Movement->IsMovingOnGround()) SearchType = EAssassinationType::Ground;
+
+	// 서 있는 상태가 아닌 경우
+	if (SearchType == EAssassinationType::None)
 	{
 		if (CurrentTarget)
 		{
 			CurrentTarget->SetTargetHighlighted(false);
 			CurrentTarget = nullptr;
 		}
+		CurrentTargetType = EAssassinationType::None;
 		return;
 	}
-	if (PlayerCharacter->IsAssassinating()) return;
 
 	UAssassinateTargetComponent* MinDistEnemy = nullptr;
+	EAssassinationType MinDistType = EAssassinationType::None;
+	// 후보를 순회
 	for (auto& Enemy : TargetCandidate)
 	{
+		// 유효하지 않거나, 암살할 수 없으면 건너 뛴다.
 		if (!IsValid(Enemy)) continue;
-		if (!Enemy->CanAssassinate()) continue;
-		// 등 뒤 위치까지 벽에 막혀 있으면 실행해도 취소되므로 테두리도 표시하지 않는다.
-		if (!Enemy->IsApproachClear(PlayerCharacter)) continue;
+		if (!Enemy->CanAssassinate())
+		{
+			continue;
+		}
+		// 높이로 방식을 정하고, 실행 위치까지 막혀 있으면 실행해도 취소되므로 테두리도 표시하지 않는다.
+		EAssassinationType EnemyType = EAssassinationType::None;
+		if (Enemy->IsApproachClear(PlayerCharacter)) 
+			EnemyType = EAssassinationType::Ground;
+
+		else if (Enemy->IsAerialApproachClear(PlayerCharacter))
+			EnemyType = EAssassinationType::Aerial;
+
+		else if (Enemy->IsBelowApproachClear(PlayerCharacter))
+			EnemyType = EAssassinationType::Below;
+
+		// 평지·공중·아래 모두 아닌 경우 건너 뛴다.
+		if (EnemyType == EAssassinationType::None)
+		{
+			continue;
+		}
+
 		if (!MinDistEnemy)
 		{
 			MinDistEnemy = Enemy;
+			MinDistType = EnemyType;
 		}
 		else
 		{
+			// 후보 중에서 가장 가까운 후보를 고른다
 			AActor* OwnerActor = GetOwner();
 			if (!IsValid(OwnerActor)) return;
 			FVector PlayerLocation = OwnerActor->GetActorLocation();
@@ -95,9 +138,13 @@ void UAssassinationTargetingComponent::SelectCandidate()
 			if (DistFromNewOne < DistFromMinDistOne)
 			{
 				MinDistEnemy = Enemy;
+				MinDistType = EnemyType;
 			}
 		}
 	}
+
+	// 같은 적이라도 서 있는 높이가 바뀌면 실행할 암살 방식이 달라지므로 방식은 매번 갱신한다.
+	CurrentTargetType = MinDistEnemy ? MinDistType : EAssassinationType::None;
 
 	// 선정 가능한 후보가 없으면 nullptr로 갱신해 기존 테두리도 해제한다.
 	if (CurrentTarget == MinDistEnemy) return;
@@ -121,6 +168,8 @@ void UAssassinationTargetingComponent::AddTargetCandidate(UAssassinateTargetComp
 {
 	TargetCandidate.Add(Enemy);
 	SelectCandidate();
+
+	// 후보 추가 후 타이머 안돌고 있으면 타이머 돌리기
 	if (GetWorld()->GetTimerManager().IsTimerActive(SearchCandidateTimer)) return;
 
 	GetWorld()->GetTimerManager().SetTimer(
@@ -142,6 +191,7 @@ void UAssassinationTargetingComponent::RemoveTargetCandidate(UAssassinateTargetC
 		SelectCandidate();
 	}
 
+	// 후보 없으면 타이머 종료하기
 	if(TargetCandidate.Num() <= 0)
 		GetWorld()->GetTimerManager().ClearTimer(SearchCandidateTimer);
 }

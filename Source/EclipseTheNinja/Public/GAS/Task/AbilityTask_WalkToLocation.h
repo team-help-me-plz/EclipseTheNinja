@@ -16,6 +16,8 @@ class ECLIPSETHENINJA_API UAbilityTask_WalkToLocation : public UAbilityTask
 
 public:
 	UAbilityTask_WalkToLocation();
+	
+	// 파라미터를 통해서 생성된 태스크를 반환하는 정적 함수
 	static UAbilityTask_WalkToLocation* WalkToLocation(UGameplayAbility* OwningAbility,
 		const FVector& Destination, float Timeout, float AcceptanceRadius = 5.0f);
 

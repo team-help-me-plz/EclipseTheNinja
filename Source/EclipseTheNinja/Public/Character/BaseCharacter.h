@@ -48,7 +48,8 @@ protected:
 
     // 클래스 프로퍼티로 부여하던 예전 BP 설정을 어빌리티 배열로 옮긴다.
     virtual void MigrateLegacyAbilities();
-    void MigrateLegacyAbility(EAbilityInputID InputID, TSubclassOf<UGameplayAbility> AbilityClass);
+    void MigrateLegacyAbility(EAbilityInputID InputID, TSubclassOf<UGameplayAbility> LegacyClass,
+        TSubclassOf<UGameplayAbility> DefaultClass);
 
     // 피격 몽타주 재생용 함수
     UFUNCTION(BlueprintCallable, Category = "Combat|Hit Reaction")

@@ -85,6 +85,8 @@ void APlayerCharacter::BeginPlay()
     InteractBox->SetBoxExtent(InteractBoxSize);
     InteractBox->SetAbsolute(false, true, true);
     WarnIfAbilityMissing(EAbilityInputID::Assassinate);
+    WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
+    WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
     WarnIfAbilityMissing(EAbilityInputID::CloneTech);
     JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
     FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
@@ -509,14 +511,26 @@ void APlayerCharacter::DoAssassinate()
     if (bIsDead) return;
     if (!IsValid(ASC)) return;
     if (IsAssassinating()) return;
-    if (!FindAbilitySpecByInputID(EAbilityInputID::Assassinate)) return;
     if (!IsValid(AssassinateTargetingComponent)) return;
 
     UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
     if (!IsValid(Target)) return;
     if (!Target->CanAssassinate()) return;
 
-    TryActivateAbilityByInputID(EAbilityInputID::Assassinate);
+    // 타겟을 고를 때 정한 방식(땅: 등 뒤, 공중: 머리 위)에 맞는 어빌리티를 발동한다.
+    const EAssassinationType Type = AssassinateTargetingComponent->GetCurrentTargetType();
+    if (Type == EAssassinationType::Ground)
+    {
+        TryActivateAbilityByInputID(EAbilityInputID::Assassinate);
+    }
+    else if (Type == EAssassinationType::Aerial)
+    {
+        TryActivateAbilityByInputID(EAbilityInputID::AerialAssassinate);
+    }
+    else if (Type == EAssassinationType::Below)
+    {
+        TryActivateAbilityByInputID(EAbilityInputID::BelowAssassinate);
+    }
 }
 
 bool APlayerCharacter::IsAssassinating() const
@@ -816,9 +830,7 @@ void APlayerCharacter::MigrateLegacyAbilities()
     Super::MigrateLegacyAbilities();
 
     // 예전에는 BP 값이 없으면 C++ 기본 암살 클래스로 부여했으므로 같은 규칙으로 옮긴다.
-    MigrateLegacyAbility(EAbilityInputID::Assassinate, AssassinationAbilityClass_DEPRECATED
-        ? TSubclassOf<UGameplayAbility>(AssassinationAbilityClass_DEPRECATED)
-        : TSubclassOf<UGameplayAbility>(UGAAssassinate::StaticClass()));
+    MigrateLegacyAbility(EAbilityInputID::Assassinate, AssassinationAbilityClass_DEPRECATED, UGAAssassinate::StaticClass());
     AssassinationAbilityClass_DEPRECATED = nullptr;
 }
 

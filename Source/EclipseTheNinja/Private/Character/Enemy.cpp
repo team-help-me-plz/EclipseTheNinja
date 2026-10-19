@@ -131,6 +131,7 @@ void AEnemy::ReceiveAssassination(UAnimMontage* Montage)
 
 	// 기존 체력/사망 경로를 사용하고 이번 사망 연출만 암살 몽타주로 바꾼다.
 	PendingAssassinationMontage = Montage;
+	//TODO Damage를 통해서 체력 수정하도록 변경
 	ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 0.0f);
 	if (!bIsDead)
 	{
