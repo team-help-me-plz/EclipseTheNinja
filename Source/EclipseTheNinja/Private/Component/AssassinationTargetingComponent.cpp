@@ -69,6 +69,8 @@ void UAssassinationTargetingComponent::SelectCandidate()
 	{
 		if (!IsValid(Enemy)) continue;
 		if (!Enemy->CanAssassinate()) continue;
+		// 등 뒤 위치까지 벽에 막혀 있으면 실행해도 취소되므로 테두리도 표시하지 않는다.
+		if (!Enemy->IsApproachClear(PlayerCharacter)) continue;
 		if (!MinDistEnemy)
 		{
 			MinDistEnemy = Enemy;

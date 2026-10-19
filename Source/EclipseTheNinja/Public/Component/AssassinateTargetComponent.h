@@ -8,6 +8,7 @@
 
 class UBoxComponent;
 class AEnemy;
+class ACharacter;
 class UAssassinationTargetingComponent;
 class USkeletalMeshComponent;
 class UMaterialInterface;
@@ -28,6 +29,12 @@ public:
 	void SetAssassinationInProgress(bool bInProgress) { bAssassinationInProgress = bInProgress; }
 	UFUNCTION(BlueprintCallable, Category = "Assassinate|Outline")
 	void SetTargetHighlighted(bool bInValue);
+
+	/** 암살 연출을 시작할 등 뒤 위치. 사이드뷰 이동 평면과 암살자의 바닥 높이를 유지한다. */
+	FVector GetApproachLocation(const ACharacter* Assassin) const;
+
+	/** 암살자가 현재 위치에서 등 뒤 위치까지 벽이나 다른 캐릭터에 막히지 않고 이동할 수 있는지 확인한다. */
+	bool IsApproachClear(const ACharacter* Assassin) const;
 
 protected:
 	// Called when the game starts
@@ -84,6 +91,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Boundary", meta = (ClampMin = "0.0"))
 	FVector BoundaryExtent = FVector(90.0f, 60.0f, 90.0f);
+
+	/** 암살 접근 후 적 뒤에 유지할 중심 간 거리. 캡슐이 겹치지 않는 최소 거리로 보정한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Approach", meta = (ClampMin = "0.0", Units = "cm"))
+	float BehindDistance = 150.0f;
 
 	TWeakObjectPtr<UAssassinationTargetingComponent> CurrentTargetedComp;
 	bool bAssassinationInProgress = false;

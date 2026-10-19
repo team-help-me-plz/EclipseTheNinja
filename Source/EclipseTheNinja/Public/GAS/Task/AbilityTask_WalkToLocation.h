@@ -34,6 +34,8 @@ private:
 	void FinishWalk(bool bReached);
 	TWeakObjectPtr<ACharacter> Character;
 	FVector TargetLocation = FVector::ZeroVector;
+	// 시작 시점의 이동 방향. 목적지를 지나쳤는지 판정하는 기준이다.
+	FVector StartDirection = FVector::ZeroVector;
 	float TimeLimit = 1.0f;
 	float ElapsedTime = 0.0f;
 	float ArrivalRadius = 5.0f;

@@ -47,6 +47,43 @@ void UAssassinateTargetComponent::SetTargetHighlighted(bool bInValue)
 	OutlineMesh->SetVisibility(bInValue);
 }
 
+FVector UAssassinateTargetComponent::GetApproachLocation(const ACharacter* Assassin) const
+{
+	const ACharacter* Victim = Cast<ACharacter>(GetOwner());
+	if (!IsValid(Victim) || !IsValid(Assassin)) return FVector::ZeroVector;
+
+	const float CapsuleSeparation = Assassin->GetCapsuleComponent()->GetScaledCapsuleRadius()
+		+ Victim->GetCapsuleComponent()->GetScaledCapsuleRadius() + 5.0f;
+	const float DistanceBehind = FMath::Max(BehindDistance, CapsuleSeparation);
+
+	FVector ApproachLocation = Victim->GetActorLocation() - Victim->GetActorForwardVector() * DistanceBehind;
+	ApproachLocation.Y = Assassin->GetActorLocation().Y;
+	ApproachLocation.Z = Assassin->GetActorLocation().Z;
+	return ApproachLocation;
+}
+
+bool UAssassinateTargetComponent::IsApproachClear(const ACharacter* Assassin) const
+{
+	if (!IsValid(Assassin) || !GetWorld()) return false;
+
+	const UCapsuleComponent* Capsule = Assassin->GetCapsuleComponent();
+	if (!IsValid(Capsule)) return false;
+
+	// 실제 접근과 같은 캡슐·충돌 설정으로 스윕한다. 바닥에 닿은 부분이 걸리지 않도록 조금 줄인다.
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(
+		FMath::Max(1.0f, Capsule->GetScaledCapsuleRadius() - 1.0f),
+		FMath::Max(1.0f, Capsule->GetScaledCapsuleHalfHeight() - 5.0f));
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(AssassinationApproach), false, Assassin);
+	Params.AddIgnoredActor(GetOwner());
+
+	FCollisionResponseParams ResponseParams;
+	ResponseParams.CollisionResponse = Capsule->GetCollisionResponseToChannels();
+
+	return !GetWorld()->SweepTestByChannel(Assassin->GetActorLocation(), GetApproachLocation(Assassin),
+		Capsule->GetComponentQuat(), Capsule->GetCollisionObjectType(), Shape, Params, ResponseParams);
+}
+
 
 // Called when the game starts
 void UAssassinateTargetComponent::BeginPlay()

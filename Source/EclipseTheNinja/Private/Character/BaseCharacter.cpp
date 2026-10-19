@@ -9,7 +9,10 @@ ABaseCharacter::ABaseCharacter()
 {
     ASC = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("ASC"));
     StatAttributeSet = CreateDefaultSubobject<UStatAttributeSet>(TEXT("Stat"));
-    BasicAttackAbilityClass = UGABaseAttack::StaticClass();
+    // 기본 공격은 배열의 기본 항목으로 둔다. BP에서 배열을 바꾸면 그 설정을 따른다.
+    FAbilityInfo& BasicAttackInfo = AbilityClassArray.AddDefaulted_GetRef();
+    BasicAttackInfo.AbilityClass = UGABaseAttack::StaticClass();
+    BasicAttackInfo.InputID = EAbilityInputID::BasicAttack;
     bUseControllerRotationYaw = false;
     // 횡스크롤 이동을 XZ 평면으로 제한한다.
     GetCharacterMovement()->SetPlaneConstraintNormal(FVector(0.0f, 1.0f, 0.0f));
@@ -27,7 +30,7 @@ void ABaseCharacter::InitializeAbilitySystem()
 {
     // 이 캐릭터를 GAS의 소유자와 실행 대상으로 연결한다.
     ASC->InitAbilityActorInfo(this, this);
-    GiveBasicAttackAbility();
+    GiveInitAbility();
 }
 
 void ABaseCharacter::BeginPlay()
@@ -41,6 +44,7 @@ void ABaseCharacter::BeginPlay()
     Movement->SetPlaneConstraintEnabled(true);
 
     InitializeAbilitySystem();
+    WarnIfAbilityMissing(EAbilityInputID::BasicAttack);
 }
 
 void ABaseCharacter::PossessedBy(AController* NewController)
@@ -49,13 +53,83 @@ void ABaseCharacter::PossessedBy(AController* NewController)
     InitializeAbilitySystem();
 }
 
-void ABaseCharacter::GiveBasicAttackAbility()
+void ABaseCharacter::PostLoad()
 {
-    // 권한이 있는 쪽에서 기본 공격을 한 번만 부여한다.
-    if (BasicAttackAbilityClass && !ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass))
+    Super::PostLoad();
+
+    if (!bLegacyAbilitiesMigrated)
     {
-        ASC->GiveAbility(FGameplayAbilitySpec(BasicAttackAbilityClass, 1, INDEX_NONE, this));
+        MigrateLegacyAbilities();
+        bLegacyAbilitiesMigrated = true;
     }
+}
+
+void ABaseCharacter::MigrateLegacyAbilities()
+{
+    // 예전에는 BP 값이 없으면 C++ 기본 클래스로 부여했으므로 같은 규칙으로 옮긴다.
+    MigrateLegacyAbility(EAbilityInputID::BasicAttack, BasicAttackAbilityClass_DEPRECATED
+        ? TSubclassOf<UGameplayAbility>(BasicAttackAbilityClass_DEPRECATED)
+        : TSubclassOf<UGameplayAbility>(UGABaseAttack::StaticClass()));
+    BasicAttackAbilityClass_DEPRECATED = nullptr;
+}
+
+void ABaseCharacter::MigrateLegacyAbility(EAbilityInputID InputID, TSubclassOf<UGameplayAbility> AbilityClass)
+{
+    if (!AbilityClass) return;
+
+    // 이미 같은 입력 ID가 지정돼 있으면 배열 설정을 우선한다.
+    for (const FAbilityInfo& Info : AbilityClassArray)
+    {
+        if (Info.InputID == InputID) return;
+    }
+
+    FAbilityInfo& Info = AbilityClassArray.AddDefaulted_GetRef();
+    Info.AbilityClass = AbilityClass;
+    Info.InputID = InputID;
+}
+
+void ABaseCharacter::GiveInitAbility()
+{
+    // 권한이 있는 쪽에서 부여한다. 다시 호출돼도 중복 부여하지 않는다.
+    if (!HasAuthority() || !ASC) return;
+
+    for (const FAbilityInfo& Info : AbilityClassArray)
+    {
+        if (!Info.AbilityClass) continue;
+
+        const int32 InputID = ToAbilityInputID(Info.InputID);
+        const int32 Level = FMath::Max(1, Info.AbilityLevel);
+        if (FGameplayAbilitySpec* Existing = ASC->FindAbilitySpecFromClass(Info.AbilityClass))
+        {
+            Existing->InputID = InputID;
+            Existing->Level = Level;
+            ASC->MarkAbilitySpecDirty(*Existing);
+        }
+        else
+        {
+            ASC->GiveAbility(FGameplayAbilitySpec(Info.AbilityClass, Level, InputID, this));
+        }
+    }
+}
+
+FGameplayAbilitySpec* ABaseCharacter::FindAbilitySpecByInputID(EAbilityInputID InputID) const
+{
+    if (!ASC || InputID == EAbilityInputID::None) return nullptr;
+    return ASC->FindAbilitySpecFromInputID(ToAbilityInputID(InputID));
+}
+
+bool ABaseCharacter::TryActivateAbilityByInputID(EAbilityInputID InputID)
+{
+    const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(InputID);
+    return Spec && ASC->TryActivateAbility(Spec->Handle);
+}
+
+void ABaseCharacter::WarnIfAbilityMissing(EAbilityInputID InputID) const
+{
+    if (!HasAuthority() || FindAbilitySpecByInputID(InputID)) return;
+
+    UE_LOG(LogTemp, Warning, TEXT("%s: AbilityClassArray에 %s 어빌리티가 없습니다."),
+        *GetName(), *UEnum::GetValueAsString(InputID));
 }
 
 void ABaseCharacter::PlayHitReaction()
@@ -86,7 +160,7 @@ void ABaseCharacter::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInte
 void ABaseCharacter::DoBasicAttack()
 {
     // 공격 실행은 GAS 어빌리티에 맡긴다.
-    if (BasicAttackAbilityClass && BasicAttackMontage)
+    if (BasicAttackMontage)
     {
         // 이미 공격중인지 확인
         if (ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
@@ -103,7 +177,7 @@ void ABaseCharacter::DoBasicAttack()
             return;
         }
 
-        ASC->TryActivateAbilityByClass(BasicAttackAbilityClass);
+        TryActivateAbilityByInputID(EAbilityInputID::BasicAttack);
     }
 }
 

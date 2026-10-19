@@ -38,7 +38,11 @@ APlayerCharacter::APlayerCharacter()
     InteractBox->SetGenerateOverlapEvents(true);
 
     AssassinateTargetingComponent = CreateDefaultSubobject<UAssassinationTargetingComponent>(TEXT("AssassinateTargeting"));
-    AssassinationAbilityClass = UGAAssassinate::StaticClass();
+
+    // 암살도 배열의 기본 항목으로 둔다. 기본 공격 항목은 부모 생성자에서 추가한다.
+    FAbilityInfo& AssassinateInfo = AbilityClassArray.AddDefaulted_GetRef();
+    AssassinateInfo.AbilityClass = UGAAssassinate::StaticClass();
+    AssassinateInfo.InputID = EAbilityInputID::Assassinate;
 
     // create the camera component
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
@@ -80,7 +84,8 @@ void APlayerCharacter::BeginPlay()
     Super::BeginPlay();
     InteractBox->SetBoxExtent(InteractBoxSize);
     InteractBox->SetAbsolute(false, true, true);
-    GiveInitAbility();
+    WarnIfAbilityMissing(EAbilityInputID::Assassinate);
+    WarnIfAbilityMissing(EAbilityInputID::CloneTech);
     JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
     FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
@@ -371,8 +376,8 @@ void APlayerCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uin
 
 void APlayerCharacter::PossessedBy(AController* NewController)
 {
+    // 어빌리티 배열은 부모의 PossessedBy에서 부여한다.
     Super::PossessedBy(NewController);
-    GiveInitAbility();
 
     if (IsValid(ASC))
     {
@@ -487,7 +492,7 @@ void APlayerCharacter::DoBasicAttack()
     if (!ASC) return;
     if (IsAssassinating()) return;
 
-    if (!BasicAttackAbilityClass) return;
+    if (!FindAbilitySpecByInputID(EAbilityInputID::BasicAttack)) return;
     if (!BasicAttackMontage) return;
 
     // 첫 공격 전에만 방향을 확정하고, 콤보 추가 입력은 기존 공격 방향을 유지한다.
@@ -504,14 +509,14 @@ void APlayerCharacter::DoAssassinate()
     if (bIsDead) return;
     if (!IsValid(ASC)) return;
     if (IsAssassinating()) return;
-    if (!AssassinationAbilityClass) return;
+    if (!FindAbilitySpecByInputID(EAbilityInputID::Assassinate)) return;
     if (!IsValid(AssassinateTargetingComponent)) return;
 
     UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
     if (!IsValid(Target)) return;
     if (!Target->CanAssassinate()) return;
 
-    ASC->TryActivateAbilityByClass(AssassinationAbilityClass);
+    TryActivateAbilityByInputID(EAbilityInputID::Assassinate);
 }
 
 bool APlayerCharacter::IsAssassinating() const
@@ -806,29 +811,15 @@ void APlayerCharacter::GiveTestAbility()
     ASC->GiveAbility(Spec);
 }
 
-void APlayerCharacter::GiveInitAbility()
+void APlayerCharacter::MigrateLegacyAbilities()
 {
-    if (!HasAuthority() || !ASC) return;
+    Super::MigrateLegacyAbilities();
 
-    if (AssassinationAbilityClass && !ASC->FindAbilitySpecFromClass(AssassinationAbilityClass))
-    {
-        ASC->GiveAbility(FGameplayAbilitySpec(AssassinationAbilityClass, 1, INDEX_NONE, this));
-    }
-
-    for (const FAbilityInfo& Info : AbilityClassArray)
-    {
-        if (!Info.AbilityClass) continue;
-        if (FGameplayAbilitySpec* Existing = ASC->FindAbilitySpecFromClass(Info.AbilityClass))
-        {
-            Existing->InputID = Info.InputID;
-            Existing->Level = FMath::Max(1, Info.AbilityLevel);
-            ASC->MarkAbilitySpecDirty(*Existing);
-        }
-        else
-        {
-            ASC->GiveAbility(FGameplayAbilitySpec(Info.AbilityClass, FMath::Max(1, Info.AbilityLevel), Info.InputID, this));
-        }
-    }
+    // 예전에는 BP 값이 없으면 C++ 기본 암살 클래스로 부여했으므로 같은 규칙으로 옮긴다.
+    MigrateLegacyAbility(EAbilityInputID::Assassinate, AssassinationAbilityClass_DEPRECATED
+        ? TSubclassOf<UGameplayAbility>(AssassinationAbilityClass_DEPRECATED)
+        : TSubclassOf<UGameplayAbility>(UGAAssassinate::StaticClass()));
+    AssassinationAbilityClass_DEPRECATED = nullptr;
 }
 
 void APlayerCharacter::DoCloneTech()
@@ -837,12 +828,12 @@ void APlayerCharacter::DoCloneTech()
 
     if (bIsDead || !ASC) return;
     //DoCameraMoveEnd();
-    ASC->AbilityLocalInputPressed(CloneTechInputID);
+    ASC->AbilityLocalInputPressed(ToAbilityInputID(EAbilityInputID::CloneTech));
 }
 
 void APlayerCharacter::DoCloneTechEnd()
 {
-    if (ASC) ASC->AbilityLocalInputReleased(CloneTechInputID);
+    if (ASC) ASC->AbilityLocalInputReleased(ToAbilityInputID(EAbilityInputID::CloneTech));
 }
 
 void APlayerCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)

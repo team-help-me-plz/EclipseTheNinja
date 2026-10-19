@@ -30,6 +30,7 @@ void UAbilityTask_WalkToLocation::Activate()
 
 	SavedMaxWalkSpeed = Character->GetCharacterMovement()->MaxWalkSpeed;
 	bSpeedSaved = true;
+	StartDirection = (TargetLocation - Character->GetActorLocation()).GetSafeNormal2D();
 }
 
 void UAbilityTask_WalkToLocation::TickTask(float DeltaTime)
@@ -45,9 +46,16 @@ void UAbilityTask_WalkToLocation::TickTask(float DeltaTime)
 	if (!Movement->IsMovingOnGround()) { FinishWalk(false); return; }
 
 	const FVector ToTarget = TargetLocation - Walker->GetActorLocation();
-	const float Distance = ToTarget.SizeSquared2D();
-	if (Distance <= ArrivalRadius)
+	const float DistanceSquared = ToTarget.SizeSquared2D();
+	// 도착 반경 안이거나 목적지를 이미 지나쳤으면 도착으로 보고 목적지에 맞춘다.
+	// 프레임 시간과 감속에 따라 지나치더라도 왕복하다 시간 초과로 실패하지 않는다.
+	const bool bPassedTarget = FVector::DotProduct(ToTarget.GetSafeNormal2D(), StartDirection) <= 0.0f;
+	if (DistanceSquared <= ArrivalRadius || bPassedTarget)
 	{
+		FVector SnapLocation = TargetLocation;
+		SnapLocation.Z = Walker->GetActorLocation().Z;
+		// 벽은 통과하지 않는다. 막혀서 덜 움직이면 어빌리티의 도착 검증에서 취소된다.
+		Walker->SetActorLocation(SnapLocation, true);
 		FinishWalk(true);
 		return;
 	}
@@ -59,8 +67,8 @@ void UAbilityTask_WalkToLocation::TickTask(float DeltaTime)
 		return;
 	}
 
-	// 도착 직전 한 프레임에 목적지를 지나치지 않도록 속도만 제한한다.
-	Movement->MaxWalkSpeed = FMath::Min(SavedMaxWalkSpeed, Distance / FMath::Max(DeltaTime, 0.001f));
+	// 도착 직전에 자연스럽게 감속하도록 남은 거리만큼 속도를 제한한다.
+	Movement->MaxWalkSpeed = FMath::Min(SavedMaxWalkSpeed, FMath::Sqrt(DistanceSquared) / FMath::Max(DeltaTime, 0.001f));
 	Walker->AddMovementInput(ToTarget.GetSafeNormal2D(), 1.0f);
 }
 

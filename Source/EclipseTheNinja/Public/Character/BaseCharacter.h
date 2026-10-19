@@ -3,12 +3,14 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
+#include "Ability/AbilityInfo.h"
 #include "BaseCharacter.generated.h"
 
 class UAbilitySystemComponent;
 class UStatAttributeSet;
 class UAnimMontage;
 class UGABaseAttack;
+struct FGameplayAbilitySpec;
 
 /** Player와 Enemy가 공유하는 이동 설정, GAS, 전투 데이터의 부모 클래스. */
 UCLASS(Abstract)
@@ -25,12 +27,28 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Combat")
     virtual void DoBasicAttack();
 
+    /** 어빌리티 배열에서 해당 입력 ID로 부여된 어빌리티 스펙을 찾는다. */
+    FGameplayAbilitySpec* FindAbilitySpecByInputID(EAbilityInputID InputID) const;
+
 protected:
     virtual void BeginPlay() override;
     virtual void PossessedBy(AController* NewController) override;
     virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
+    virtual void PostLoad() override;
     void InitializeAbilitySystem();
-    void GiveBasicAttackAbility();
+
+    // 어빌리티 배열에 지정된 어빌리티를 부여하고, 이미 있으면 입력 ID와 레벨만 갱신한다.
+    void GiveInitAbility();
+
+    // 입력 ID로 부여된 어빌리티를 발동한다. 콤보 입력처럼 InputPressed 이벤트는 보내지 않는다.
+    bool TryActivateAbilityByInputID(EAbilityInputID InputID);
+
+    // 필수 어빌리티가 배열에 빠져 있으면 경고를 남긴다.
+    void WarnIfAbilityMissing(EAbilityInputID InputID) const;
+
+    // 클래스 프로퍼티로 부여하던 예전 BP 설정을 어빌리티 배열로 옮긴다.
+    virtual void MigrateLegacyAbilities();
+    void MigrateLegacyAbility(EAbilityInputID InputID, TSubclassOf<UGameplayAbility> AbilityClass);
 
     // 피격 몽타주 재생용 함수
     UFUNCTION(BlueprintCallable, Category = "Combat|Hit Reaction")
@@ -57,8 +75,17 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
     TObjectPtr<UAnimMontage> BasicAttackMontage;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
-    TSubclassOf<UGABaseAttack> BasicAttackAbilityClass;
+    /** 시작 시 부여할 어빌리티와 발동에 쓸 입력 ID. 기본 공격 등 모든 기본 어빌리티를 여기서 지정한다. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
+    TArray<FAbilityInfo> AbilityClassArray;
+
+    // 예전 BP에 저장된 기본 공격 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
+    UPROPERTY()
+    TSubclassOf<UGABaseAttack> BasicAttackAbilityClass_DEPRECATED;
+
+    // 예전 BP 설정을 어빌리티 배열로 한 번 옮겼는지 여부. 이후 기획에서 항목을 지워도 다시 추가하지 않는다.
+    UPROPERTY()
+    bool bLegacyAbilitiesMigrated = false;
 
 
     /** 체력이 감소했지만 살아 있을 때 사용할 피격 몽타주. */

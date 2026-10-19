@@ -37,26 +37,32 @@ public:
 		bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
+	// 암살 몽타쥬
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination")
 	TSoftObjectPtr<UAnimMontage> AttackMontage;
 
+	// 암상 당하는 사람의 몽타쥬
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination")
 	TSoftObjectPtr<UAnimMontage> VictimMontage;
 
+	// 접근 시간
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.05", Units = "s"))
 	float ApproachTimeout = 1.0f;
 
-	/** 암살 접근 후 적 뒤에 유지할 중심 간 거리. 캡슐이 겹치지 않는 최소 거리로 보정한다. */
-	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.0", Units = "cm"))
-	float BehindDistance = 150.0f;
-
 private:
+	// 암살을 하기위해서 접근이 끝났을 떄 호출될 함수
 	UFUNCTION()
 	void OnApproachCompleted();
+	
+	// 암살이 성공적으로 끝났을 때 호출될 함수
 	UFUNCTION()
 	void OnCompleted();
+
+	// 암살이 도중에 종료된 경우 호출될 함수
 	UFUNCTION()
 	void OnInterrupted();
+
+	// 암살대상이 파괴될때 호출될 함수
 	UFUNCTION()
 	void OnVictimDestroyed(AActor* DestroyedActor);
 

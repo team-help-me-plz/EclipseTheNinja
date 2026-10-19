@@ -29,10 +29,6 @@ UGAAssassinate::UGAAssassinate()
 	ActivationOwnedTags.AddTag(UGABaseAttack::GetAttackingTag());
 	ActivationBlockedTags.AddTag(TAG_Assassinating);
 	ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
-	AttackMontage = TSoftObjectPtr<UAnimMontage>(FSoftObjectPath(
-		TEXT("/Game/Anims/Montage/AM_Assassination_Attack.AM_Assassination_Attack")));
-	VictimMontage = TSoftObjectPtr<UAnimMontage>(FSoftObjectPath(
-		TEXT("/Game/Anims/Montage/AM_Assassination_Victim.AM_Assassination_Victim")));
 }
 
 FGameplayTag UGAAssassinate::GetAssassinatingTag()
@@ -61,6 +57,7 @@ bool UGAAssassinate::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	UAssassinateTargetComponent* Target = Targeting->GetCurrentTarget();
 	if (!IsValid(Target)) return false;
 	if (!Target->CanAssassinate()) return false;
+	if (!Target->IsApproachClear(Player)) return false;
 
 	const AEnemy* Enemy = Cast<AEnemy>(Target->GetOwner());
 	if (!IsValid(Enemy)) return false;
@@ -135,16 +132,12 @@ void UGAAssassinate::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
 	ExecutionRotation = Enemy->GetActorRotation();
 	Player->SetAssassinationFacing(ExecutionRotation.Yaw);
-	const float CapsuleSeparation = Player->GetCapsuleComponent()->GetScaledCapsuleRadius()
-		+ Enemy->GetCapsuleComponent()->GetScaledCapsuleRadius() + 5.0f;
-	const float DistanceBehind = FMath::Max(BehindDistance, CapsuleSeparation);
-	ApproachLocation = Enemy->GetActorLocation() - Enemy->GetActorForwardVector() * DistanceBehind;
-	// 사이드뷰의 이동 평면과 현재 바닥 높이를 유지한다.
-	ApproachLocation.Y = Player->GetActorLocation().Y;
-	ApproachLocation.Z = Player->GetActorLocation().Z;
+	// 타겟팅의 벽 검사와 같은 위치를 쓰도록 등 뒤 위치는 대상 컴포넌트에서 받는다.
+	ApproachLocation = TargetComponent->GetApproachLocation(Player);
 
 	// 이미 가까우면 뒤로 걷지 않고 연출 간격만 즉시 맞춘다. 벽은 통과하지 않는다.
-	if (FVector::DistSquared2D(Player->GetActorLocation(), Enemy->GetActorLocation()) <= FMath::Square(DistanceBehind))
+	if (FVector::DistSquared2D(Player->GetActorLocation(), Enemy->GetActorLocation())
+		<= FVector::DistSquared2D(ApproachLocation, Enemy->GetActorLocation()))
 	{
 		Player->SetActorLocation(ApproachLocation, true);
 		if (FVector::DistSquared2D(Player->GetActorLocation(), ApproachLocation) > FMath::Square(1.0f))

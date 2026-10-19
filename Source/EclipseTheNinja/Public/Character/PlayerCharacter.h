@@ -34,9 +34,6 @@ class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter, public IInte
 	UCameraComponent* Camera;
 
 protected:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
-	TArray<FAbilityInfo> AbilityClassArray;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> CloneTechAction;
 
@@ -49,11 +46,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Assassinate")
 	TObjectPtr<UAssassinationTargetingComponent> AssassinateTargetingComponent;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Assassinate")
-	TSubclassOf<UGAAssassinate> AssassinationAbilityClass;
+	// 예전 BP에 저장된 암살 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
+	UPROPERTY()
+	TSubclassOf<UGAAssassinate> AssassinationAbilityClass_DEPRECATED;
 
-	void GiveInitAbility();
-	static constexpr int32 CloneTechInputID = 100;
+	virtual void MigrateLegacyAbilities() override;
 
 	/** Move Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")

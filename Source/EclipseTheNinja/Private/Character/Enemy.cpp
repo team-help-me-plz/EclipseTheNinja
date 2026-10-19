@@ -352,7 +352,7 @@ AActor* AEnemy::GetCombatTarget() const
 
 bool AEnemy::IsAttackActive() const
 {
-	const FGameplayAbilitySpec* Spec = BasicAttackAbilityClass ? ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass) : nullptr;
+	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack);
 	return Spec && Spec->IsActive();
 }
 
@@ -404,7 +404,7 @@ void AEnemy::SetBehaviorState(EEnemyBehaviorState NewState)
 	if (NewState == EEnemyBehaviorState::Idle || NewState == EEnemyBehaviorState::Patrol)
 	{
 		// Cancel attack before losing its tracked target. EndAbility clears montage tasks/tags.
-		if (FGameplayAbilitySpec* Spec = BasicAttackAbilityClass ? ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass) : nullptr)
+		if (const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack))
 		{
 			ASC->CancelAbilityHandle(Spec->Handle);
 		}
@@ -467,17 +467,14 @@ bool AEnemy::TryStartAIBaseAttack(AActor* Target)
 	StopHorizontalMovement();
 	FaceLocation(Target->GetActorLocation());
 	NextAttackTime = Now + FMath::Max(0.1f, AttackInterval);
-	return BasicAttackAbilityClass && BasicAttackMontage && ASC->TryActivateAbilityByClass(BasicAttackAbilityClass);
+	return BasicAttackMontage && TryActivateAbilityByInputID(EAbilityInputID::BasicAttack);
 }
 
 void AEnemy::CancelAIBaseAttack()
 {
-	if (ASC && BasicAttackAbilityClass)
+	if (const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack))
 	{
-		if (const FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass))
-		{
-			ASC->CancelAbilityHandle(Spec->Handle);
-		}
+		ASC->CancelAbilityHandle(Spec->Handle);
 	}
 }
 
