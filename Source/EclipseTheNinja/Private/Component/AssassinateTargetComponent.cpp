@@ -216,5 +216,3 @@ void UAssassinateTargetComponent::RemoveTarget(UAssassinationTargetingComponent*
 	ATC->RemoveTargetCandidate(this);
 	CurrentTargetedComp = nullptr;
 }
-
-//TODO 죽었을 때 해제되도록

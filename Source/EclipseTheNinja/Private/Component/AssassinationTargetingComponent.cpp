@@ -5,6 +5,8 @@
 #include "Character/Enemy.h"
 #include "Component/AssassinateTargetComponent.h"
 #include "TimerManager.h"
+#include "Character/PlayerCharacter.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 // Sets default values for this component's properties
 UAssassinationTargetingComponent::UAssassinationTargetingComponent()
@@ -50,6 +52,18 @@ void UAssassinationTargetingComponent::TickComponent(float DeltaTime, ELevelTick
 
 void UAssassinationTargetingComponent::SelectCandidate()
 {
+	APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(GetOwner());
+	if (!PlayerCharacter || !PlayerCharacter->GetCharacterMovement()->IsMovingOnGround())
+	{
+		if (CurrentTarget)
+		{
+			CurrentTarget->SetTargetHighlighted(false);
+			CurrentTarget = nullptr;
+		}
+		return;
+	}
+	if (PlayerCharacter->IsAssassinating()) return;
+
 	UAssassinateTargetComponent* MinDistEnemy = nullptr;
 	for (auto& Enemy : TargetCandidate)
 	{
