@@ -145,6 +145,13 @@ public:
 	virtual void DoBasicAttack() override;
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void DoAssassinate();
+
+	/** 카메라 이동 모드에서만 허용한다. 분신 타게팅의 좌클릭 확인, 암살 연출과는 분리한다. */
+	UFUNCTION(BlueprintPure, Category = "Combat|Kunai")
+	bool CanThrowKunai() const { return bIsExploring && !bIsCloneTargeting && !bIsDead && !IsAssassinating(); }
+
+	UFUNCTION(BlueprintCallable, Category = "Combat|Kunai")
+	void DoThrowKunai();
 	virtual void RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void ReturnToSafePoint_Implementation() override;
 

@@ -20,6 +20,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Ability/GABaseAttack.h"
+#include "GAS/Ability/GAThrowKunai.h"
 #include "Components/BoxComponent.h"
 #include "Engine/TargetPoint.h"
 #include "Interface/Interactable.h"
@@ -313,7 +314,7 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
         {
             EnhancedInputComponent->BindAction(CloneRecallAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneRecall);
         }
-        EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::OnCameraMoveEndInput);
+        // 카메라 이동 중 좌클릭은 모드를 유지한 채 쿠나이를 던진다.
         EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
 
         // Jumping
@@ -334,6 +335,7 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
         EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Completed, this, &APlayerCharacter::DropReleased);
 
         EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APlayerCharacter::OnCameraMoveEndInput);
+        EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Canceled, this, &APlayerCharacter::OnCameraMoveEndInput);
         EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
     }
 }
@@ -498,6 +500,11 @@ void APlayerCharacter::DoBasicAttack()
     if (bIsDead) return;
     if (!ASC) return;
     if (IsAssassinating()) return;
+    if (bIsExploring)
+    {
+        DoThrowKunai();
+        return;
+    }
 
     if (!FindAbilitySpecByInputID(EAbilityInputID::BasicAttack)) return;
     if (!BasicAttackMontage) return;
@@ -549,6 +556,31 @@ void APlayerCharacter::SetAssassinationFacing(float Yaw)
     SetCursorFacingActive(false);
     FacingTargetYaw = Yaw;
     SnapToFacingTarget();
+}
+
+void APlayerCharacter::DoThrowKunai()
+{
+    if (!CanThrowKunai() || !ASC) return;
+
+    // 새 에셋 경로를 하드코딩하지 않고 기존 BP의 시작 어빌리티 목록에서 투척 GA를 찾는다.
+    for (const FAbilityInfo& Info : AbilityClassArray)
+    {
+        if (!Info.AbilityClass || !Info.AbilityClass->IsChildOf(UGAThrowKunai::StaticClass())) continue;
+
+        // 좌클릭 입력이 Tick보다 먼저 와도 현재 커서로 조준한다.
+        UpdateCursorTarget();
+        if (bHasCursorTarget)
+        {
+            const float DirectionX = CursorWorldLocation.X - GetActorLocation().X;
+            if (FMath::Abs(DirectionX) > CursorFacingDeadZone)
+            {
+                FacingTargetYaw = DirectionX > 0.0f ? 0.0f : 180.0f;
+            }
+        }
+        SnapToFacingTarget();
+        ASC->TryActivateAbilityByClass(Info.AbilityClass);
+        return;
+    }
 }
 
 void APlayerCharacter::DoMove(float Forward)

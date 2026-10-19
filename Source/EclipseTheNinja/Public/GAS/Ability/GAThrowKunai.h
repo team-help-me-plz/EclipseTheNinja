@@ -1,0 +1,100 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Abilities/GameplayAbility.h"
+#include "GAThrowKunai.generated.h"
+
+class ACharacter;
+class AKunaiProjectile;
+class UAnimMontage;
+
+/** 플레이어/적 공용 투척. 입력과 BT는 이 어빌리티를 지급한 뒤 활성화만 한다. */
+UCLASS()
+class ECLIPSETHENINJA_API UGAThrowKunai : public UGameplayAbility
+{
+    GENERATED_BODY()
+
+public:
+    UGAThrowKunai();
+
+    static FGameplayTag GetReleaseEventTag();
+
+    virtual bool CanActivateAbility(
+        const FGameplayAbilitySpecHandle Handle,
+        const FGameplayAbilityActorInfo* ActorInfo,
+        const FGameplayTagContainer* SourceTags = nullptr,
+        const FGameplayTagContainer* TargetTags = nullptr,
+        FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
+    virtual void ActivateAbility(
+        const FGameplayAbilitySpecHandle Handle,
+        const FGameplayAbilityActorInfo* ActorInfo,
+        const FGameplayAbilityActivationInfo ActivationInfo,
+        const FGameplayEventData* TriggerEventData) override;
+
+    virtual void EndAbility(
+        const FGameplayAbilitySpecHandle Handle,
+        const FGameplayAbilityActorInfo* ActorInfo,
+        const FGameplayAbilityActivationInfo ActivationInfo,
+        bool bReplicateEndAbility,
+        bool bWasCancelled) override;
+
+protected:
+    /** 이벤트 Target > 적의 전투 대상 > 투척 시작 시 저장한 플레이어 커서 > 정면. 필요하면 GA BP에서 변경한다. */
+    UFUNCTION(BlueprintNativeEvent, Category = "Kunai")
+    FVector GetThrowDirection(ACharacter* Character, const FVector& SpawnLocation) const;
+
+    UFUNCTION()
+    void OnKunaiReleased(FGameplayEventData Payload);
+
+    UFUNCTION()
+    void OnMontageCompleted();
+
+    UFUNCTION()
+    void OnMontageInterrupted();
+
+protected:
+    /** 투척 프레임에 Kunai Release Notify를 배치한다. 프로젝트 에셋은 BP 기본값에서 연결한다. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Animation")
+    TObjectPtr<UAnimMontage> ThrowMontage;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Projectile")
+    TSubclassOf<AKunaiProjectile> ProjectileClass;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Damage")
+    TSubclassOf<UGameplayEffect> DamageEffectClass;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Damage", meta = (ClampMin = "0.01"))
+    float DamageMultiplier = 1.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Projectile", meta = (ClampMin = "1.0", Units = "cm/s"))
+    float ProjectileSpeed = 1500.0f;
+
+    /** 수평선에서 위로 조준할 수 있는 최대 각도. 좌우 어느 방향으로 던져도 동일하게 적용한다. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Aim", meta = (ClampMin = "0.0", ClampMax = "90.0", UIMin = "0.0", UIMax = "90.0", Units = "deg"))
+    float MaxUpwardThrowAngle = 60.0f;
+
+    /** 수평선에서 아래로 조준할 수 있는 최대 각도. 양수로 입력한다. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Aim", meta = (ClampMin = "0.0", ClampMax = "90.0", UIMin = "0.0", UIMax = "90.0", Units = "deg"))
+    float MaxDownwardThrowAngle = 60.0f;
+
+    /** None이면 캐릭터 원점, 지정하면 해당 메시 소켓을 기준으로 Offset을 적용한다. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Projectile")
+    FName ThrowSocketName;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Projectile", meta = (Units = "cm"))
+    FVector SpawnOffset = FVector(60.0f, 0.0f, 40.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Animation", meta = (ClampMin = "0.01"))
+    float PlayRate = 1.0f;
+
+
+private:
+    UPROPERTY(Transient)
+    TWeakObjectPtr<AActor> RequestedTarget;
+
+    FVector InitialPlayerCursorLocation = FVector::ZeroVector;
+    FVector InitialPlayerForward = FVector::ForwardVector;
+    bool bHasInitialPlayerCursor = false;
+    bool bReleased = false;
+};
