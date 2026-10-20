@@ -138,7 +138,8 @@ bool UAssassinateTargetComponent::IsAerialApproachClear(const ACharacter* Assass
 	const AActor* OwnerActor = GetOwner();
 	if (!IsValid(Assassin) || !IsValid(OwnerActor)) return false;
 	// 높이차가 공중 암살 기준보다 작으면 암살 진행 불가
-	if (Assassin->GetActorLocation().Z - OwnerActor->GetActorLocation().Z < AerialMinHeight) return false;
+	const float Height = Assassin->GetActorLocation().Z - OwnerActor->GetActorLocation().Z;
+	if (Height < AerialMinHeight || Height > AerialMaxHeight) return false;
 
 	// 발판 위에서 대각선으로 확인하면 발판 모서리에 걸리므로, 같은 높이로 착지 위치 위까지 나간 뒤 수직으로 내려가는 경로를 확인한다.
 	// 적이 발판 바로 아래에 있으면 수직 경로가 발판에 막혀 탈락한다.
@@ -150,8 +151,7 @@ bool UAssassinateTargetComponent::IsAerialApproachClear(const ACharacter* Assass
 	return IsPathClear(Assassin, Start, AboveLanding) && IsPathClear(Assassin, AboveLanding, Landing);
 }
 
-bool UAssassinateTargetComponent::FindBelowClimbLocation(const ACharacter* Assassin, FVector& OutClimbLocation,
-	FVector& OutWallLocation) const
+bool UAssassinateTargetComponent::FindBelowPlan(const ACharacter* Assassin, FBelowPlan& OutPlan) const
 {
 	const ACharacter* Victim = Cast<ACharacter>(GetOwner());
 	if (!IsValid(Victim) || !IsValid(Assassin) || !GetWorld()) return false;
@@ -159,11 +159,6 @@ bool UAssassinateTargetComponent::FindBelowClimbLocation(const ACharacter* Assas
 	// 암살대상, 암살자의 위치를 가져옴
 	const FVector VictimLocation = Victim->GetActorLocation();
 	const FVector AssassinLocation = Assassin->GetActorLocation();
-	// 둘 사이의 위치 차이 계산
-	const float Height = VictimLocation.Z - AssassinLocation.Z;
-
-	// 아래에서 암살이 가능한 범위를 넘어난 경우 암살 경우
-	if (Height < BelowMinHeight || Height > BelowMaxHeight) return false;
 
 	// 암살자의 캡슐
 	const UCapsuleComponent* Capsule = Assassin->GetCapsuleComponent();
@@ -174,13 +169,18 @@ bool UAssassinateTargetComponent::FindBelowClimbLocation(const ACharacter* Assas
 	// 암살대상의 뒤쪽방향 벡터
 	const FVector Back = -Victim->GetActorForwardVector().GetSafeNormal2D();
 
+	// 손 짚고 올라갈 높이 = 적이 선 발판 높이 - 암살자 발 높이. 적이 모서리에서 얼마나 떨어져 있는지는 따지지 않는다.
+	// TODO 매달리기가 생기면 매달린 손 높이 기준으로 바꾼다.
+	const float ClimbHeight = FloorZ - (AssassinLocation.Z - Capsule->GetScaledCapsuleHalfHeight());
+	if (ClimbHeight < BelowMinHeight || ClimbHeight > BelowMaxHeight) return false;
+
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(AssassinationLedge), false, Assassin);
 	Params.AddIgnoredActor(Victim);
 	FCollisionResponseParams ResponseParams;
 	ResponseParams.CollisionResponse = Capsule->GetCollisionResponseToChannels();
 
-	// 적 발밑에서 뒤쪽으로 가며 바닥이 끊기는 곳(발판 모서리)을 찾는다.
+	// 적 발밑에서 뒤쪽으로 가며 바닥이 끊기는 곳(발판 모서리)을 찾는다. 적이 모서리 바로 위에 있으면 0이다.
 	constexpr float SearchStep = 10.0f;
 	float EdgeDistance = -1.0f;
 	// 10cm 단위로 검사
@@ -199,7 +199,8 @@ bool UAssassinateTargetComponent::FindBelowClimbLocation(const ACharacter* Assas
 		}
 	}
 
-	if (EdgeDistance <= 0.0f) return false;
+	// 찾는 거리 안에 모서리가 없으면 올라갈 곳이 없다.
+	if (EdgeDistance < 0.0f) return false;
 
 	// 암살자는 모서리 바깥 아래에 있어야 한다. 발판 밑에 들어가 있으면 올라갈 수 없다.
 	const FVector ToAssassin = AssassinLocation - VictimLocation;
@@ -242,41 +243,57 @@ bool UAssassinateTargetComponent::FindBelowClimbLocation(const ACharacter* Assas
 	WallLocation.Z = AssassinLocation.Z;
 	if (FVector::Dist2D(AssassinLocation, WallLocation) > BelowWallTolerance) return false;
 
-	// 모서리 안쪽에 올라선 위치. 적을 잡을 거리보다는 뒤에 있어야 한다.
-	// 발판에 올라선 뒤 적의 뒤쪽으로 얼마나 떨어져 있을지
-	const float ClimbDistance = EdgeDistance - BelowClimbInset;
-	// 발판 여유 공간이 암살을 위한 최소 거리가 되지 않으면 암살 불가
-	if (ClimbDistance < BelowGrabDistance) return false;
+	// 모서리 안쪽에 올라선 위치(적 기준 뒤쪽 거리). 적이 모서리에 아주 가까우면 적 바로 뒤에 선다.
+	const float ClimbDistance = FMath::Max(0.0f, EdgeDistance - BelowClimbInset);
+	// 목을 잡는 위치. 올라선 자리가 잡는 거리보다 가까우면 걸어갈 필요 없이 올라선 자리에서 바로 잡고,
+	// 모자란 거리만큼 피격자를 앞으로 밀어 손이 목에 맞게 한다.
+	const float GrabDistance = FMath::Min(BelowGrabDistance, ClimbDistance);
+	const float StandZ = FloorZ + Capsule->GetScaledCapsuleHalfHeight();
 
-	// 실제 올라갈 거리
 	FVector ClimbLocation = VictimLocation + Back * ClimbDistance;
 	ClimbLocation.Y = AssassinLocation.Y;
-	// 캡슐 크기만큼 띄우기
-	ClimbLocation.Z = FloorZ + Capsule->GetScaledCapsuleHalfHeight();
+	ClimbLocation.Z = StandZ;
+
+	FVector GrabLocation = VictimLocation + Back * GrabDistance;
+	GrabLocation.Y = AssassinLocation.Y;
+	GrabLocation.Z = StandZ;
 
 	// 벽 앞에서 벽을 따라 올라간 뒤 모서리 안쪽으로 넘어가는 경로, 그리고 잡는 위치까지 걸어가는 경로가 막히지 않아야 한다.
 	// 벽까지 걸어가는 경로는 위의 벽 찾기 스윕이 확인했다.
-	const FVector AboveWall(WallLocation.X, WallLocation.Y, ClimbLocation.Z + 5.0f);
+	const FVector AboveWall(WallLocation.X, WallLocation.Y, StandZ + 5.0f);
 	if (!IsPathClear(Assassin, WallLocation, AboveWall)) return false;
 	if (!IsPathClear(Assassin, AboveWall, ClimbLocation)) return false;
-	if (!IsPathClear(Assassin, ClimbLocation, GetBelowGrabLocation(Assassin))) return false;
+	if (!IsPathClear(Assassin, ClimbLocation, GrabLocation)) return false;
 
-	OutClimbLocation = ClimbLocation;
-	OutWallLocation = WallLocation;
+	OutPlan.WallLocation = WallLocation;
+	OutPlan.ClimbLocation = ClimbLocation;
+	OutPlan.GrabLocation = GrabLocation;
+	OutPlan.VictimForwardPush = BelowGrabDistance - GrabDistance;
 	return true;
 }
 
-FVector UAssassinateTargetComponent::GetBelowGrabLocation(const ACharacter* Assassin) const
+EAssassinationType UAssassinateTargetComponent::EvaluateAssassinationType(ACharacter* Assassin, bool bCheckZone) const
 {
-	const ACharacter* Victim = Cast<ACharacter>(GetOwner());
-	if (!IsValid(Victim) || !IsValid(Assassin)) return FVector::ZeroVector;
+	if (!IsValid(Assassin)) return EAssassinationType::None;
+	if (bCheckZone && !IsAssassinInZone(Assassin)) return EAssassinationType::None;
 
-	// 암살 대상의 위치에서 뒤쪽으로 BelowGrabDistance 떨어진 거리,  이거리가 목조르기 시작하는 위치
-	FVector GrabLocation = Victim->GetActorLocation() - Victim->GetActorForwardVector().GetSafeNormal2D() * BelowGrabDistance;
-	GrabLocation.Y = Assassin->GetActorLocation().Y;
-	GrabLocation.Z = Victim->GetActorLocation().Z - Victim->GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
-		+ Assassin->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	return GrabLocation;
+	// 높이로 방식이 갈리고, 각 방식은 실행 위치까지 막혀 있지 않아야 한다.
+	if (IsApproachClear(Assassin)) return EAssassinationType::Ground;
+	if (IsAerialApproachClear(Assassin)) return EAssassinationType::Aerial;
+	if (IsBelowApproachClear(Assassin)) return EAssassinationType::Below;
+	return EAssassinationType::None;
+}
+
+bool UAssassinateTargetComponent::IsAssassinInZone(const ACharacter* Assassin) const
+{
+	if (!IsValid(Assassin) || !IsValid(AssassinateBoundary)) return false;
+
+	// 박스의 월드 범위를 캡슐 크기만큼 넓혀 캡슐 중심이 그 안에 있는지 본다.
+	const UCapsuleComponent* Capsule = Assassin->GetCapsuleComponent();
+	const float Radius = Capsule->GetScaledCapsuleRadius();
+	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+	const FBox Zone = AssassinateBoundary->Bounds.GetBox().ExpandBy(FVector(Radius, Radius, HalfHeight));
+	return Zone.IsInsideOrOn(Assassin->GetActorLocation());
 }
 
 bool UAssassinateTargetComponent::IsPathClear(const ACharacter* Assassin, const FVector& Start, const FVector& End) const

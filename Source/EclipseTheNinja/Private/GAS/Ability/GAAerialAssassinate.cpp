@@ -40,7 +40,7 @@ void UGAAerialAssassinate::StartApproach()
 	ResolveJumpWindow();
 
 	// 칼날이 피격자 몸통을 지나도록, 몽타주 시작부터 칼이 꽂히는(착지) 순간까지 피격자를 옆으로 천천히 옮긴다.
-	SlideVictimSideways(VictimSideOffset, ResolvedJumpStartTime + ResolvedJumpDuration);
+	SlideVictim(VictimSideOffset, 0.0f, ResolvedJumpStartTime + ResolvedJumpDuration);
 
 	// 암살 대상 피격
 	ExecuteVictim();

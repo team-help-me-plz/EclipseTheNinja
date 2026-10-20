@@ -21,9 +21,11 @@ void UGABelowAssassinate::StartApproach()
 	if (!IsValid(Player) || !IsValid(Enemy) || !TargetComponent.IsValid()) { OnInterrupted(); return; }
 
 	// 벽에 바짝 붙어 있을 때만 발동되므로 현재 위치에서 바로 올라간다.
-	FVector WallLocation;
-	if (!TargetComponent->FindBelowClimbLocation(Player, ClimbLocation, WallLocation)) { OnInterrupted(); return; }
-	GrabLocation = TargetComponent->GetBelowGrabLocation(Player);
+	UAssassinateTargetComponent::FBelowPlan Plan;
+	if (!TargetComponent->FindBelowPlan(Player, Plan)) { OnInterrupted(); return; }
+	ClimbLocation = Plan.ClimbLocation;
+	GrabLocation = Plan.GrabLocation;
+	VictimForwardPush = Plan.VictimForwardPush;
 
 	// 적 뒤로 다가가는 동안 적 캡슐에 막히지 않게 한다. 처치되면 적 충돌은 꺼진다.
 	SetIgnoreVictimCollision(true);
@@ -65,9 +67,10 @@ void UGABelowAssassinate::OnSectionCrossfade()
 	if (!RestartAttackMontageAt(ResolvedClimbEndTime)) return;
 	SetAttackRootMotionEnabled(false);
 
-	// 목을 잡는 순간 손이 피격자 목에 오도록, 지금부터 목을 잡는 순간까지 피격자를 옆으로 천천히 옮긴다.
+	// 목을 잡는 순간 손이 피격자 목에 오도록, 지금부터 목을 잡는 순간까지 피격자를 천천히 옮긴다.
+	// 옆은 애니메이션 간격, 앞은 적이 모서리에 가까워 잡는 거리가 모자란 만큼이다.
 	// 목 꺾기 구간을 방금 시작했으므로 잡는 순간까지는 GrabTime이 남았다.
-	SlideVictimSideways(VictimSideOffset, GrabTime);
+	SlideVictim(VictimSideOffset, VictimForwardPush, GrabTime);
 
 	// 페어 애니메이션이라 목 꺾기 구간과 함께 피격자 몽타주를 시작해 처치를 확정한다.
 	ExecuteVictim();

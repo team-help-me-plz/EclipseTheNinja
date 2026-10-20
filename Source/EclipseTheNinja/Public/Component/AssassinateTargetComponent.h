@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Component/AssassinationTargetingComponent.h"
 #include "AssassinateTargetComponent.generated.h"
 
 class UBoxComponent;
@@ -50,24 +51,38 @@ public:
 	bool IsAerialApproachClear(const ACharacter* Assassin) const;
 
 	/**
-	 * 아래 바닥에 선 암살자가 적이 선 발판 모서리를 잡고 올라올 수 있는지 확인한다.
-	 * 적 뒤쪽으로 발판이 끝나는 모서리와 그 아래 벽을 찾아, 암살자가 벽에 바짝 붙어 있고 올라갈 경로가 막히지 않으면
-	 * 모서리 안쪽에 올라선 위치(OutClimbLocation)와 벽 바로 앞 아래 바닥 위치(OutWallLocation)를 돌려준다.
+	 * 아래 바닥에 선 암살자가 적이 선 발판 모서리를 손 짚고 올라와 암살할 수 있는지 확인하고, 그 계획을 돌려준다.
+	 * 판정은 올라갈 높이(적 발판 높이 - 암살자 발 높이)와 벽에 붙어 있는지, 경로가 막히지 않는지만 본다.
+	 * 적이 모서리에서 얼마나 떨어져 있는지는 따지지 않고, 가까우면 피격자를 앞으로 밀어 잡는 거리를 맞춘다.
 	 */
-	bool FindBelowClimbLocation(const ACharacter* Assassin, FVector& OutClimbLocation, FVector& OutWallLocation) const;
+	struct FBelowPlan
+	{
+		FVector WallLocation = FVector::ZeroVector;   // 벽 바로 앞 아래 바닥(올라가기 시작 위치)
+		FVector ClimbLocation = FVector::ZeroVector;  // 모서리 안쪽에 올라선 위치
+		FVector GrabLocation = FVector::ZeroVector;   // 목을 잡는 위치(올라선 위치보다 적에게 가깝거나 같다)
+		float VictimForwardPush = 0.0f;               // 잡는 거리가 모자라 피격자를 앞으로 밀 거리(cm)
+	};
+	bool FindBelowPlan(const ACharacter* Assassin, FBelowPlan& OutPlan) const;
 
 	bool IsBelowApproachClear(const ACharacter* Assassin) const
 	{
-		FVector ClimbLocation;
-		FVector WallLocation;
-		return FindBelowClimbLocation(Assassin, ClimbLocation, WallLocation);
+		FBelowPlan Plan;
+		return FindBelowPlan(Assassin, Plan);
 	}
-
-	/** 아래 암살에서 올라온 뒤 적을 잡는 위치. 적 뒤 BelowGrabDistance만큼 떨어진 발판 위다. */
-	FVector GetBelowGrabLocation(const ACharacter* Assassin) const;
 
 	/** 지정한 두 위치 사이를 암살자의 캡슐로 막힘 없이 이동할 수 있는지 확인한다. 이 적은 무시한다. */
 	bool IsPathClear(const ACharacter* Assassin, const FVector& Start, const FVector& End) const;
+
+	/**
+	 * 지금 위치의 암살자에게 이 적을 어떤 방식으로 암살할 수 있는지 돌려준다(평지 > 공중 > 아래 순서로 확인).
+	 * 적의 경계 상태와 암살자의 이동 상태는 보지 않는다. 타겟 선정과 테스트 맵 검증이 같은 판정을 쓴다.
+	 * @param bCheckZone true면 암살 영역(박스) 안에 있는지도 확인한다. 게임에서는 영역 진입 이벤트로 이미 걸러진다.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Assassinate")
+	EAssassinationType EvaluateAssassinationType(ACharacter* Assassin, bool bCheckZone) const;
+
+	/** 암살자 캡슐이 암살 영역(박스)과 겹치는지 위치로 확인한다. 겹침 이벤트가 없는 에디터 월드 검증용이다. */
+	bool IsAssassinInZone(const ACharacter* Assassin) const;
 
 	/** 플레이어가 암살 영역 안에 있는지. 평지·공중은 높이와 이동 상태로 구분한다. */
 	bool IsPlayerInZone() const { return bPlayerInZone; }
@@ -139,9 +154,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Approach", meta = (ClampMin = "0.0", Units = "cm"))
 	float GroundHeightTolerance = 45.0f;
 
-	/** 암살자 캡슐 중심이 적 캡슐 중심보다 최소 이만큼 높아야 공중 암살이 가능하다. 짧은 점프에서 발동되지 않게 한다. */
+	/**
+	 * 암살자 캡슐 중심이 적 캡슐 중심보다 최소 이만큼 높아야 공중 암살이 가능하다.
+	 * GroundHeightTolerance와 같게 두면 평지 암살과 공중 암살 사이에 암살이 안 되는 높이 구간이 생기지 않는다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Aerial", meta = (ClampMin = "0.0", Units = "cm"))
-	float AerialMinHeight = 120.0f;
+	float AerialMinHeight = 45.0f;
+
+	/** 암살자 캡슐 중심이 적 캡슐 중심보다 이보다 높으면 공중 암살을 할 수 없다. 애니메이션은 약 400cm 낙하 기준이다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Aerial", meta = (ClampMin = "0.0", Units = "cm"))
+	float AerialMaxHeight = 400.0f;
 
 	/**
 	 * 공중 암살에서 암살자가 착지할 위치. 적이 바라보는 방향 기준(X 앞, Z 위)이다.
@@ -151,7 +173,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Aerial")
 	FVector AerialLandingOffset = FVector(-40.0f, 0.0f, 0.0f);
 
-	/** 아래 암살이 가능한 높이 차(적 캡슐 중심 - 암살자 캡슐 중심). 애니메이션은 약 200cm 기준이다. */
+	/** 아래 암살로 손 짚고 올라갈 수 있는 높이(적이 선 발판 높이 - 암살자 발 높이). 애니메이션은 약 200cm 기준이다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Below", meta = (ClampMin = "0.0", Units = "cm"))
 	float BelowMinHeight = 120.0f;
 

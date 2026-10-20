@@ -96,15 +96,8 @@ void UAssassinationTargetingComponent::SelectCandidate()
 			continue;
 		}
 		// 높이로 방식을 정하고, 실행 위치까지 막혀 있으면 실행해도 취소되므로 테두리도 표시하지 않는다.
-		EAssassinationType EnemyType = EAssassinationType::None;
-		if (Enemy->IsApproachClear(PlayerCharacter)) 
-			EnemyType = EAssassinationType::Ground;
-
-		else if (Enemy->IsAerialApproachClear(PlayerCharacter))
-			EnemyType = EAssassinationType::Aerial;
-
-		else if (Enemy->IsBelowApproachClear(PlayerCharacter))
-			EnemyType = EAssassinationType::Below;
+		// 후보는 이미 암살 영역 안에 들어온 적이므로 영역은 다시 확인하지 않는다.
+		const EAssassinationType EnemyType = Enemy->EvaluateAssassinationType(PlayerCharacter, false);
 
 		// 평지·공중·아래 모두 아닌 경우 건너 뛴다.
 		if (EnemyType == EAssassinationType::None)

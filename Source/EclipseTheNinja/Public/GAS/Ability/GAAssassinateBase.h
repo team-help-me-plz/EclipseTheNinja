@@ -60,13 +60,13 @@ protected:
 	void ExecuteVictim();
 
 	/**
-	 * 피격자를 옆으로 옮겨 TimeToContact 뒤(칼이나 손이 몸에 닿는 순간)에 도착하게 한다.
-	 * 횡스크롤에서는 화면 깊이 방향(월드 Y축)이다. 페어 애니메이션은 두 캐릭터가 옆으로 조금 어긋난 자리에서
-	 * 맞물리도록 만들어져 있어서, 암살자는 평면에 두고 피격자만 그 차이만큼 옮긴다.
-	 * 서 있는 동안 미끄러지면 눈에 띄므로 닿기 직전 VictimSlideTime 동안만 움직인다.
-	 * @param SideOffset 암살자 기준 오른쪽이 +, 왼쪽이 -(cm)
+	 * 피격자를 옮겨 TimeToContact 뒤(칼이나 손이 몸에 닿는 순간)에 도착하게 한다.
+	 * 페어 애니메이션은 두 캐릭터가 정해진 간격에서 맞물리도록 만들어져 있어서, 암살자는 평면에 두고
+	 * 피격자만 그 차이만큼 옮긴다. 서 있는 동안 미끄러지면 눈에 띄므로 닿기 직전 VictimSlideTime 동안만 움직인다.
+	 * @param SideOffset    암살자 기준 오른쪽이 +, 왼쪽이 -(cm). 횡스크롤에서는 화면 깊이 방향(월드 Y축)이다.
+	 * @param ForwardOffset 피격자가 바라보는 방향으로 밀 거리(cm)
 	 */
-	void SlideVictimSideways(float SideOffset, float TimeToContact);
+	void SlideVictim(float SideOffset, float ForwardOffset, float TimeToContact);
 
 	UFUNCTION()
 	void StartVictimSlide();
@@ -125,6 +125,7 @@ protected:
 	bool bIgnoringVictimCollision = false;
 	bool bRestartingAttackMontage = false;
 	float PendingVictimSideOffset = 0.0f;
+	float PendingVictimForwardOffset = 0.0f;
 	float PendingVictimSlideDuration = 0.0f;
 	bool bLedgeWalkLocked = false;
 	bool bSavedCanWalkOffLedges = true;

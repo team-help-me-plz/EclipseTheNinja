@@ -185,12 +185,13 @@ bool UGAAssassinateBase::PlayAttackMontage()
 	return StartAttackMontageTask(0.0f);
 }
 
-void UGAAssassinateBase::SlideVictimSideways(float SideOffset, float TimeToContact)
+void UGAAssassinateBase::SlideVictim(float SideOffset, float ForwardOffset, float TimeToContact)
 {
-	if (FMath::IsNearlyZero(SideOffset)) return;
+	if (FMath::IsNearlyZero(SideOffset) && FMath::IsNearlyZero(ForwardOffset)) return;
 
 	// 피격자가 가만히 서 있는 동안 미끄러지면 눈에 띄므로, 맞물리기 직전 VictimSlideTime 동안만 옮긴다.
 	PendingVictimSideOffset = SideOffset;
+	PendingVictimForwardOffset = ForwardOffset;
 	PendingVictimSlideDuration = FMath::Min(VictimSlideTime, TimeToContact);
 	const float Delay = TimeToContact - PendingVictimSlideDuration;
 	if (Delay <= KINDA_SMALL_NUMBER)
@@ -211,10 +212,11 @@ void UGAAssassinateBase::StartVictimSlide()
 	AEnemy* Enemy = Victim.Get();
 	if (!IsValid(Enemy)) return;
 
-	// 피격자는 암살자와 같은 방향을 보므로 피격자의 오른쪽이 곧 암살자의 오른쪽이다.
-	// 횡스크롤에서는 화면 깊이 방향(월드 Y축)으로만 움직인다.
+	// 피격자는 암살자와 같은 방향을 보므로 피격자의 오른쪽·앞이 곧 암살자의 오른쪽·앞이다.
+	// 옆은 화면 깊이 방향(월드 Y축), 앞은 피격자가 바라보는 방향이다.
 	const FVector Target = Enemy->GetActorLocation()
-		+ Enemy->GetActorRightVector().GetSafeNormal2D() * PendingVictimSideOffset;
+		+ Enemy->GetActorRightVector().GetSafeNormal2D() * PendingVictimSideOffset
+		+ Enemy->GetActorForwardVector().GetSafeNormal2D() * PendingVictimForwardOffset;
 
 	UAbilityTask_SlideActor* SlideTask = UAbilityTask_SlideActor::SlideActor(this, Enemy, Target, PendingVictimSlideDuration);
 	SlideTask->ReadyForActivation();

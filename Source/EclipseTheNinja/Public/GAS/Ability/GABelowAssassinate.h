@@ -57,6 +57,8 @@ private:
 
 	FVector ClimbLocation = FVector::ZeroVector;
 	FVector GrabLocation = FVector::ZeroVector;
+	// 적이 모서리에 가까워 잡는 거리가 모자랄 때 피격자를 앞으로 밀 거리
+	float VictimForwardPush = 0.0f;
 	float ResolvedClimbEndTime = 0.0f;
 	// 구간 경계를 섞는 시간. 몽타주의 Blend In 시간을 쓴다.
 	float CrossfadeTime = 0.0f;
