@@ -12,6 +12,11 @@ class UInputAction;
 class UInputMappingContext;
 class UNiagaraSystem;
 
+// 분신이 소환됐을 때 델리게이트
+DECLARE_MULTICAST_DELEGATE(FOnCloneSpawned);
+// 분신과 플레이어가 더 이상 Swap할 수 없을 때 델리게이트
+DECLARE_MULTICAST_DELEGATE(FOnCloneCannotSwap);
+
 UCLASS()
 class ECLIPSETHENINJA_API UGACloneTech : public UGACooldownBase
 {
@@ -44,6 +49,8 @@ public:
 
 	void	OnRecallClone();
 
+	FOnCloneSpawned		OnCloneSpawned;
+	FOnCloneCannotSwap	OnCloneCannotSwap;
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Target")
 	TSubclassOf<ACloneCharacter>	CloneClass;
