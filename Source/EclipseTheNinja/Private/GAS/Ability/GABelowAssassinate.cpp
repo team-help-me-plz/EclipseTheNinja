@@ -64,6 +64,8 @@ void UGABelowAssassinate::OnSectionCrossfade()
 	if (!IsActive()) return;
 
 	// 목 꺾기 구간부터 다시 재생한다. 위치는 계속 코드가 맡으므로 새 재생의 루트 모션도 끈다.
+	// 다시 재생하면 몽타주 위치가 섞기 시간만큼 앞으로 뛰므로, 임팩트 대기는 새 재생 위치를 기준으로 건다.
+	WaitForImpact(ResolvedClimbEndTime);
 	if (!RestartAttackMontageAt(ResolvedClimbEndTime)) return;
 	SetAttackRootMotionEnabled(false);
 
