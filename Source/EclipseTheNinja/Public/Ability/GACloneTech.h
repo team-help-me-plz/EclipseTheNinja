@@ -1,8 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Abilities/GameplayAbility.h"
 #include "Clone/CloneCommandType.h"
+
+#include "Ability/GACooldownBase.h"
 #include "GACloneTech.generated.h"
 
 class ACloneCharacter;
@@ -12,7 +13,7 @@ class UInputMappingContext;
 class UNiagaraSystem;
 
 UCLASS()
-class ECLIPSETHENINJA_API UGACloneTech : public UGameplayAbility
+class ECLIPSETHENINJA_API UGACloneTech : public UGACooldownBase
 {
 	GENERATED_BODY()
 
@@ -36,10 +37,6 @@ public:
 		const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		bool	bReplicateEndAbility, bool bWasCancelled) override;
-
-	virtual void ApplyCooldown(const FGameplayAbilitySpecHandle Handle,
-		const FGameplayAbilityActorInfo* ActorInfo, 
-		const FGameplayAbilityActivationInfo ActivationInfo) const override;
 
 	// 분신이 풀에 반환되거나 파괴되면 어빌리티를 종료한다
 	UFUNCTION()
@@ -102,5 +99,4 @@ private:
 
 	bool	bIsSwaped = false;
 
-	mutable FActiveGameplayEffectHandle	CooldownEffectHandle;
 };
