@@ -32,7 +32,7 @@ public:
 
 	virtual void	ToggleActivate_Implementation() override;
 
-	// 체크포인트 리스폰: 발사 쿨다운 초기화 (날아가던 화살은 Subsystem이 런타임 스폰 액터로 파괴)
+	// 체크포인트 리스폰: 발사 쿨다운 초기화 (날아가던 화살은 Subsystem이 런타임 스폰 액터로 풀에 반환)
 	virtual void	ResetToInitial_Implementation() override;
 	virtual void	OnAfterReset_Implementation() override {}
 
@@ -59,6 +59,10 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Trap")
 	float								ArrowSpawnDist = 100.f;
+
+	// 오브젝트 풀에 미리 생성을 요청할 화살 수 (동시에 날아가는 화살 수 기준, 화살 풀이 등록된 경우만 적용)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap|ObjectPool", meta = (ClampMin = "0"))
+	int32								ArrowWarmupCount = 5;
 
 private:
 	void	ResetActivateCooldown();

@@ -16,7 +16,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCheckpointEvent, ECheckpointId, C
  * 체크포인트 서브시스템.
  *  - 갱신   : 현재보다 이후의 체크포인트에 도달하면 CurrentCheckpoint를 갱신한다.
  *  - 리스폰 : BoundCheckpoint == CurrentCheckpoint 인 UCheckpointBoundComponent들의 Owner를 초기 상태로 리셋하고,
- *             런타임 스폰 액터를 파괴한 뒤 플레이어를 체크포인트로 이동시킨다.
+ *             런타임 스폰 액터를 풀에 반환(풀 액터가 아니면 파괴)한 뒤 플레이어를 체크포인트로 이동시킨다.
  *  - 리셋   : 모든 대상 ResetToInitial -> 모든 대상 OnAfterReset
  */
 UCLASS()
@@ -52,7 +52,7 @@ public:
     // Bound 컴포넌트를 서브시스템에서 해제하는 함수
     void UnregisterBound(UCheckpointBoundComponent* InComponent);
 
-    // 리스폰 시 파괴될 런타임 스폰 액터(발사체, 증원 몬스터 등)를 등록하는 함수
+    // 리스폰 시 풀에 반환(또는 파괴)될 런타임 스폰 액터(발사체, 증원 몬스터 등)를 등록하는 함수
     UFUNCTION(BlueprintCallable, Category = "Checkpoint")
     void RegisterRuntimeSpawnedActor(AActor* InActor);
 
@@ -69,9 +69,8 @@ public:
     FOnCheckpointEvent OnRespawned;
 
 private:
-    // 런타임 스폰 액터(발사체, 증원 몬스터 등)들을 파괴하는 함수
-    // TODO: 오브젝트 풀을 도입할 경우 풀에 반환하는 방식으로 수정
-    void DestroyRuntimeSpawnedActors();
+    // 런타임 스폰 액터(발사체, 증원 몬스터 등)들을 풀에 반환하는 함수 (풀 액터가 아니면 파괴)
+    void ReleaseRuntimeSpawnedActors();
 
 private:
     ECheckpointId CurrentCheckpoint = ECheckpointId::None;

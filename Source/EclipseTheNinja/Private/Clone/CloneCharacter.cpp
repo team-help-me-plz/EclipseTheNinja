@@ -2,6 +2,7 @@
 
 
 #include "Clone/CloneCharacter.h"
+#include "ObjectPool/ObjectPoolSubsystem.h"
 
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/TargetPoint.h"
@@ -26,10 +27,68 @@ void ACloneCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	InitializeWalkState();
+	this->bIsSpawned = true;
+}
+
+void ACloneCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// 풀을 거치지 않고 파괴되는 경우
+	NotifyDespawned();
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ACloneCharacter::InitializeWalkState()
+{
 	GetCharacterMovement()->SetPlaneConstraintOrigin(GetActorLocation());
 
 	const float	Sign = GetActorForwardVector().X >= 0.f ? 1.f : -1.f;
 	this->WalkDir = FVector(Sign, 0.f, 0.f);
+}
+
+void ACloneCharacter::NotifyDespawned()
+{
+	if (!this->bIsSpawned)
+	{
+		return ;
+	}
+	this->bIsSpawned = false;
+	this->OnCloneDespawned.Broadcast(this);
+}
+
+void ACloneCharacter::LifeSpanExpired()
+{
+	UObjectPoolSubsystem::Release(this);
+}
+
+void ACloneCharacter::OnSpawnFromPool_Implementation()
+{
+	InitializeWalkState();
+	this->bIsSpawned = true;
+}
+
+void ACloneCharacter::OnReturnToPool_Implementation()
+{
+	// LifeTime 타이머 초기화
+	SetLifeSpan(0.f);
+	NotifyDespawned();
+
+	// 명령, 쿨다운, 안전 지점은 반환 시 정리한다
+	// (안전 지점은 스폰 시 콜리전이 켜지며 오버랩으로 다시 등록될 수 있으므로 OnSpawnFromPool에서 지우지 않는다)
+	this->bIsArrived = false;
+	this->TargetActor = nullptr;
+	this->TargetLocation = FVector::ZeroVector;
+	this->CommandType = ECloneCommandType::Move;
+
+	GetWorldTimerManager().ClearTimer(this->InteractionCooldownTimer);
+	this->bIsInteractCooldown = false;
+
+	this->SafePointLocation = FVector::ZeroVector;
+	this->SafePointRotate = FRotator::ZeroRotator;
+
+	ConsumeMovementInputVector();
+	GetCharacterMovement()->StopMovementImmediately();
 }
 
 // Called every frame
