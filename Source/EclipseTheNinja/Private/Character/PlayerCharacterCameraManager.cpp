@@ -185,7 +185,27 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 
 		float FinalX = FMath::Clamp(CurrentActorLocation.X + MoveOffset.X, CameraXMinBounds, CameraXMaxBounds);
 		FVector TargetCameraLocation(FinalX, CurrentY, CurrentActorLocation.Z + CameraZOffset + MoveOffset.Y);
-		OutVT.POV.Location = FMath::VInterpTo(GetCameraLocation(), TargetCameraLocation, DeltaTime, CameraReturnSpeed);
+
+		if (bIsCameraExploreMode || !bFollowInstantlyInNormalMode)
+		{
+			OutVT.POV.Location = FMath::VInterpTo(GetCameraLocation(), TargetCameraLocation, DeltaTime, CameraReturnSpeed);
+		}
+		else
+		{
+			// 일반 모드는 캐릭터에 바로 붙는다. 탐색 모드에서 막 돌아왔을 때만 벌어진 거리를 부드럽게 줄인다.
+			// 캐릭터 기준 오프셋을 줄이므로 캐릭터가 움직이는 중에도 늦게 따라오지 않는다.
+			if (bWasCameraExploreMode)
+			{
+				ExploreReturnOffset = GetCameraLocation() - TargetCameraLocation;
+			}
+			ExploreReturnOffset = FMath::VInterpTo(ExploreReturnOffset, FVector::ZeroVector, DeltaTime, CameraReturnSpeed);
+			if (ExploreReturnOffset.SizeSquared() < 1.0f)
+			{
+				ExploreReturnOffset = FVector::ZeroVector;
+			}
+			OutVT.POV.Location = TargetCameraLocation + ExploreReturnOffset;
+		}
+		bWasCameraExploreMode = bIsCameraExploreMode;
 	}
 }
 
