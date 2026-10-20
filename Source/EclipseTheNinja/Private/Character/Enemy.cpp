@@ -24,6 +24,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
 #include "GAS/Ability/GABaseAttack.h"
+#include "Component/AssassinateTargetComponent.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 
 // Sets default values
@@ -45,6 +46,7 @@ AEnemy::AEnemy()
 	OverHeadWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+	AssassinateTargetComt = CreateDefaultSubobject<UAssassinateTargetComponent>(TEXT("AssassinateTargetComp"));
 }
 
 // Called when the game starts or when spawned
@@ -57,6 +59,7 @@ void AEnemy::BeginPlay()
 	// 리스폰 시 복원할 충돌 설정 저장
 	InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
 	InitialMeshCollision = GetMesh()->GetCollisionEnabled();
+	InitialMeshRelativeLocation = GetMesh()->GetRelativeLocation();
 
 	// 체력 변화 델리게이트 바인딩
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
@@ -128,6 +131,22 @@ void AEnemy::PlayHitReaction()
 	}
 }
 
+void AEnemy::ReceiveAssassination(UAnimMontage* Montage)
+{
+	if (bIsDead) return;
+	if (!IsValid(ASC)) return;
+
+	// 기존 체력/사망 경로를 사용하고 이번 사망 연출만 암살 몽타주로 바꾼다.
+	PendingAssassinationMontage = Montage;
+	//TODO Damage를 통해서 체력 수정하도록 변경
+	ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 0.0f);
+	if (!bIsDead)
+	{
+		Die();
+	}
+	PendingAssassinationMontage = nullptr;
+}
+
 void AEnemy::Die()
 {
 	// 사망은 한 번만 처리하고 공격, AI, 이동과 충돌을 정리한다.
@@ -165,17 +184,28 @@ void AEnemy::Die()
 	SetActorTickEnabled(false);
 
 	// 사망 몽타주 재생
+	UAnimMontage* MontageToPlay = DeathMontage;
+	if (IsValid(PendingAssassinationMontage))
+	{
+		MontageToPlay = PendingAssassinationMontage;
+	}
+
 	float MontageDuration = 0.0f;
 	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
 	{
-		if (DeathMontage)
+		if (MontageToPlay)
 		{
-			MontageDuration = AnimInstance->Montage_Play(DeathMontage, 1.0f, EMontagePlayReturnType::Duration);
+			MontageDuration = AnimInstance->Montage_Play(MontageToPlay, 1.0f, EMontagePlayReturnType::Duration);
 			if (MontageDuration > 0.0f)
 			{
 				FOnMontageBlendingOutStarted BlendOutDelegate;
-				BlendOutDelegate.BindUObject(this, &AEnemy::OnDeathMontageBlendingOut);
-				AnimInstance->Montage_SetBlendingOutDelegate(BlendOutDelegate, DeathMontage);
+				BlendOutDelegate.BindWeakLambda(this, [this, MontageToPlay](UAnimMontage* Montage, bool bInterrupted)
+				{
+					if (!bIsDead) return;
+					if (Montage != MontageToPlay) return;
+					GetMesh()->bPauseAnims = true;
+				});
+				AnimInstance->Montage_SetBlendingOutDelegate(BlendOutDelegate, MontageToPlay);
 			}
 		}
 	}
@@ -241,6 +271,7 @@ void AEnemy::ResetToInitial_Implementation()
 	// 충돌, 이동 복원
 	GetCapsuleComponent()->SetCollisionEnabled(InitialCapsuleCollision);
 	GetMesh()->SetCollisionEnabled(InitialMeshCollision);
+	GetMesh()->SetRelativeLocation(InitialMeshRelativeLocation);
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->StopMovementImmediately();
@@ -380,7 +411,7 @@ AActor* AEnemy::GetCombatTarget() const
 
 bool AEnemy::IsAttackActive() const
 {
-	const FGameplayAbilitySpec* Spec = BasicAttackAbilityClass ? ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass) : nullptr;
+	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack);
 	return Spec && Spec->IsActive();
 }
 
@@ -432,7 +463,7 @@ void AEnemy::SetBehaviorState(EEnemyBehaviorState NewState)
 	if (NewState == EEnemyBehaviorState::Idle || NewState == EEnemyBehaviorState::Patrol)
 	{
 		// Cancel attack before losing its tracked target. EndAbility clears montage tasks/tags.
-		if (FGameplayAbilitySpec* Spec = BasicAttackAbilityClass ? ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass) : nullptr)
+		if (const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack))
 		{
 			ASC->CancelAbilityHandle(Spec->Handle);
 		}
@@ -495,17 +526,14 @@ bool AEnemy::TryStartAIBaseAttack(AActor* Target)
 	StopHorizontalMovement();
 	FaceLocation(Target->GetActorLocation());
 	NextAttackTime = Now + FMath::Max(0.1f, AttackInterval);
-	return BasicAttackAbilityClass && BasicAttackMontage && ASC->TryActivateAbilityByClass(BasicAttackAbilityClass);
+	return BasicAttackMontage && TryActivateAbilityByInputID(EAbilityInputID::BasicAttack);
 }
 
 void AEnemy::CancelAIBaseAttack()
 {
-	if (ASC && BasicAttackAbilityClass)
+	if (const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack))
 	{
-		if (const FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(BasicAttackAbilityClass))
-		{
-			ASC->CancelAbilityHandle(Spec->Handle);
-		}
+		ASC->CancelAbilityHandle(Spec->Handle);
 	}
 }
 

@@ -17,6 +17,8 @@ class UEnhancedInputLocalPlayerSubsystem;
 class UAnimMontage;
 class UGABaseAttack;
 class UBoxComponent;
+class UAssassinationTargetingComponent;
+class UGAAssassinate;
 struct FInputActionValue;
 
 /**
@@ -28,36 +30,39 @@ class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter, public IInte
 	GENERATED_BODY()
 
 	/** Player camera */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Camera", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* Camera;
 
 protected:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
-	TArray<FAbilityInfo> AbilityClassArray;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
 	TObjectPtr<UBoxComponent> InteractBox;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Collision|Interact")
 	FVector InteractBoxSize = FVector(80.f, 1000.f, 100.f);
 
-	void GiveInitAbility();
-	static constexpr int32 CloneTechInputID = 100;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Assassinate")
+	TObjectPtr<UAssassinationTargetingComponent> AssassinateTargetingComponent;
+
+	// 예전 BP에 저장된 암살 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
+	UPROPERTY()
+	TSubclassOf<UGAAssassinate> AssassinationAbilityClass_DEPRECATED;
+
+	virtual void MigrateLegacyAbilities() override;
 
 	/** Move Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
+	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* MoveAction;
 
 	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
+	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* JumpAction;
 
 	/** Drop from Platform Action */
-	UPROPERTY(EditAnywhere, Category="Input")
+	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* DropAction;
 
 	/** Interact Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
+	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* InteractAction;
 
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -65,7 +70,7 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> AimAction;
-	
+
 	/** CloneTech Input Action */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> CloneTechAction;
@@ -75,42 +80,42 @@ protected:
 	TObjectPtr<UInputAction> CloneRecallAction;
 
 	/** Impulse to manually push physics objects while we're in midair */
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Jump")
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Jump")
 	float JumpPushImpulse = 600.0f;
 
 	/** Max distance that interactive objects can be triggered */
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Interaction")
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Interaction")
 	float InteractionRadius = 200.0f;
 
 	/** Time to disable input after a wall jump to preserve momentum */
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Wall Jump")
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Wall Jump")
 	float DelayBetweenWallJumps = 0.3f;
 
 	/** Distance to trace ahead of the character for wall jumps */
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Wall Jump")
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Wall Jump")
 	float WallJumpTraceDistance = 50.0f;
 
 	/** Horizontal impulse to apply to the character during wall jumps */
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Wall Jump")
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Wall Jump")
 	float WallJumpHorizontalImpulse = 500.0f;
 
 	/** Multiplies the jump Z velocity for wall jumps. */
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Wall Jump")
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Wall Jump")
 	float WallJumpVerticalMultiplier = 1.4f;
 
 	/** Collision object type to use for soft collision traces (dropping down floors) */
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Soft Platforms")
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Soft Platforms")
 	TEnumAsByte<ECollisionChannel> SoftCollisionObjectType;
 
 	/** Distance to trace down during soft collision checks */
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Soft Platforms")
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Soft Platforms")
 	float SoftCollisionTraceDistance = 1000.0f;
 
 	/** Last recorded time when this character started falling */
 	float LastFallTime = 0.0f;
 
 	/** Max amount of time that can pass since we started falling when we allow a regular jump */
-	UPROPERTY(EditAnywhere, Category="Side Scrolling|Coyote Time", meta = (ClampMin = 0, ClampMax = 5, Units = "s"))
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Coyote Time", meta = (ClampMin = 0, ClampMax = 5, Units = "s"))
 	float MaxCoyoteTime = 0.16f;
 
 	TWeakObjectPtr<UEnhancedInputLocalPlayerSubsystem> AttackInputSubsystem;
@@ -134,10 +139,12 @@ protected:
 	bool bMovingHorizontally = false;
 
 public:
-	
+
 	/** Constructor */
 	APlayerCharacter();
 	virtual void DoBasicAttack() override;
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void DoAssassinate();
 	virtual void RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void ReturnToSafePoint_Implementation() override;
 
@@ -153,6 +160,10 @@ public:
 	bool HasCursorTarget() const { return bHasCursorTarget; }
 	bool IsFacingCursor() const { return bCursorFacingActive; }
 	const FVector& GetCursorWorldLocation() const { return CursorWorldLocation; }
+
+	UAssassinationTargetingComponent* GetAssassinationTargetingComponent() const { return AssassinateTargetingComponent; }
+	bool IsAssassinating() const;
+	void SetAssassinationFacing(float Yaw);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cursor Look")
 	bool bFaceCursor = true;
@@ -256,23 +267,23 @@ protected:
 public:
 
 	/** Handles move inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoMove(float Forward);
 
 	/** Handles drop inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoDrop(float Value);
 
 	/** Handles jump pressed inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoJumpStart();
 
 	/** Handles jump pressed inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoJumpEnd();
 
 	/** Handles interact inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoInteract();
 
 
@@ -312,11 +323,11 @@ public:
 public:
 
 	/** 기존 Anim BP 연결을 유지하기 위한 함수. 2단 점프는 사용하지 않는다. */
-	UFUNCTION(BlueprintPure, Category="Side Scrolling")
+	UFUNCTION(BlueprintPure, Category = "Side Scrolling")
 	bool HasDoubleJumped() const { return false; }
 
 	/** Returns true if the character has just wall jumped */
-	UFUNCTION(BlueprintPure, Category="Side Scrolling")
+	UFUNCTION(BlueprintPure, Category = "Side Scrolling")
 	bool HasWallJumped() const;
 
 

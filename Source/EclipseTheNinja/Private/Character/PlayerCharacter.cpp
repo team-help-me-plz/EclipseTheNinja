@@ -18,12 +18,14 @@
 #include "Character/PlayerCharacterController.h"
 #include "Character/PlayerCharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "InputCoreTypes.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "Components/BoxComponent.h"
 #include "Engine/TargetPoint.h"
 #include "Interface/Interactable.h"
+#include "Component/AssassinationTargetingComponent.h"
+#include "Component/AssassinateTargetComponent.h"
+#include "GAS/Ability/GAAssassinate.h"
 #include "Ability/GACloneTech.h"
 
 APlayerCharacter::APlayerCharacter()
@@ -35,6 +37,13 @@ APlayerCharacter::APlayerCharacter()
     InteractBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractBox->SetCollisionResponseToAllChannels(ECR_Overlap);
     InteractBox->SetGenerateOverlapEvents(true);
+
+    AssassinateTargetingComponent = CreateDefaultSubobject<UAssassinationTargetingComponent>(TEXT("AssassinateTargeting"));
+
+    // 암살도 배열의 기본 항목으로 둔다. 기본 공격 항목은 부모 생성자에서 추가한다.
+    FAbilityInfo& AssassinateInfo = AbilityClassArray.AddDefaulted_GetRef();
+    AssassinateInfo.AbilityClass = UGAAssassinate::StaticClass();
+    AssassinateInfo.InputID = EAbilityInputID::Assassinate;
 
     // create the camera component
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
@@ -76,7 +85,10 @@ void APlayerCharacter::BeginPlay()
     Super::BeginPlay();
     InteractBox->SetBoxExtent(InteractBoxSize);
     InteractBox->SetAbsolute(false, true, true);
-    GiveInitAbility();
+    WarnIfAbilityMissing(EAbilityInputID::Assassinate);
+    WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
+    WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
+    WarnIfAbilityMissing(EAbilityInputID::CloneTech);
     JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
     FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
@@ -96,6 +108,8 @@ void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    if (IsAssassinating()) return;
+
     UpdateCursorTarget();
     UpdateCursorFacing(DeltaSeconds);
 }
@@ -308,8 +322,8 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
         EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoJumpEnd);
 
         // Interacting
-        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::OnCameraMoveEndInput);
-        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoInteract);
+        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::OnCameraMoveEndInput);
+        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APlayerCharacter::DoInteract);
 
         // Moving
         EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
@@ -369,8 +383,8 @@ void APlayerCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uin
 
 void APlayerCharacter::PossessedBy(AController* NewController)
 {
+    // 어빌리티 배열은 부모의 PossessedBy에서 부여한다.
     Super::PossessedBy(NewController);
-    GiveInitAbility();
 
     if (IsValid(ASC))
     {
@@ -483,7 +497,9 @@ void APlayerCharacter::DoBasicAttack()
 {
     if (bIsDead) return;
     if (!ASC) return;
-    if (!BasicAttackAbilityClass) return;
+    if (IsAssassinating()) return;
+
+    if (!FindAbilitySpecByInputID(EAbilityInputID::BasicAttack)) return;
     if (!BasicAttackMontage) return;
 
     // 첫 공격 전에만 방향을 확정하고, 콤보 추가 입력은 기존 공격 방향을 유지한다.
@@ -495,8 +511,50 @@ void APlayerCharacter::DoBasicAttack()
     Super::DoBasicAttack();
 }
 
+void APlayerCharacter::DoAssassinate()
+{
+    if (bIsDead) return;
+    if (!IsValid(ASC)) return;
+    if (IsAssassinating()) return;
+    if (!IsValid(AssassinateTargetingComponent)) return;
+
+    UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
+    if (!IsValid(Target)) return;
+    if (!Target->CanAssassinate()) return;
+
+    // 타겟을 고를 때 정한 방식(땅: 등 뒤, 공중: 머리 위)에 맞는 어빌리티를 발동한다.
+    const EAssassinationType Type = AssassinateTargetingComponent->GetCurrentTargetType();
+    if (Type == EAssassinationType::Ground)
+    {
+        TryActivateAbilityByInputID(EAbilityInputID::Assassinate);
+    }
+    else if (Type == EAssassinationType::Aerial)
+    {
+        TryActivateAbilityByInputID(EAbilityInputID::AerialAssassinate);
+    }
+    else if (Type == EAssassinationType::Below)
+    {
+        TryActivateAbilityByInputID(EAbilityInputID::BelowAssassinate);
+    }
+}
+
+bool APlayerCharacter::IsAssassinating() const
+{
+    if (!IsValid(ASC)) return false;
+    return ASC->HasMatchingGameplayTag(UGAAssassinate::GetAssassinatingTag());
+}
+
+void APlayerCharacter::SetAssassinationFacing(float Yaw)
+{
+    SetCursorFacingActive(false);
+    FacingTargetYaw = Yaw;
+    SnapToFacingTarget();
+}
+
 void APlayerCharacter::DoMove(float Forward)
 {
+    if (IsAssassinating()) return;
+
     // is movement temporarily disabled after wall jumping?
     if (!bHasWallJumped)
     {
@@ -522,12 +580,16 @@ void APlayerCharacter::DoMove(float Forward)
 
 void APlayerCharacter::DoDrop(float Value)
 {
+    if (IsAssassinating()) return;
+
     // save the movement value
     DropValue = Value;
 }
 
 void APlayerCharacter::DoJumpStart()
 {
+    if (IsAssassinating()) return;
+
     // 입력 상태에 따라 점프 또는 발판 내려가기를 선택한다.
     MultiJump();
 }
@@ -540,6 +602,18 @@ void APlayerCharacter::DoJumpEnd()
 void APlayerCharacter::DoInteract()
 {
     if (bIsDead) return;
+    if (IsAssassinating()) return;
+
+    // 상호작용보다 암살을 우선하고, 실패하더라도 같은 입력으로 상호작용하지 않는다.
+    if (IsValid(AssassinateTargetingComponent))
+    {
+        UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
+        if (IsValid(Target) && Target->CanAssassinate())
+        {
+            DoAssassinate();
+            return;
+        }
+    }
 
     // Clone-tech interactables (levers, clone launch, traps) use a separate interface.
     TArray<AActor*> Candidates;
@@ -756,43 +830,38 @@ void APlayerCharacter::GiveTestAbility()
     ASC->GiveAbility(Spec);
 }
 
-void APlayerCharacter::GiveInitAbility()
+void APlayerCharacter::MigrateLegacyAbilities()
 {
-    if (!HasAuthority() || !ASC) return;
-    for (const FAbilityInfo& Info : AbilityClassArray)
-    {
-        if (!Info.AbilityClass) continue;
-        if (FGameplayAbilitySpec* Existing = ASC->FindAbilitySpecFromClass(Info.AbilityClass))
-        {
-            Existing->InputID = Info.InputID;
-            Existing->Level = FMath::Max(1, Info.AbilityLevel);
-            ASC->MarkAbilitySpecDirty(*Existing);
-        }
-        else
-        {
-            ASC->GiveAbility(FGameplayAbilitySpec(Info.AbilityClass, FMath::Max(1, Info.AbilityLevel), Info.InputID, this));
-        }
-    }
+    Super::MigrateLegacyAbilities();
+
+    // 예전에는 BP 값이 없으면 C++ 기본 암살 클래스로 부여했으므로 같은 규칙으로 옮긴다.
+    MigrateLegacyAbility(EAbilityInputID::Assassinate, AssassinationAbilityClass_DEPRECATED, UGAAssassinate::StaticClass());
+    AssassinationAbilityClass_DEPRECATED = nullptr;
 }
 
 void APlayerCharacter::DoCloneTech()
 {
+    if (IsAssassinating()) return;
+
     if (bIsDead || !ASC) return;
     //DoCameraMoveEnd();
-    ASC->AbilityLocalInputPressed(CloneTechInputID);
+    ASC->AbilityLocalInputPressed(ToAbilityInputID(EAbilityInputID::CloneTech));
 }
 
 void APlayerCharacter::DoCloneTechEnd()
 {
-    if (ASC) ASC->AbilityLocalInputReleased(CloneTechInputID);
+    if (ASC) ASC->AbilityLocalInputReleased(ToAbilityInputID(EAbilityInputID::CloneTech));
 }
 
 void APlayerCharacter::DoCloneRecall()
 {
+	if (bIsDead) return;
+	if (!IsValid(ASC)) return;
+
 	/* TODO: Player 상태가 발각됐거나 전투중이면 바로 리턴하는 코드가 필요해용
 	*/
-	// CloneTechInputID로 어빌리티 확인
-	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromInputID(CloneTechInputID);
+	// 기본 어빌리티와 같은 입력 ID 규칙으로 분신 회수 대상을 찾는다.
+	FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::CloneTech);
 	// 분신이 없어지면 UGACloneTech는 EndAbility가 호출되므로 Activate 검사는 하지 않는다
 	if (!Spec)
 	{

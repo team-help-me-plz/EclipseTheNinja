@@ -59,6 +59,9 @@ public:
     UFUNCTION(BlueprintPure, Category="AI|Detection")
     float GetCurrentDiscoveryRadius() const;
 
+    UFUNCTION(BlueprintPure, Category = "AI|Detection")
+    EEnemyAlertLevel GetCurrentAlertLevel() const { return AlertLevel; }
+
     /** 공격을 받으면 감지 상태와 무관하게 즉시 전투 상태가 되고, 공격자 위치를 마지막 목격 위치로 기록한다. */
     UFUNCTION(BlueprintCallable, Category="AI|Detection")
     void NotifyDamaged(AActor* DamageInstigator);

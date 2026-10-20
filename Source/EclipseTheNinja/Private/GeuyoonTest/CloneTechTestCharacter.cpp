@@ -114,19 +114,20 @@ void ACloneTechTestCharacter::GiveInitAbility()
 		{
 			continue ;
 		}
+		const int32 InputID = ToAbilityInputID(AbilityInfo.InputID);
 		if (FGameplayAbilitySpec* ExistingSpec = AbilitySystemComponent->FindAbilitySpecFromClass(AbilityInfo.AbilityClass))
 		{
-			ExistingSpec->InputID = AbilityInfo.InputID;
+			ExistingSpec->InputID = InputID;
 			this->AbilitySystemComponent->MarkAbilitySpecDirty(*ExistingSpec);
-			this->AbilityHandles.Add(AbilityInfo.InputID, ExistingSpec->Handle);
+			this->AbilityHandles.Add(InputID, ExistingSpec->Handle);
 			continue ;
 		}
-		FGameplayAbilitySpec				AbilitySpec(AbilityInfo.AbilityClass, 
-														AbilityInfo.AbilityLevel, 
-														AbilityInfo.InputID, this);
+		FGameplayAbilitySpec				AbilitySpec(AbilityInfo.AbilityClass,
+														AbilityInfo.AbilityLevel,
+														InputID, this);
 		const FGameplayAbilitySpecHandle	Handle = AbilitySystemComponent->GiveAbility(AbilitySpec);
 
-		this->AbilityHandles.Add(AbilityInfo.InputID, Handle);
+		this->AbilityHandles.Add(InputID, Handle);
 	}
 }
 

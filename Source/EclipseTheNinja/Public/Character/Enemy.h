@@ -14,6 +14,7 @@ class UAnimMontage;
 class UGABaseAttack;
 class UEnemyDetectionComponent;
 class UCheckpointBoundComponent;
+class UAssassinateTargetComponent;
 struct FOnAttributeChangeData;
 
 /** 적의 순찰, 추적, 공격, 사망 상태. */
@@ -50,6 +51,7 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Combat|Death")
 	bool IsDead() const { return bIsDead; }
+	void ReceiveAssassination(UAnimMontage* Montage);
 
 	UFUNCTION(BlueprintPure, Category = "AI|Target")
 	AActor* GetCombatTarget() const;
@@ -88,11 +90,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement")
 	void FaceLocation(const FVector& Location);
 
+
+
 	// 체크포인트 리스폰 1단계: 체력/사망/전투 상태, 충돌, 이동, 애니메이션, 감지 상태를 초기화한다.
 	virtual void ResetToInitial_Implementation() override;
 
 	// 체크포인트 리스폰 2단계: 블랙보드를 비우고 BT를 처음부터 다시 실행한다.
 	virtual void OnAfterReset_Implementation() override;
+
+	UEnemyDetectionComponent* GetEneymDetectionComponent() const { return EnemyDetectComponent; }
 
 	// 오브젝트 풀: 꺼낸 위치를 기준으로 활동 영역을 다시 잡고, 체크포인트 리셋과 같은 방식으로 상태와 AI를 초기화한다.
 	// (풀에서 스폰하는 적은 CheckpointBound의 BoundCheckpoint를 None으로 두고, 스포너가 런타임 스폰 액터로 등록할 것)
@@ -103,6 +109,9 @@ public:
 
 protected:
 	// Called when the game starts or when spawned
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> PendingAssassinationMontage;
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	// Called every frame
@@ -139,7 +148,7 @@ protected:
 	// 플레이어 또는 분신이 살아있는지 확인한다. 기존 Blueprint 함수 이름은 유지한다.
 	UFUNCTION(BlueprintPure, Category = "AI|Target")
 	bool IsLivingPlayer(const APawn* Player) const;
-	
+
 public:
 	// BehaviorOrigin을 중심으로 활동영역 안에 있는지 확인하는 함수
 	UFUNCTION(BlueprintPure, Category = "AI|Detection")
@@ -213,11 +222,19 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent> CheckpointBound;
 
+	/** 암살의 타겟으로 지정 가능해지도록 해주는 컴포넌트 */
+	/** 이 컴포넌트를 가진 액터는 암살의 대상이 될 수 있다*/
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UAssassinateTargetComponent> AssassinateTargetComt;
+
 	FTimerHandle DeathDeactivateTimer;
 
 	// 사망 시 끄는 충돌 설정을 리스폰 때 되돌리기 위한 초기값
 	ECollisionEnabled::Type InitialCapsuleCollision = ECollisionEnabled::QueryAndPhysics;
 	ECollisionEnabled::Type InitialMeshCollision = ECollisionEnabled::NoCollision;
+
+	// 암살 연출이 옮긴 메시 위치를 리스폰 때 되돌리기 위한 초기값
+	FVector InitialMeshRelativeLocation = FVector::ZeroVector;
 
 
 
