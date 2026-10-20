@@ -221,6 +221,9 @@ protected:
 	ECollisionEnabled::Type InitialCapsuleCollision = ECollisionEnabled::QueryAndPhysics;
 	ECollisionEnabled::Type InitialMeshCollision = ECollisionEnabled::NoCollision;
 
+	// 암살 연출이 옮긴 메시 위치를 리스폰 때 되돌리기 위한 초기값
+	FVector InitialMeshRelativeLocation = FVector::ZeroVector;
+
 
 
 	//머리위에 표시할 위젯

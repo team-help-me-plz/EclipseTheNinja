@@ -59,8 +59,28 @@ protected:
 	// 피격자 몽타주로 기존 사망 처리를 실행해 처치를 확정한다.
 	void ExecuteVictim();
 
+	/**
+	 * 피격자를 옆으로 옮겨 TimeToContact 뒤(칼이나 손이 몸에 닿는 순간)에 도착하게 한다.
+	 * 횡스크롤에서는 화면 깊이 방향(월드 Y축)이다. 페어 애니메이션은 두 캐릭터가 옆으로 조금 어긋난 자리에서
+	 * 맞물리도록 만들어져 있어서, 암살자는 평면에 두고 피격자만 그 차이만큼 옮긴다.
+	 * 서 있는 동안 미끄러지면 눈에 띄므로 닿기 직전 VictimSlideTime 동안만 움직인다.
+	 * @param SideOffset 암살자 기준 오른쪽이 +, 왼쪽이 -(cm)
+	 */
+	void SlideVictimSideways(float SideOffset, float TimeToContact);
+
+	UFUNCTION()
+	void StartVictimSlide();
+
+	/** 피격자를 옆으로 옮기는 시간. 칼이나 손이 닿기 직전 이 시간 동안만 움직인다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.05", Units = "s"))
+	float VictimSlideTime = 0.3f;
+
 	// 암살자 몽타주의 루트 모션을 켜거나 끈다. 이동을 코드가 맡는 구간에서는 끈다.
 	void SetAttackRootMotionEnabled(bool bEnabled);
+
+	// 코드가 맡던 이동을 몽타주 루트 모션에 넘긴다. 걷기 상태로 바꾸고, 발판 끝에서 떨어지지 않게 막는다.
+	// 종료 시 발판 끝 설정은 자동으로 되돌린다.
+	void HandOverToAttackRootMotion();
 
 	// 암살자가 이동하는 동안 대상 캡슐에 막히지 않게 한다. 종료 시 자동으로 되돌린다.
 	void SetIgnoreVictimCollision(bool bIgnore);
@@ -104,6 +124,10 @@ protected:
 	bool bAttackRootMotionDisabled = false;
 	bool bIgnoringVictimCollision = false;
 	bool bRestartingAttackMontage = false;
+	float PendingVictimSideOffset = 0.0f;
+	float PendingVictimSlideDuration = 0.0f;
+	bool bLedgeWalkLocked = false;
+	bool bSavedCanWalkOffLedges = true;
 
 private:
 	bool StartAttackMontageTask(float StartTime);

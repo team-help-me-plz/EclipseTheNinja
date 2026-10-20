@@ -36,12 +36,15 @@ void UGAAerialAssassinate::StartApproach()
 	if (!PlayAttackMontage()) return;
 	SetAttackRootMotionEnabled(false);
 
+	// 점프 시작 시간/ 점프 지속 기간을 런타임에 구하기
+	ResolveJumpWindow();
+
+	// 칼날이 피격자 몸통을 지나도록, 몽타주 시작부터 칼이 꽂히는(착지) 순간까지 피격자를 옆으로 천천히 옮긴다.
+	SlideVictimSideways(VictimSideOffset, ResolvedJumpStartTime + ResolvedJumpDuration);
+
 	// 암살 대상 피격
 	ExecuteVictim();
 	if (!IsActive()) return;
-
-	// 점프 시작 시간/ 점프 지속 기간을 런타임에 구하기
-	ResolveJumpWindow();
 
 	// 발판 위 준비 동작이 끝나는 시점에 뛰어내린다.
 	if (ResolvedJumpStartTime <= KINDA_SMALL_NUMBER)
@@ -145,7 +148,6 @@ void UGAAerialAssassinate::OnJumpLanded()
 		return;
 	}
 
-	// 착지 후에는 몽타주가 끝날 때까지 제자리에 둔다.
-	Player->GetCharacterMovement()->StopMovementImmediately();
-	Player->GetCharacterMovement()->DisableMovement();
+	// 착지 후 찌르고 돌아서는 동안 앞뒤로 디디는 걸음은 몽타주 루트 모션으로 움직인다.
+	HandOverToAttackRootMotion();
 }

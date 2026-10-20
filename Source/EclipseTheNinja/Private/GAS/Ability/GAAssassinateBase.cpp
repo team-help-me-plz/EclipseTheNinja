@@ -1,6 +1,9 @@
 #include "GAS/Ability/GAAssassinateBase.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "GAS/Task/AbilityTask_MontageRootOffset.h"
+#include "GAS/Task/AbilityTask_SlideActor.h"
+#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Components/CapsuleComponent.h"
 #include "Curves/CurveVector.h"
 #include "GameFramework/RootMotionSource.h"
@@ -80,6 +83,7 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	bTargetReserved = false;
 	bAttackRootMotionDisabled = false;
 	bIgnoringVictimCollision = false;
+	bLedgeWalkLocked = false;
 	PausedBrain.Reset();
 
 	// 암살자 설정
@@ -181,6 +185,41 @@ bool UGAAssassinateBase::PlayAttackMontage()
 	return StartAttackMontageTask(0.0f);
 }
 
+void UGAAssassinateBase::SlideVictimSideways(float SideOffset, float TimeToContact)
+{
+	if (FMath::IsNearlyZero(SideOffset)) return;
+
+	// 피격자가 가만히 서 있는 동안 미끄러지면 눈에 띄므로, 맞물리기 직전 VictimSlideTime 동안만 옮긴다.
+	PendingVictimSideOffset = SideOffset;
+	PendingVictimSlideDuration = FMath::Min(VictimSlideTime, TimeToContact);
+	const float Delay = TimeToContact - PendingVictimSlideDuration;
+	if (Delay <= KINDA_SMALL_NUMBER)
+	{
+		StartVictimSlide();
+		return;
+	}
+
+	UAbilityTask_WaitDelay* WaitTask = UAbilityTask_WaitDelay::WaitDelay(this, Delay);
+	WaitTask->OnFinish.AddDynamic(this, &UGAAssassinateBase::StartVictimSlide);
+	WaitTask->ReadyForActivation();
+}
+
+void UGAAssassinateBase::StartVictimSlide()
+{
+	if (bEnding || !IsActive()) return;
+
+	AEnemy* Enemy = Victim.Get();
+	if (!IsValid(Enemy)) return;
+
+	// 피격자는 암살자와 같은 방향을 보므로 피격자의 오른쪽이 곧 암살자의 오른쪽이다.
+	// 횡스크롤에서는 화면 깊이 방향(월드 Y축)으로만 움직인다.
+	const FVector Target = Enemy->GetActorLocation()
+		+ Enemy->GetActorRightVector().GetSafeNormal2D() * PendingVictimSideOffset;
+
+	UAbilityTask_SlideActor* SlideTask = UAbilityTask_SlideActor::SlideActor(this, Enemy, Target, PendingVictimSlideDuration);
+	SlideTask->ReadyForActivation();
+}
+
 bool UGAAssassinateBase::RestartAttackMontageAt(float StartTime)
 {
 	if (bEnding || !IsActive()) return false;
@@ -215,6 +254,11 @@ void UGAAssassinateBase::ExecuteVictim()
 
 	// 암살 피격 애니메이션 수신
 	Enemy->ReceiveAssassination(VictimExecutionMontage);
+
+	// 피격자는 이동이 꺼져 있으므로 끌려가거나 쓰러지며 움직이는 루트 이동을 메시로 보여주고, 쓰러진 자리에 둔다.
+	UAbilityTask_MontageRootOffset* OffsetTask = UAbilityTask_MontageRootOffset::FollowMontageRoot(
+		this, Enemy, VictimExecutionMontage, false, true);
+	OffsetTask->ReadyForActivation();
 }
 
 void UGAAssassinateBase::SetAttackRootMotionEnabled(bool bEnabled)
@@ -229,6 +273,23 @@ void UGAAssassinateBase::SetAttackRootMotionEnabled(bool bEnabled)
 	if (bEnabled) MontageInstance->PopDisableRootMotion();
 	else MontageInstance->PushDisableRootMotion();
 	bAttackRootMotionDisabled = !bEnabled;
+}
+
+void UGAAssassinateBase::HandOverToAttackRootMotion()
+{
+	APlayerCharacter* Player = Assassin.Get();
+	if (!IsValid(Player)) return;
+
+	UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
+	Movement->StopMovementImmediately();
+	Movement->SetMovementMode(MOVE_Walking);
+	if (!bLedgeWalkLocked)
+	{
+		bSavedCanWalkOffLedges = Movement->bCanWalkOffLedges;
+		Movement->bCanWalkOffLedges = false;
+		bLedgeWalkLocked = true;
+	}
+	SetAttackRootMotionEnabled(true);
 }
 
 void UGAAssassinateBase::SetIgnoreVictimCollision(bool bIgnore)
@@ -329,8 +390,16 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	// 끝났다는 표시 남기기
 	if (bEnding) return;
 
-	// 대상 참조를 비우기 전에 충돌 무시와 루트 모션 설정을 되돌린다.
+	// 대상 참조를 비우기 전에 충돌 무시, 발판 끝 이동, 루트 모션 설정을 되돌린다.
 	SetIgnoreVictimCollision(false);
+	if (bLedgeWalkLocked)
+	{
+		if (APlayerCharacter* LedgePlayer = Assassin.Get())
+		{
+			LedgePlayer->GetCharacterMovement()->bCanWalkOffLedges = bSavedCanWalkOffLedges;
+		}
+		bLedgeWalkLocked = false;
+	}
 	SetAttackRootMotionEnabled(true);
 	bAttackRootMotionDisabled = false;
 	bEnding = true;

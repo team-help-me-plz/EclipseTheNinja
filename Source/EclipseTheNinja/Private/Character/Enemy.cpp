@@ -64,6 +64,7 @@ void AEnemy::BeginPlay()
 	// 리스폰 시 복원할 충돌 설정 저장
 	InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
 	InitialMeshCollision = GetMesh()->GetCollisionEnabled();
+	InitialMeshRelativeLocation = GetMesh()->GetRelativeLocation();
 
 	// 체력 변화 델리게이트 바인딩
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
@@ -255,6 +256,7 @@ void AEnemy::ResetToInitial_Implementation()
 	// 충돌, 이동 복원
 	GetCapsuleComponent()->SetCollisionEnabled(InitialCapsuleCollision);
 	GetMesh()->SetCollisionEnabled(InitialMeshCollision);
+	GetMesh()->SetRelativeLocation(InitialMeshRelativeLocation);
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->StopMovementImmediately();

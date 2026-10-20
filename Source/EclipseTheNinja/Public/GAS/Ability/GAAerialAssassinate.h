@@ -7,8 +7,7 @@
 /**
  * 적보다 높은 발판 위에서 뛰어내려 내려찍는 공중 암살.
  * 페어 애니메이션이므로 암살자·피격자 몽타주를 동시에 시작하고, 암살자 몽타주의 루트가 움직이기 시작하는 시점부터
- * 착지 시점까지 적 뒤 착지 위치로 포물선 점프한다. 발판 높이가 달라도 맞도록 이동은 점프가 맡고 몽타주의 루트 모션은 끈다.
- */
+ * 착지 시점까지 적 뒤 착지 위치로 포물선 점프한다. 발판 높이가 달라도 맞도록 이동은 점프가 맡고 몽타주의 루트 모션은 끈다. */
 UCLASS()
 class ECLIPSETHENINJA_API UGAAerialAssassinate : public UGAAssassinateBase
 {
@@ -30,6 +29,13 @@ protected:
 	/** 이동을 시작한 뒤 착지까지 걸리는 시간. 몽타주의 착지 시점에 맞춘다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.05", Units = "s"))
 	float JumpDuration = 0.33f;
+
+	/**
+	 * 칼날이 피격자 몸통을 지나도록 피격자를 옆으로 옮길 거리(cm). 암살자 기준 오른쪽이 +, 왼쪽이 -다.
+	 * 횡스크롤에서는 화면 깊이 방향(월드 Y축)이다. 칼날과 몸통 위치로 애니메이션에서 구한 값이다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (Units = "cm"))
+	float VictimSideOffset = -23.0f;
 
 private:
 	// 암살을 위한 점프 시작

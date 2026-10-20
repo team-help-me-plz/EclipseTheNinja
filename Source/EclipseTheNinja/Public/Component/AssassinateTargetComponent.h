@@ -143,9 +143,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Aerial", meta = (ClampMin = "0.0", Units = "cm"))
 	float AerialMinHeight = 120.0f;
 
-	/** 공중 암살 몽타주가 끝났을 때 암살자가 서 있을 위치. 적이 바라보는 방향 기준(X 앞, Z 위)이다. */
+	/**
+	 * 공중 암살에서 암살자가 착지할 위치. 적이 바라보는 방향 기준(X 앞, Z 위)이다.
+	 * 칼날이 쓰러진 피격자 몸통을 지나도록 애니메이션에서 구한 값이다. 피격자 원점은 암살자 원점보다 160cm 앞이고,
+	 * 착지 순간 암살자 루트는 약 120cm 지점에 있으므로 피격자 40cm 뒤에 착지한다.
+	 */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Aerial")
-	FVector AerialLandingOffset = FVector(-80.0f, 0.0f, 0.0f);
+	FVector AerialLandingOffset = FVector(-40.0f, 0.0f, 0.0f);
 
 	/** 아래 암살이 가능한 높이 차(적 캡슐 중심 - 암살자 캡슐 중심). 애니메이션은 약 200cm 기준이다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Below", meta = (ClampMin = "0.0", Units = "cm"))
@@ -162,7 +166,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Below", meta = (ClampMin = "0.0", Units = "cm"))
 	float BelowWallTolerance = 10.0f;
 
-	/** 올라온 뒤 서는 위치가 모서리에서 발판 안쪽으로 들어온 거리. */
+	/** 올라온 뒤 서는 위치, 모서리에서 얼마나 떨어져 있는지. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Below", meta = (ClampMin = "0.0", Units = "cm"))
 	float BelowClimbInset = 40.0f;
 

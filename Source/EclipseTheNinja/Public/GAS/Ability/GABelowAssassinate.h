@@ -17,11 +17,6 @@ class ECLIPSETHENINJA_API UGABelowAssassinate : public UGAAssassinateBase
 {
 	GENERATED_BODY()
 
-public:
-	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle,
-		const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
-		bool bReplicateEndAbility, bool bWasCancelled) override;
-
 protected:
 	virtual bool CanAssassinateTarget(const APlayerCharacter* Player, const UAssassinateTargetComponent* Target,
 		const AEnemy* Enemy) const override;
@@ -38,6 +33,13 @@ protected:
 	/** 목 꺾기 구간이 시작된 뒤 적의 목을 잡는 시점까지의 시간. 이때까지 적 뒤로 다가간다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.05", Units = "s"))
 	float GrabTime = 0.6f;
+
+	/**
+	 * 목을 잡는 동안 손이 피격자 목에 오도록 피격자를 옆으로 옮길 거리(cm). 암살자 기준 오른쪽이 +, 왼쪽이 -다.
+	 * 횡스크롤에서는 화면 깊이 방향(월드 Y축)이다. 손과 목 위치로 애니메이션에서 구한 값이다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (Units = "cm"))
+	float VictimSideOffset = -34.0f;
 
 private:
 	UFUNCTION()
@@ -58,6 +60,4 @@ private:
 	float ResolvedClimbEndTime = 0.0f;
 	// 구간 경계를 섞는 시간. 몽타주의 Blend In 시간을 쓴다.
 	float CrossfadeTime = 0.0f;
-	bool bSavedCanWalkOffLedges = true;
-	bool bLedgeWalkLocked = false;
 };

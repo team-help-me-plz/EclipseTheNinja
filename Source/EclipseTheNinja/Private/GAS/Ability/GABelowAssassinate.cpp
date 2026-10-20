@@ -65,6 +65,10 @@ void UGABelowAssassinate::OnSectionCrossfade()
 	if (!RestartAttackMontageAt(ResolvedClimbEndTime)) return;
 	SetAttackRootMotionEnabled(false);
 
+	// 목을 잡는 순간 손이 피격자 목에 오도록, 지금부터 목을 잡는 순간까지 피격자를 옆으로 천천히 옮긴다.
+	// 목 꺾기 구간을 방금 시작했으므로 잡는 순간까지는 GrabTime이 남았다.
+	SlideVictimSideways(VictimSideOffset, GrabTime);
+
 	// 페어 애니메이션이라 목 꺾기 구간과 함께 피격자 몽타주를 시작해 처치를 확정한다.
 	ExecuteVictim();
 }
@@ -118,29 +122,6 @@ void UGABelowAssassinate::OnGrabReached()
 	APlayerCharacter* Player = Assassin.Get();
 	if (!IsValid(Player)) { OnInterrupted(); return; }
 
-	UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
-	Movement->StopMovementImmediately();
-
-	// 잡은 뒤에는 몽타주 루트 모션으로 뒤로 물러난다. 발판 끝에서 떨어지지 않게 막는다.
-	bSavedCanWalkOffLedges = Movement->bCanWalkOffLedges;
-	Movement->bCanWalkOffLedges = false;
-	bLedgeWalkLocked = true;
-	SetAttackRootMotionEnabled(true);
-}
-
-void UGABelowAssassinate::EndAbility(const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
-	bool bReplicateEndAbility, bool bWasCancelled)
-{
-	// 부모가 암살자 참조를 비우기 전에 발판 끝 이동 설정을 되돌린다.
-	if (!bEnding && bLedgeWalkLocked)
-	{
-		if (APlayerCharacter* Player = Assassin.Get())
-		{
-			Player->GetCharacterMovement()->bCanWalkOffLedges = bSavedCanWalkOffLedges;
-		}
-		bLedgeWalkLocked = false;
-	}
-
-	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+	// 잡은 뒤에는 몽타주 루트 모션으로 뒤로 물러난다.
+	HandOverToAttackRootMotion();
 }
