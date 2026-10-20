@@ -16,7 +16,9 @@
 #include "GAS/Ability/GABaseAttack.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "GAS/StatAttributeSet.h"
+#include "Checkpoint/CheckpointSubsystem.h"
 #include "NativeGameplayTags.h"
+#include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Projectile/KunaiProjectile.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -150,17 +152,18 @@ void UGAThrowKunai::OnKunaiReleased(FGameplayEventData Payload)
         ? Character->GetMesh()->GetSocketTransform(ThrowSocketName) : Character->GetActorTransform();
     FVector SpawnLocation = Origin.TransformPosition(SpawnOffset);
     SpawnLocation.Y = Character->GetActorLocation().Y;
-    // 손/오프셋이 벽 너머에 있어도 벽을 건너뛰어 발사하지 않는다.
-    FHitResult Obstruction;
+    FHitResult LaunchHit;
     FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(KunaiMuzzle), false, Character);
     // 손과 발사 위치 사이에 아군 분신이 있어도 플레이어의 투척을 막지 않는다.
     if (Character->IsA<APlayerCharacter>())
     {
         for (TActorIterator<ACloneCharacter> It(Character->GetWorld()); It; ++It) QueryParams.AddIgnoredActor(*It);
     }
-    const float Radius = ProjectileClass->GetDefaultObject<AKunaiProjectile>()->GetCollisionRadius();
-    if (Character->GetWorld()->SweepSingleByChannel(Obstruction, Character->GetActorLocation(), SpawnLocation,
-                                                    FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(FMath::Max(1.0f, Radius)), QueryParams))
+    const bool bLaunchBlocked = ProjectileClass->GetDefaultObject<AKunaiProjectile>()->SweepLaunchPath(
+        Character->GetWorld(), Character->GetActorLocation(), SpawnLocation, QueryParams, LaunchHit);
+    // 손/오프셋이 벽 너머에 있어도 벽을 건너뛰어 발사하지 않는다.
+    // 몸과 손 사이의 캐릭터는 취소 사유가 아니라 발사 직후 명중으로 처리한다.
+    if (bLaunchBlocked && !Cast<APawn>(LaunchHit.GetActor()))
     {
         OnMontageInterrupted();
         return;
@@ -199,16 +202,36 @@ void UGAThrowKunai::OnKunaiReleased(FGameplayEventData Payload)
     Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), Damage);
 
     const FTransform SpawnTransform(Direction.Rotation(), SpawnLocation);
-    AKunaiProjectile* Projectile = Character->GetWorld()->SpawnActorDeferred<AKunaiProjectile>(
-        ProjectileClass, SpawnTransform, Character, Character, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+    UWorld* World = Character->GetWorld();
+    // 쿠나이 풀이 등록되어 있지 않으면 풀 서브시스템이 일반 스폰한다.
+    AKunaiProjectile* Projectile = nullptr;
+    if (UObjectPoolSubsystem* PoolSubsystem = World->GetSubsystem<UObjectPoolSubsystem>())
+    {
+        Projectile = PoolSubsystem->SpawnActor<AKunaiProjectile>(ProjectileClass, SpawnTransform, Character, Character);
+    }
+    else
+    {
+        // 풀 서브시스템은 Game/PIE 월드에서만 생성되므로 그 외 월드에서는 직접 스폰한다.
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Owner = Character;
+        SpawnParams.Instigator = Character;
+        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        Projectile = World->SpawnActor<AKunaiProjectile>(ProjectileClass, SpawnTransform, SpawnParams);
+    }
     if (!Projectile)
     {
         OnMontageInterrupted();
         return;
     }
-    // BeginPlay/충돌보다 먼저 피해와 발사자 정보를 전달한다. GA 종료 후에도 발사체가 이를 보관한다.
+    // 피해와 발사자 정보를 전달하고 비행을 시작한다. GA 종료 후에도 발사체가 이를 보관한다.
     Projectile->InitializeKunai(ASC, Spec, Direction, ProjectileSpeed);
-    Projectile->FinishSpawning(SpawnTransform);
+    // 체크포인트 리스폰 시 날아가거나 박혀 있는 쿠나이를 풀에 반환한다.
+    if (UCheckpointSubsystem* CheckpointSubsystem = World->GetSubsystem<UCheckpointSubsystem>())
+    {
+        CheckpointSubsystem->RegisterRuntimeSpawnedActor(Projectile);
+    }
+    // 근접한 대상은 비행 sweep이 시작 겹침으로 놓칠 수 있으므로 미리 찾은 충돌을 바로 적용한다.
+    if (bLaunchBlocked && IsValid(Projectile)) Projectile->HandleLaunchHit(LaunchHit);
 }
 
 void UGAThrowKunai::OnMontageCompleted()

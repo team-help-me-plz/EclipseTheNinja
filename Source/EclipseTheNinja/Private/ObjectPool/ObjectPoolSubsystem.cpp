@@ -70,6 +70,7 @@ void UObjectPoolSubsystem::Deinitialize()
 
     // 풀 액터들은 월드와 함께 파괴되므로 목록만 비운다
     this->Pools.Empty();
+    this->OnActorReturnedToPool.Clear();
     this->bCanWarmup = false;
 
     Super::Deinitialize();
@@ -410,6 +411,9 @@ bool UObjectPoolSubsystem::ReturnToPool(AActor* InActor)
     {
         CurrentPool->ReadyActors.Add(InActor);
     }
+
+    // 수신자가 다른 풀 액터를 반환할 수 있으므로 이 액터의 처리가 모두 끝난 뒤 알린다
+    this->OnActorReturnedToPool.Broadcast(InActor);
 
     return true;
 }
