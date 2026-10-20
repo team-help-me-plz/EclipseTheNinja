@@ -24,7 +24,7 @@ class ECLIPSETHENINJA_API UAbilityCooldownWidget : public UUserWidget
 public:
 	virtual void NativeConstruct() override;
 
-	void	InitWidget(APawn* InPawn);
+	virtual void	InitWidget(APawn* InPawn);
 
 protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
@@ -42,17 +42,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability")
 	EAbilityInputID	TargetAbilityInputID = EAbilityInputID::None;
 
-	void	StartCooldown();
-	void	EndCooldown();
+	virtual void	StartCooldown();
+	virtual void	EndCooldown();
 
-	void	UpdateCooldown();
-	void	UpdateWidget(const float InRemainig, const float InDuration);
+	virtual void	UpdateCooldown();
+	virtual void	UpdateWidget(const float InRemainig, const float InDuration);
+
+	virtual void	UnbindAbility();
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UGACooldownBase> ObservedAbility;
 
 private:
-	void	UnbindAbility();
 
 	FTimerHandle	CooldownUpdateTimer;
 
