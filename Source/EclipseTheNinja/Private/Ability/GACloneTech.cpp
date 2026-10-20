@@ -366,14 +366,3 @@ void UGACloneTech::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	//this->CooldownEffectHandle = FActiveGameplayEffectHandle();
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
-
-void UGACloneTech::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
-{
-	this->CooldownEffectHandle = FActiveGameplayEffectHandle();
-
-	UGameplayEffect*	CooldownGE = GetCooldownGameplayEffect();
-	if (CooldownGE)
-	{
-		this->CooldownEffectHandle = ApplyGameplayEffectToOwner(Handle, ActorInfo, ActivationInfo, CooldownGE, GetAbilityLevel(Handle, ActorInfo));
-	}
-}
