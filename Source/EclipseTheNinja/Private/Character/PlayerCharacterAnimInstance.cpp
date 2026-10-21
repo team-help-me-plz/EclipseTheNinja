@@ -6,6 +6,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimMontage.h"
+#include "AbilitySystemComponent.h"
+#include "GAS/Ability/GAWallAttach.h"
 
 void UPlayerCharacterAnimInstance::NativeInitializeAnimation()
 {
@@ -17,6 +19,10 @@ void UPlayerCharacterAnimInstance::NativeInitializeAnimation()
 
 void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
+
+	// 소유자가 없어지거나 ASC가 없으면 이전 상태를 남기지 않는다.
+	bWallAttached = false;
+
 	Super::NativeUpdateAnimation(DeltaSeconds);
 
 	// Pawn 재빙의와 에디터 프리뷰에서도 안전하게 갱신한다.
@@ -29,6 +35,15 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		return;
 	}
 
+	const UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
+	if (IsValid(ASC))
+	{
+		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag()))
+		{
+			bWallAttached = true;
+		}
+	}
+
 	// 캐릭터 고개 상하 지정
 	const float TargetPitch = bEnableHeadTracking ? CalculateHeadPitch(*Character) : 0.0f;
 	HeadLookPitch = FMath::FInterpTo(HeadLookPitch, TargetPitch, DeltaSeconds, HeadTrackingSpeed);
@@ -37,6 +52,7 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 	// 머리 위치 업데이트
 	UpdateHeadRotation(*Character);
+
 }
 
 void UPlayerCharacterAnimInstance::NativeUninitializeAnimation()

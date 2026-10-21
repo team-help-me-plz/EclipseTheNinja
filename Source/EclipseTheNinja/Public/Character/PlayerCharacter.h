@@ -336,20 +336,4 @@ public:
 	/** Returns true if the character has just wall jumped */
 	UFUNCTION(BlueprintPure, Category = "Side Scrolling")
 	bool HasWallJumped() const;
-
-
-
-	/*============================================================
-	여기 있는 코드는 단순 테스트용 실제 빌드에서는 사용하지 마시오
-	=============================================================*/
-protected:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AttackTest")
-	TSubclassOf<UGameplayAbility> TestAbilityClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackTest", meta = (ClampMin = "1"))
-	int32 TestAbilityLevel = 1;
-
-	UFUNCTION(BlueprintCallable)
-	void GiveTestAbility();
-
 };

@@ -15,6 +15,7 @@ enum class EAbilityInputID : uint8
     AerialAssassinate = 3,
     BelowAssassinate = 4,
     ThrowKunai = 5,
+    WallAttach = 6,
     CloneTech = 100,
 };
 
