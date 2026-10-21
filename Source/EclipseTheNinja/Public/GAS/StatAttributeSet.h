@@ -7,6 +7,9 @@
 #include "GameplayEffectExtension.h"
 #include "StatAttributeSet.generated.h"
 
+// 메타 Damage를 Health로 변환한 뒤 원본 피해 Context를 전달한다.
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnStatDamageReceived, const FGameplayEffectContextHandle&);
+
 /**
  * 
  */
@@ -17,6 +20,8 @@ class ECLIPSETHENINJA_API UStatAttributeSet : public UAttributeSet
 	
 public:
 	UStatAttributeSet();
+
+	FOnStatDamageReceived OnDamageReceived;
 
 	// CurrentValue 변경 전에 실행되는 함수
 	// 값의 Clamping용도로 사용

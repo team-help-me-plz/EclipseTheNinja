@@ -1,8 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Abilities/GameplayAbility.h"
 #include "Clone/CloneCommandType.h"
+
+#include "Ability/GACooldownBase.h"
 #include "GACloneTech.generated.h"
 
 class ACloneCharacter;
@@ -11,8 +12,13 @@ class UInputAction;
 class UInputMappingContext;
 class UNiagaraSystem;
 
+// 분신이 소환됐을 때 델리게이트
+DECLARE_MULTICAST_DELEGATE(FOnCloneSpawned);
+// 분신과 플레이어가 더 이상 Swap할 수 없을 때 델리게이트
+DECLARE_MULTICAST_DELEGATE(FOnCloneCannotSwap);
+
 UCLASS()
-class ECLIPSETHENINJA_API UGACloneTech : public UGameplayAbility
+class ECLIPSETHENINJA_API UGACloneTech : public UGACooldownBase
 {
 	GENERATED_BODY()
 
@@ -37,16 +43,14 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		bool	bReplicateEndAbility, bool bWasCancelled) override;
 
-	virtual void ApplyCooldown(const FGameplayAbilitySpecHandle Handle,
-		const FGameplayAbilityActorInfo* ActorInfo, 
-		const FGameplayAbilityActivationInfo ActivationInfo) const override;
-
 	// 분신이 풀에 반환되거나 파괴되면 어빌리티를 종료한다
 	UFUNCTION()
 	void HandleCloneDespawned(ACloneCharacter* DespawnedClone);
 
 	void	OnRecallClone();
 
+	FOnCloneSpawned		OnCloneSpawned;
+	FOnCloneCannotSwap	OnCloneCannotSwap;
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Target")
 	TSubclassOf<ACloneCharacter>	CloneClass;
@@ -102,5 +106,4 @@ private:
 
 	bool	bIsSwaped = false;
 
-	mutable FActiveGameplayEffectHandle	CooldownEffectHandle;
 };

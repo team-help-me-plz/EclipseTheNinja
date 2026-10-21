@@ -4,6 +4,9 @@
 #include "GAS/Task/AbilityTask_MontageRootOffset.h"
 #include "GAS/Task/AbilityTask_SlideActor.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "GAS/Animation/AnimNotify_AssassinateImpact.h"
+#include "Kismet/GameplayStatics.h"
 #include "Components/CapsuleComponent.h"
 #include "Curves/CurveVector.h"
 #include "GameFramework/RootMotionSource.h"
@@ -22,6 +25,7 @@
 #include "NativeGameplayTags.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Assassinating, "State.Assassinating");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_AssassinateImpact, "Event.Assassinate.Impact");
 
 UGAAssassinateBase::UGAAssassinateBase()
 {
@@ -38,6 +42,11 @@ UGAAssassinateBase::UGAAssassinateBase()
 FGameplayTag UGAAssassinateBase::GetAssassinatingTag()
 {
 	return TAG_Assassinating;
+}
+
+FGameplayTag UGAAssassinateBase::GetImpactEventTag()
+{
+	return TAG_AssassinateImpact;
 }
 
 bool UGAAssassinateBase::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -84,6 +93,7 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	bAttackRootMotionDisabled = false;
 	bIgnoringVictimCollision = false;
 	bLedgeWalkLocked = false;
+	bImpactTriggered = false;
 	PausedBrain.Reset();
 
 	// 암살자 설정
@@ -365,6 +375,215 @@ UAbilityTask_ApplyRootMotionMoveToForce* UGAAssassinateBase::MoveAlongAttackRoot
 	return MoveTask;
 }
 
+void UGAAssassinateBase::WaitForImpact(float CurrentMontageTime)
+{
+	if (!bUseImpactTimeDilation || bEnding || !IsActive()) return;
+
+	// 몽타주는 1배속으로 재생하므로, 지금 몽타주 위치부터 잰 게임 시간 대기가 몽타주 시간과 같다.
+	// 예비 동작 슬로모가 걸려도 대기 시간이 같이 늘어나 시점이 어긋나지 않는다.
+	float ImpactTime = ImpactFallbackTime;
+	if (FindImpactNotifyTime(ImpactTime))
+	{
+		// 노티파이는 몽타주가 틱할 때 오므로 재생 전에 듣기 시작한다.
+		UAbilityTask_WaitGameplayEvent* ImpactTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+			this, TAG_AssassinateImpact, nullptr, true);
+		ImpactTask->EventReceived.AddDynamic(this, &UGAAssassinateBase::OnImpactEvent);
+		ImpactTask->ReadyForActivation();
+	}
+	else if (ImpactFallbackTime >= 0.0f)
+	{
+		// 노티파이를 아직 안 찍은 몽타주도 바로 확인할 수 있게 고정 시점으로 대신한다.
+		UAbilityTask_WaitDelay* DelayTask = UAbilityTask_WaitDelay::WaitDelay(
+			this, FMath::Max(0.0f, ImpactFallbackTime - CurrentMontageTime));
+		DelayTask->OnFinish.AddDynamic(this, &UGAAssassinateBase::OnImpactFallback);
+		DelayTask->ReadyForActivation();
+	}
+	else
+	{
+		return;
+	}
+
+	// 예비 동작: 칼을 뻗기 전까지 느리게 보여 긴장을 만들고, 칼이 들어가는 구간은 원래 속도로 되돌려 빠르게 꽂는다.
+	if (!bUseAnticipation || AnticipationLeadTime <= SnapLeadTime) return;
+	const float AnticipationStart = ImpactTime - AnticipationLeadTime - CurrentMontageTime;
+	const float SnapTime = ImpactTime - SnapLeadTime - CurrentMontageTime;
+	if (AnticipationStart <= KINDA_SMALL_NUMBER || SnapTime <= KINDA_SMALL_NUMBER) return;
+
+	UAbilityTask_WaitDelay* AnticipationTask = UAbilityTask_WaitDelay::WaitDelay(this, AnticipationStart);
+	AnticipationTask->OnFinish.AddDynamic(this, &UGAAssassinateBase::OnAnticipationStart);
+	AnticipationTask->ReadyForActivation();
+
+	UAbilityTask_WaitDelay* SnapTask = UAbilityTask_WaitDelay::WaitDelay(this, SnapTime);
+	SnapTask->OnFinish.AddDynamic(this, &UGAAssassinateBase::OnAnticipationSnap);
+	SnapTask->ReadyForActivation();
+}
+
+void UGAAssassinateBase::OnImpactEvent(FGameplayEventData Payload)
+{
+	StartImpactTimeDilation();
+}
+
+void UGAAssassinateBase::OnImpactFallback()
+{
+	StartImpactTimeDilation();
+}
+
+void UGAAssassinateBase::OnAnticipationStart()
+{
+	if (bImpactTriggered || bEnding || !IsActive()) return;
+
+	// 한 번에 떨어뜨리면 끊겨 보이므로 티커에서 서서히 느려지게 한다.
+	SetTimeScale(1.0f);
+	TimeDilationPhase = ETimeDilationPhase::Anticipation;
+	ImpactElapsed = 0.0f;
+	StartTimeDilationTicker();
+}
+
+void UGAAssassinateBase::OnAnticipationSnap()
+{
+	if (bImpactTriggered || bEnding || !IsActive()) return;
+
+	// 칼이 들어가는 구간은 즉시 원래 속도로 돌려 빠르게 꽂히는 대비를 만든다.
+	StopTimeDilationTicker();
+	TimeDilationPhase = ETimeDilationPhase::None;
+	SetTimeScale(1.0f);
+}
+
+bool UGAAssassinateBase::FindImpactNotifyTime(float& OutTime) const
+{
+	if (!IsValid(ExecutionMontage)) return false;
+
+	// 노티파이는 몽타주 자체에도, 몽타주가 담은 시퀀스에도 찍을 수 있다.
+	for (const FAnimNotifyEvent& Event : ExecutionMontage->Notifies)
+	{
+		if (!Cast<UAnimNotify_AssassinateImpact>(Event.Notify)) continue;
+		OutTime = Event.GetTriggerTime();
+		return true;
+	}
+
+	for (const FSlotAnimationTrack& Slot : ExecutionMontage->SlotAnimTracks)
+	{
+		for (const FAnimSegment& Segment : Slot.AnimTrack.AnimSegments)
+		{
+			const UAnimSequenceBase* Animation = Segment.GetAnimReference();
+			if (!IsValid(Animation)) continue;
+
+			for (const FAnimNotifyEvent& Event : Animation->Notifies)
+			{
+				if (!Cast<UAnimNotify_AssassinateImpact>(Event.Notify)) continue;
+
+				// 시퀀스 안의 시간을 몽타주 시간으로 바꾼다. 구간 밖에 찍힌 노티파이는 재생되지 않는다.
+				const float AnimTime = Event.GetTriggerTime();
+				if (AnimTime < Segment.AnimStartTime || AnimTime > Segment.AnimEndTime) continue;
+				const float PlayRate = FMath::Max(FMath::Abs(Segment.GetValidPlayRate()), KINDA_SMALL_NUMBER);
+				OutTime = Segment.StartPos + (AnimTime - Segment.AnimStartTime) / PlayRate;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+void UGAAssassinateBase::SetTimeScale(float Scale)
+{
+	// 분신술 조준처럼 이미 느려진 상태일 수 있으므로 처음 바꿀 때의 배율을 기준으로 곱하고 그대로 되돌린다.
+	if (!bTimeDilationApplied)
+	{
+		SavedTimeDilation = UGameplayStatics::GetGlobalTimeDilation(this);
+		bTimeDilationApplied = true;
+	}
+	UGameplayStatics::SetGlobalTimeDilation(this, SavedTimeDilation * Scale);
+}
+
+void UGAAssassinateBase::StartImpactTimeDilation()
+{
+	if (bImpactTriggered || bEnding || !IsActive()) return;
+	bImpactTriggered = true;
+
+	TimeDilationPhase = ETimeDilationPhase::Impact;
+	ImpactElapsed = 0.0f;
+	SetTimeScale(HitStopTimeScale);
+	StartTimeDilationTicker();
+}
+
+void UGAAssassinateBase::StartTimeDilationTicker()
+{
+	if (ImpactTickerHandle.IsValid()) return;
+	ImpactTickerHandle = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateUObject(this, &UGAAssassinateBase::TickImpactTimeDilation));
+}
+
+void UGAAssassinateBase::StopTimeDilationTicker()
+{
+	if (ImpactTickerHandle.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(ImpactTickerHandle);
+	}
+	ImpactTickerHandle.Reset();
+}
+
+bool UGAAssassinateBase::TickImpactTimeDilation(float DeltaTime)
+{
+	if (!bTimeDilationApplied || !GetWorld() || TimeDilationPhase == ETimeDilationPhase::None)
+	{
+		ImpactTickerHandle.Reset();
+		return false;
+	}
+
+	// 모두 실제 시간 기준이다.
+	ImpactElapsed += DeltaTime;
+
+	if (TimeDilationPhase == ETimeDilationPhase::Anticipation)
+	{
+		// 예비 동작: 원래 속도에서 예비 동작 배율까지 부드럽게 감속한 뒤 유지한다. 끝은 OnAnticipationSnap이 맡는다.
+		const float Alpha = FMath::Clamp(ImpactElapsed / FMath::Max(AnticipationBlendTime, KINDA_SMALL_NUMBER), 0.0f, 1.0f);
+		UGameplayStatics::SetGlobalTimeDilation(this,
+			SavedTimeDilation * FMath::InterpEaseOut(1.0f, AnticipationTimeScale, Alpha, 2.0f));
+		return true;
+	}
+
+	// 임팩트: 히트스톱 → 짧은 슬로모션 유지 → 시작과 끝이 부드러운 곡선으로 원래 속도 복귀.
+	const float SlowStart = HitStopDuration;
+	const float RecoverStart = SlowStart + SlowMotionDuration;
+	const float RecoverEnd = RecoverStart + RecoverDuration;
+	if (ImpactElapsed >= RecoverEnd)
+	{
+		// 반환값 false로 티커가 빠지므로 직접 제거하지 않는다.
+		StopImpactTimeDilation(false);
+		return false;
+	}
+
+	float Scale = SlowMotionTimeScale;
+	if (ImpactElapsed < SlowStart)
+	{
+		Scale = HitStopTimeScale;
+	}
+	else if (ImpactElapsed >= RecoverStart)
+	{
+		const float Alpha = (ImpactElapsed - RecoverStart) / FMath::Max(RecoverDuration, KINDA_SMALL_NUMBER);
+		Scale = FMath::InterpEaseInOut(SlowMotionTimeScale, 1.0f, Alpha, 2.0f);
+	}
+	UGameplayStatics::SetGlobalTimeDilation(this, SavedTimeDilation * Scale);
+	return true;
+}
+
+void UGAAssassinateBase::StopImpactTimeDilation(bool bRemoveTicker)
+{
+	if (bRemoveTicker)
+	{
+		StopTimeDilationTicker();
+	}
+	ImpactTickerHandle.Reset();
+	TimeDilationPhase = ETimeDilationPhase::None;
+
+	if (!bTimeDilationApplied) return;
+	bTimeDilationApplied = false;
+	if (GetWorld())
+	{
+		UGameplayStatics::SetGlobalTimeDilation(this, SavedTimeDilation);
+	}
+}
+
 void UGAAssassinateBase::OnCompleted()
 {
 	if (bEnding) return;
@@ -391,6 +610,9 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 {
 	// 끝났다는 표시 남기기
 	if (bEnding) return;
+
+	// 중간에 끊겨도 게임이 느린 채로 남지 않게 먼저 속도를 되돌린다.
+	StopImpactTimeDilation(true);
 
 	// 대상 참조를 비우기 전에 충돌 무시, 발판 끝 이동, 루트 모션 설정을 되돌린다.
 	SetIgnoreVictimCollision(false);

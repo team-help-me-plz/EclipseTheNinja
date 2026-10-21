@@ -33,6 +33,7 @@ void UGAAerialAssassinate::StartApproach()
 
 	// 내려찍는 암살 몽타쥬 실행
 	// 위치는 점프가 맡으므로 암살자 몽타주의 루트 모션은 끈다.
+	WaitForImpact();
 	if (!PlayAttackMontage()) return;
 	SetAttackRootMotionEnabled(false);
 

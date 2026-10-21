@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
+#include "Containers/Ticker.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GAAssassinateBase.generated.h"
 
@@ -26,6 +27,7 @@ class ECLIPSETHENINJA_API UGAAssassinateBase : public UGameplayAbility
 public:
 	UGAAssassinateBase();
 	static FGameplayTag GetAssassinatingTag();
+	static FGameplayTag GetImpactEventTag();
 
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr,
@@ -89,6 +91,59 @@ protected:
 	// 실제 거리·높이에 맞춰 늘리거나 줄이므로 발판 높이가 애니메이션과 달라도 움직임의 모양은 유지된다.
 	UAbilityTask_ApplyRootMotionMoveToForce* MoveAlongAttackRootMotion(float StartTime, float Duration, const FVector& End);
 
+	// 칼이 박히는 순간을 기다렸다가 히트스톱·슬로모션을 건다. 암살자 몽타주를 재생하기 직전에 호출한다.
+	// 암살자 몽타주에 AnimNotify_AssassinateImpact가 있으면 그 프레임을, 없으면 ImpactFallbackTime을 쓴다.
+	// 몽타주를 중간부터 다시 재생할 때는 그 시작 위치를 CurrentMontageTime으로 넘긴다.
+	void WaitForImpact(float CurrentMontageTime = 0.0f);
+
+	/** 임팩트 순간에 게임 속도를 늦출지 여부 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact")
+	bool bUseImpactTimeDilation = true;
+
+	/** 몽타주에 Assassinate Impact 노티파이가 없을 때 쓰는 임팩트 시점(몽타주 시작 기준). 음수면 노티파이만 기다린다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", Units = "s"))
+	float ImpactFallbackTime = 0.4f;
+
+	/** 히트스톱 동안의 게임 속도 배율 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", ClampMin = "0.001", ClampMax = "1.0"))
+	float HitStopTimeScale = 0.02f;
+
+	/** 히트스톱 길이(실제 시간) */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", ClampMin = "0.0", Units = "s"))
+	float HitStopDuration = 0.1f;
+
+	/** 히트스톱 뒤 슬로모션 동안의 게임 속도 배율 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", ClampMin = "0.001", ClampMax = "1.0"))
+	float SlowMotionTimeScale = 0.2f;
+
+	/** 슬로모션 길이(실제 시간) */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", ClampMin = "0.0", Units = "s"))
+	float SlowMotionDuration = 0.12f;
+
+	/** 슬로모션에서 원래 속도로 돌아오는 시간(실제 시간). 시작과 끝을 부드럽게 이어 속도가 튀지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", ClampMin = "0.0", Units = "s"))
+	float RecoverDuration = 0.4f;
+
+	/** 칼을 뻗기 전 예비 동작을 느리게 보여 줄지 여부. 칼이 들어가는 구간은 원래 속도로 돌아온다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation"))
+	bool bUseAnticipation = true;
+
+	/** 예비 동작 동안의 게임 속도 배율 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation && bUseAnticipation", ClampMin = "0.05", ClampMax = "1.0"))
+	float AnticipationTimeScale = 0.45f;
+
+	/** 예비 동작 배율까지 서서히 느려지는 시간(실제 시간). 한 번에 바꾸면 끊겨 보인다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation && bUseAnticipation", ClampMin = "0.0", Units = "s"))
+	float AnticipationBlendTime = 0.1f;
+
+	/** 임팩트보다 얼마나 앞(몽타주 시간)에서 예비 동작 슬로모를 시작할지 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation && bUseAnticipation", ClampMin = "0.0", Units = "s"))
+	float AnticipationLeadTime = 0.25f;
+
+	/** 임팩트보다 얼마나 앞(몽타주 시간)에서 원래 속도로 되돌려 칼을 빠르게 꽂을지 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation && bUseAnticipation", ClampMin = "0.0", Units = "s"))
+	float SnapLeadTime = 0.07f;
+
 	UFUNCTION()
 	void OnCompleted();
 
@@ -132,6 +187,35 @@ protected:
 
 private:
 	bool StartAttackMontageTask(float StartTime);
+
+	UFUNCTION()
+	void OnImpactEvent(FGameplayEventData Payload);
+	UFUNCTION()
+	void OnImpactFallback();
+	UFUNCTION()
+	void OnAnticipationStart();
+	UFUNCTION()
+	void OnAnticipationSnap();
+
+	// 암살자 몽타주에서 Assassinate Impact 노티파이가 울리는 몽타주 시간을 찾는다.
+	bool FindImpactNotifyTime(float& OutTime) const;
+	// 처음 바꿀 때의 전역 배율을 기준으로 게임 속도를 Scale배로 맞춘다.
+	void SetTimeScale(float Scale);
+	void StartImpactTimeDilation();
+	// 게임 속도 배율과 무관하게 실제 시간으로 진행해야 하므로 코어 티커로 돈다.
+	bool TickImpactTimeDilation(float DeltaTime);
+	void StartTimeDilationTicker();
+	void StopTimeDilationTicker();
+	void StopImpactTimeDilation(bool bRemoveTicker);
+
+	enum class ETimeDilationPhase : uint8 { None, Anticipation, Impact };
+
+	FTSTicker::FDelegateHandle ImpactTickerHandle;
+	ETimeDilationPhase TimeDilationPhase = ETimeDilationPhase::None;
+	float ImpactElapsed = 0.0f;
+	float SavedTimeDilation = 1.0f;
+	bool bImpactTriggered = false;
+	bool bTimeDilationApplied = false;
 
 protected:
 	TEnumAsByte<EMovementMode> PlayerMovementMode = MOVE_Walking;

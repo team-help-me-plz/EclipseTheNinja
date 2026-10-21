@@ -192,6 +192,7 @@ void UGACloneTech::HandleTargetAccepted(const FCloneCommandType& InCommand)
 	this->SpawnedClone->OnCloneDespawned.AddDynamic(this, &UGACloneTech::HandleCloneDespawned);
 	// 수명이 끝나면 ACloneCharacter::LifeSpanExpired에서 풀에 반환된다
 	this->SpawnedClone->SetLifeSpan(FMath::Max(this->CloneLifeTime, 0.01f));
+	this->OnCloneSpawned.Broadcast();
 
 	// 체크포인트 리스폰 시 분신 제거 (HandleCloneDespawned에서 어빌리티가 정리됨)
 	if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
@@ -298,6 +299,7 @@ void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle,
 	this->bIsSwaped = true;
 	Character->SetActorLocation(this->SpawnedClone->GetActorLocation());
 	this->SpawnedClone->SetActorLocation(PlayerLocation);
+	this->OnCloneCannotSwap.Broadcast();
 }
 
 void UGACloneTech::HandleCloneDespawned(ACloneCharacter* DespawnedClone)
@@ -308,6 +310,7 @@ void UGACloneTech::HandleCloneDespawned(ACloneCharacter* DespawnedClone)
 	}
 	DespawnedClone->OnCloneDespawned.RemoveDynamic(this, &UGACloneTech::HandleCloneDespawned);
 	this->SpawnedClone.Reset();
+	this->OnCloneCannotSwap.Broadcast();
 	if (IsActive())
 	{
 		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, false);
@@ -365,15 +368,4 @@ void UGACloneTech::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	this->bIsSwaped = false;
 	//this->CooldownEffectHandle = FActiveGameplayEffectHandle();
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
-}
-
-void UGACloneTech::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
-{
-	this->CooldownEffectHandle = FActiveGameplayEffectHandle();
-
-	UGameplayEffect*	CooldownGE = GetCooldownGameplayEffect();
-	if (CooldownGE)
-	{
-		this->CooldownEffectHandle = ApplyGameplayEffectToOwner(Handle, ActorInfo, ActivationInfo, CooldownGE, GetAbilityLevel(Handle, ActorInfo));
-	}
 }

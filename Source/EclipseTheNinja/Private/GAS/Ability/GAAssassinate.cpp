@@ -72,5 +72,6 @@ void UGAAssassinate::OnApproachCompleted()
 	// 암살자의 움직임을 잠그고 암살 수행
 	Player->GetCharacterMovement()->StopMovementImmediately();
 	Player->GetCharacterMovement()->DisableMovement();
+	WaitForImpact();
 	PlayExecution();
 }

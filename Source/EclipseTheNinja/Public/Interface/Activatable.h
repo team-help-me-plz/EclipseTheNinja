@@ -25,4 +25,8 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	void	ToggleActivate();
 
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+	void	ShowActivationIndicator();
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+	void	HideActivationIndicator();
 };

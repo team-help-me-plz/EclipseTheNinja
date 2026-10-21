@@ -7,6 +7,7 @@
 #include "HUDWidget.generated.h"
 
 class UPlayerStatWidget;
+class UAbilityCooldownContainerWidget;
 /**
  * 
  */
@@ -27,4 +28,7 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UPlayerStatWidget> PlayerStatWidget;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+	TObjectPtr<UAbilityCooldownContainerWidget> AbilityCooldownContainerWidget;
 };

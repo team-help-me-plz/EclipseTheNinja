@@ -3,6 +3,7 @@
 
 #include "Widgets/HUDWidget.h"
 #include "Widgets/PlayerStatWidget.h"
+#include "Widgets/AbilityCooldownContainerWidget.h"
 #include "GameFramework/PlayerController.h"
 
 void UHUDWidget::NativeConstruct()
@@ -36,5 +37,9 @@ void UHUDWidget::InitWidget(APawn* InPawn)
 	if (PlayerStatWidget)
 	{
 		PlayerStatWidget->InitWidget(InPawn);
+	}
+	if (AbilityCooldownContainerWidget)
+	{
+		AbilityCooldownContainerWidget->InitWidget(InPawn);
 	}
 }
