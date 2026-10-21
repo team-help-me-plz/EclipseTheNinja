@@ -70,6 +70,9 @@ private:
 
 	void CleanupTargeting();
 
+	// 커서 아래의 상호작용 액터 테두리를 강조. 이전 액터의 강조는 해제한다
+	void SetHoveredActor(AActor* InActor);
+
 	// GA에서 전달받은 설정
 	UPROPERTY(Transient)
 	TObjectPtr<UInputMappingContext>	TargetingMappingContext;
@@ -98,6 +101,9 @@ private:
 	FCloneCommandType	PendingCommand;
 
 	bool	bHasValidTarget = false;
+
+	// 커서가 올라가 있어 테두리를 강조 중인 상호작용 액터
+	TWeakObjectPtr<AActor>	HoveredActor;
 
 	// 확정·취소 중복 처리 방지
 	bool	bSelectionFinished = false;

@@ -2,6 +2,7 @@
 
 #include "PuzzelObject/MovingPlatform.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
+#include "Component/ActivateHighlightComponent.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -20,6 +21,7 @@ AMovingPlatform::AMovingPlatform()
     this->MeshAssembly->SetupAttachment(GetRootComponent());
 
     this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+    this->ActivateHighlight = CreateDefaultSubobject<UActivateHighlightComponent>(TEXT("ActivateHighlight"));
 }
 
 void AMovingPlatform::BeginPlay()
@@ -92,6 +94,16 @@ void AMovingPlatform::ToggleActivate_Implementation()
         return;
     }
     this->bIsMovementUse = !this->bIsMovementUse;
+}
+
+void AMovingPlatform::ShowActivationIndicator_Implementation()
+{
+    this->ActivateHighlight->ShowHighlight();
+}
+
+void AMovingPlatform::HideActivationIndicator_Implementation()
+{
+    this->ActivateHighlight->HideHighlight();
 }
 
 void AMovingPlatform::ResetToInitial_Implementation()

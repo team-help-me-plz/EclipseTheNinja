@@ -12,6 +12,7 @@
 #include "CloneCharacter.generated.h"
 
 class ACloneCharacter;
+class UInteractHighlightComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCloneDespawned, ACloneCharacter*, Clone);
 
@@ -42,6 +43,7 @@ public:
 	virtual void	ShowInteractionIndicator_Implementation() override;
 	virtual void	HideInteractionIndicator_Implementation() override;
 	virtual bool	bIsInteractReady_Implementation() override;
+	virtual EInteractState	GetInteractState_Implementation() override;
 
 	virtual void	RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void	ReturnToSafePoint_Implementation() override;
@@ -64,8 +66,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Margin")
 	FVector	InteractVelocity = FVector(0.f, 0.f, 500.f);
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
+
 private:
 	void	ResetInteractionCooldown();
+
+	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신
+	void	RefreshInteractState();
+	void	RefreshHighlight();
 
 	// 현재 위치와 방향을 기준으로 이동 평면과 걷는 방향을 설정
 	void	InitializeWalkState();
@@ -85,6 +94,10 @@ private:
 	FTimerHandle	InteractionCooldownTimer;
 	bool			bIsInteractCooldown = false;
 	float			InteractInterval = 0.5f;
+
+	EInteractState	InteractState = EInteractState::Ready;
+	// 선택(강조)을 요청한 수. InteractBox 선택, 발판 강조, 분신 조준 커서가 각각 Show/Hide를 짝지어 호출한다
+	int32			SelectCount = 0;
 
 	FVector	SafePointLocation = FVector::ZeroVector;
 	FRotator	SafePointRotate = FRotator::ZeroRotator;

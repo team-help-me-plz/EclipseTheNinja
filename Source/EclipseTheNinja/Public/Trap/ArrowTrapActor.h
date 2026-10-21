@@ -12,6 +12,7 @@
 class UStaticMeshComponent;
 class ATrapArrowActor;
 class UCheckpointBoundComponent;
+class UActivateHighlightComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API AArrowTrapActor : public AActor, public IActivatable, public ICheckpointResettable
@@ -31,6 +32,8 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void	ToggleActivate_Implementation() override;
+	virtual void	ShowActivationIndicator_Implementation() override;
+	virtual void	HideActivationIndicator_Implementation() override;
 
 	// 체크포인트 리스폰: 발사 쿨다운 초기화 (날아가던 화살은 Subsystem이 런타임 스폰 액터로 풀에 반환)
 	virtual void	ResetToInitial_Implementation() override;
@@ -50,7 +53,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
-	
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UActivateHighlightComponent>	ActivateHighlight = nullptr;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Trap")
 	TSubclassOf<ATrapArrowActor>		ArrowClass = nullptr;
 	

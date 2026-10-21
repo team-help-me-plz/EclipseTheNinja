@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Interface/Interactor.h"
+#include "Checkpoint/CheckpointBoundComponent.h"
 
 // Sets default values
 ABreakablePlatform::ABreakablePlatform()

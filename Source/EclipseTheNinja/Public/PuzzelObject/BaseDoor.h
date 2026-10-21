@@ -12,6 +12,8 @@
 
 class UStaticMeshComponent;
 class UCheckpointBoundComponent;
+class UInteractHighlightComponent;
+class UActivateHighlightComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API ABaseDoor : public AActor, public IActivatable, public IInteractable, public ICheckpointResettable
@@ -24,11 +26,14 @@ public:
 	virtual void	Tick(float DeltaTime) override;
 
 	virtual void	ToggleActivate_Implementation() override;
+	virtual void	ShowActivationIndicator_Implementation() override;
+	virtual void	HideActivationIndicator_Implementation() override;
 
 	virtual void	Interact_Implementation(AActor* InActor) override;
 	virtual void	ShowInteractionIndicator_Implementation() override;
 	virtual void	HideInteractionIndicator_Implementation() override;
 	virtual bool	bIsInteractReady_Implementation() override;
+	virtual EInteractState	GetInteractState_Implementation() override;
 
 	// 체크포인트 리스폰: 열림 상태와 쿨다운을 BeginPlay 시점으로 되돌린다
 	virtual void	ResetToInitial_Implementation() override;
@@ -52,6 +57,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UActivateHighlightComponent>	ActivateHighlight = nullptr;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.01"))
 	float	DoorMoveTime = 3.0;
 
@@ -67,6 +78,13 @@ protected:
 private:
 	void	ResetInteractionCooldown();
 
+	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신
+	void	RefreshInteractState();
+	void	RefreshHighlight();
+
+	EInteractState	InteractState = EInteractState::Ready;
+	// 선택(강조)을 요청한 수. InteractBox 선택, 발판 강조, 분신 조준 커서가 각각 Show/Hide를 짝지어 호출한다
+	int32			SelectCount = 0;
 
 	FTimerHandle	InteractionCooldownTimer;
 	bool			bIsInteractCooldown = false;
