@@ -20,7 +20,6 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Ability/GABaseAttack.h"
-#include "GAS/Ability/GAThrowKunai.h"
 #include "Components/BoxComponent.h"
 #include "Engine/TargetPoint.h"
 #include "Interface/Interactable.h"
@@ -28,17 +27,18 @@
 #include "Component/AssassinateTargetComponent.h"
 #include "GAS/Ability/GAAssassinate.h"
 #include "Ability/GACloneTech.h"
+#include "Component/InteractBoxComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
 
 APlayerCharacter::APlayerCharacter()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	InteractBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractCollision"));
-	InteractBox->SetupAttachment(RootComponent);
-	InteractBox->SetBoxExtent(InteractBoxSize);
-	InteractBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	InteractBox->SetCollisionResponseToAllChannels(ECR_Overlap);
-	InteractBox->SetGenerateOverlapEvents(true);
+    PrimaryActorTick.bCanEverTick = true;
+    InteractComponent = CreateDefaultSubobject<UInteractBoxComponent>(TEXT("InteractComponent"));
+    InteractComponent->SetupAttachment(RootComponent);
+    InteractComponent->SetBoxExtent(InteractBoxSize);
+    InteractComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    InteractComponent->SetCollisionResponseToAllChannels(ECR_Overlap);
+    InteractComponent->SetGenerateOverlapEvents(true);
 
 	AssassinateTargetingComponent = CreateDefaultSubobject<UAssassinationTargetingComponent>(TEXT("AssassinateTargeting"));
 
@@ -84,15 +84,16 @@ APlayerCharacter::APlayerCharacter()
 
 void APlayerCharacter::BeginPlay()
 {
-	Super::BeginPlay();
-	InteractBox->SetBoxExtent(InteractBoxSize);
-	InteractBox->SetAbsolute(false, true, true);
-	WarnIfAbilityMissing(EAbilityInputID::Assassinate);
-	WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
-	WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
-	WarnIfAbilityMissing(EAbilityInputID::CloneTech);
-	JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
-	FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
+    Super::BeginPlay();
+    InteractComponent->SetBoxExtent(InteractBoxSize);
+    InteractComponent->SetAbsolute(false, true, true);
+    WarnIfAbilityMissing(EAbilityInputID::Assassinate);
+    WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
+    WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
+    WarnIfAbilityMissing(EAbilityInputID::CloneTech);
+    WarnIfAbilityMissing(EAbilityInputID::ThrowKunai);
+    JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
+    FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
 	// 체력 변화 델리게이트 바인딩
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
@@ -311,21 +312,26 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	// Set up action bindings
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
-	{
-		if (CloneTechAction)
-		{
-			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneTech);
-			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCloneTechEnd);
-			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Canceled, this, &APlayerCharacter::DoCloneTechEnd);
-		}
-		if (CloneRecallAction)
-		{
-			EnhancedInputComponent->BindAction(CloneRecallAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneRecall);
-		}
-		// 카메라 이동 중 좌클릭은 모드를 유지한 채 쿠나이를 던진다.
-		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
+    // Set up action bindings
+    if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+    {
+        if (CloneTechAction)
+        {
+            EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneTech);
+            EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCloneTechEnd);
+            EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Canceled, this, &APlayerCharacter::DoCloneTechEnd);
+        }
+        if (CloneRecallAction)
+        {
+            EnhancedInputComponent->BindAction(CloneRecallAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneRecall);
+        }
+        if (MoveScrollAction)
+        {
+            EnhancedInputComponent->BindAction(MoveScrollAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoMouseScroll);
+        }
+
+        // 카메라 이동 중 좌클릭은 모드를 유지한 채 표창을 던진다.
+        EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
 
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayerCharacter::OnCameraMoveEndInput);
@@ -575,27 +581,31 @@ void APlayerCharacter::SetAssassinationFacing(float Yaw)
 
 void APlayerCharacter::DoThrowKunai()
 {
-	if (!CanThrowKunai() || !ASC) return;
+    if (!CanThrowKunai() || !ASC)
+    {
+        return;
+    }
 
-	// 새 에셋 경로를 하드코딩하지 않고 기존 BP의 시작 어빌리티 목록에서 투척 GA를 찾는다.
-	for (const FAbilityInfo& Info : AbilityClassArray)
-	{
-		if (!Info.AbilityClass || !Info.AbilityClass->IsChildOf(UGAThrowKunai::StaticClass())) continue;
+    // 투척 어빌리티가 지급되지 않았으면 몸 방향도 바꾸지 않는다.
+    if (!FindAbilitySpecByInputID(EAbilityInputID::ThrowKunai))
+    {
+        return;
+    }
 
-		// 좌클릭 입력이 Tick보다 먼저 와도 현재 커서로 조준한다.
-		UpdateCursorTarget();
-		if (bHasCursorTarget)
-		{
-			const float DirectionX = CursorWorldLocation.X - GetActorLocation().X;
-			if (FMath::Abs(DirectionX) > CursorFacingDeadZone)
-			{
-				FacingTargetYaw = DirectionX > 0.0f ? 0.0f : 180.0f;
-			}
-		}
-		SnapToFacingTarget();
-		ASC->TryActivateAbilityByClass(Info.AbilityClass);
-		return;
-	}
+    // 좌클릭 입력이 Tick보다 먼저 와도 현재 커서로 조준한다.
+    UpdateCursorTarget();
+    if (bHasCursorTarget)
+    {
+        const float DirectionX = CursorWorldLocation.X - GetActorLocation().X;
+        if (FMath::Abs(DirectionX) > CursorFacingDeadZone)
+        {
+            FacingTargetYaw = DirectionX > 0.0f ? 0.0f : 180.0f;
+        }
+    }
+
+    SnapToFacingTarget();
+
+    TryActivateAbilityByInputID(EAbilityInputID::ThrowKunai);
 }
 
 void APlayerCharacter::DoMove(float Forward)
@@ -671,44 +681,45 @@ void APlayerCharacter::DoInteract()
 		}
 	}
 
-	// Clone-tech interactables (levers, clone launch, traps) use a separate interface.
-	TArray<AActor*> Candidates;
-	InteractBox->GetOverlappingActors(Candidates);
-	for (AActor* Candidate : Candidates)
-	{
-		if (IsValid(Candidate) && Candidate != this && Candidate->Implements<UInteractable>()
-			&& IInteractable::Execute_bIsInteractReady(Candidate))
-		{
-			IInteractable::Execute_Interact(Candidate, this);
-			return;
-		}
-	}
+    this->InteractComponent->TryInteract();
+    //// Clone-tech interactables (levers, clone launch, traps) use a separate interface.
+    //TArray<AActor*> Candidates;
+    //InteractBox->GetOverlappingActors(Candidates);
+    //for (AActor* Candidate : Candidates)
+    //{
+    //    if (IsValid(Candidate) && Candidate != this && Candidate->Implements<UInteractable>()
+    //        && IInteractable::Execute_bIsInteractReady(Candidate))
+    //    {
+    //        IInteractable::Execute_Interact(Candidate, this);
+    //        return;
+    //    }
+    //}
 
-	// do a sphere trace to look for interactive objects
-	FHitResult OutHit;
+    //// do a sphere trace to look for interactive objects
+    //FHitResult OutHit;
 
-	const FVector Start = GetActorLocation();
-	const FVector End = Start + FVector(100.0f, 0.0f, 0.0f);
+    //const FVector Start = GetActorLocation();
+    //const FVector End = Start + FVector(100.0f, 0.0f, 0.0f);
 
-	FCollisionShape ColSphere;
-	ColSphere.SetSphere(InteractionRadius);
+    //FCollisionShape ColSphere;
+    //ColSphere.SetSphere(InteractionRadius);
 
-	FCollisionObjectQueryParams ObjectParams;
-	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+    //FCollisionObjectQueryParams ObjectParams;
+    //ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+    //ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this);
+    //FCollisionQueryParams QueryParams;
+    //QueryParams.AddIgnoredActor(this);
 
-	if (GetWorld()->SweepSingleByObjectType(OutHit, Start, End, FQuat::Identity, ObjectParams, ColSphere, QueryParams))
-	{
-		// have we hit an interactable?
-		if (ISideScrollingInteractable* Interactable = Cast<ISideScrollingInteractable>(OutHit.GetActor()))
-		{
-			// interact
-			Interactable->Interaction(this);
-		}
-	}
+    //if (GetWorld()->SweepSingleByObjectType(OutHit, Start, End, FQuat::Identity, ObjectParams, ColSphere, QueryParams))
+    //{
+    //    // have we hit an interactable?
+    //    if (ISideScrollingInteractable* Interactable = Cast<ISideScrollingInteractable>(OutHit.GetActor()))
+    //    {
+    //        // interact
+    //        Interactable->Interaction(this);
+    //    }
+    //}
 }
 
 void APlayerCharacter::DoCameraMoveStart()
@@ -925,26 +936,46 @@ void APlayerCharacter::DoCloneTechEnd()
 
 void APlayerCharacter::DoCloneRecall()
 {
-	if (bIsDead) return;
-	if (!IsValid(ASC)) return;
+    if (bIsDead) return;
+    if (!IsValid(ASC)) return;
 
-	/* TODO: Player 상태가 발각됐거나 전투중이면 바로 리턴하는 코드가 필요해용
-	*/
-	// 기본 어빌리티와 같은 입력 ID 규칙으로 분신 회수 대상을 찾는다.
-	FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::CloneTech);
-	// 분신이 없어지면 UGACloneTech는 EndAbility가 호출되므로 Activate 검사는 하지 않는다
-	if (!Spec)
-	{
-		return;
-	}
-	// CloneAbility 얻기
-	UGACloneTech* CloneAbility = Cast<UGACloneTech>(Spec->GetPrimaryInstance());
+    /* TODO: Player 상태가 발각됐거나 전투중이면 바로 리턴하는 코드가 필요해용
+    */
+    // 기본 어빌리티와 같은 입력 ID 규칙으로 분신 회수 대상을 찾는다.
+    FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::CloneTech);
+    // 분신이 없어지면 UGACloneTech는 EndAbility가 호출되므로 Activate 검사는 하지 않는다
+    if (!Spec)
+    {
+        return;
+    }
+    // CloneAbility 얻기
+    UGACloneTech* CloneAbility = Cast<UGACloneTech>(Spec->GetPrimaryInstance());
 
-	if (CloneAbility)
-	{
-		// Recall하기
-		CloneAbility->OnRecallClone();
-	}
+    if (CloneAbility)
+    {
+        // Recall하기
+        CloneAbility->OnRecallClone();
+    }
+}
+
+void APlayerCharacter::DoMouseScroll(const FInputActionValue& InValue)
+{
+    const float	Axis = InValue.Get<float>();
+    int32		Direction = 0;
+
+    if (Axis < 0)
+    {
+        Direction--;
+    }
+    else if (Axis > 0)
+    {
+        Direction++;
+    }
+    this->InteractComponent->OnScrollInput(Direction);
+    //if (Axis > 0)
+    //{
+    //	this->InteractComponent->
+    //}
 }
 
 void APlayerCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)

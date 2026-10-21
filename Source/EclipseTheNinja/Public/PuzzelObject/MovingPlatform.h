@@ -12,6 +12,7 @@
 
 class UStaticMeshComponent;
 class UCheckpointBoundComponent;
+class UActivateHighlightComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API AMovingPlatform : public AActor, public IActivatable, public ICheckpointResettable
@@ -24,6 +25,8 @@ public:
 	virtual void	Tick(float DeltaTime) override;
 
 	virtual void	ToggleActivate_Implementation() override;
+	virtual void	ShowActivationIndicator_Implementation() override;
+	virtual void	HideActivationIndicator_Implementation() override;
 
 	virtual void ResetToInitial_Implementation() override;
 	virtual void OnAfterReset_Implementation() override;
@@ -47,6 +50,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UActivateHighlightComponent>	ActivateHighlight = nullptr;
 
 	// 트리거로 움직임을 제어할 수 있는지 설정하는 값
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|State")

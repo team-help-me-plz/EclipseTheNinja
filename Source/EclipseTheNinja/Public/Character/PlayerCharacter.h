@@ -16,7 +16,7 @@ class UInputMappingContext;
 class UEnhancedInputLocalPlayerSubsystem;
 class UAnimMontage;
 class UGABaseAttack;
-class UBoxComponent;
+class UInteractBoxComponent;
 class UAssassinationTargetingComponent;
 class UGAAssassinate;
 struct FInputActionValue;
@@ -35,7 +35,7 @@ class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter, public IInte
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
-	TObjectPtr<UBoxComponent> InteractBox;
+	TObjectPtr<UInteractBoxComponent> InteractComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Collision|Interact")
 	FVector InteractBoxSize = FVector(80.f, 1000.f, 100.f);
@@ -78,6 +78,10 @@ protected:
 	/** CloneDespawn Input Action */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> CloneRecallAction;
+
+	/** Move Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> MoveScrollAction;
 
 	/** Impulse to manually push physics objects while we're in midair */
 	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Jump")
@@ -146,12 +150,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void DoAssassinate();
 
-	/** 카메라 이동 모드에서만 허용한다. 분신 타게팅의 좌클릭 확인, 암살 연출과는 분리한다. */
+	// 표창 투척은 카메라 이동 모드(조준 모드)에서만 허용하며, 분신 타게팅의 좌클릭 확인, 암살 연출 재생 시에는 투척할 수 없도록 한다.
 	UFUNCTION(BlueprintPure, Category = "Combat|Kunai")
 	bool CanThrowKunai() const { return bIsExploring && !bIsCloneTargeting && !bIsDead && !IsAssassinating(); }
 
+	// 표창 투척 어빌리티를 실행하는 함수
 	UFUNCTION(BlueprintCallable, Category = "Combat|Kunai")
 	void DoThrowKunai();
+
 	virtual void RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void ReturnToSafePoint_Implementation() override;
 
@@ -163,6 +169,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void DoCloneRecall();
+
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void DoMouseScroll(const FInputActionValue& InValue);
 
 	bool HasCursorTarget() const { return bHasCursorTarget; }
 	bool IsFacingCursor() const { return bCursorFacingActive; }

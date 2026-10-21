@@ -47,9 +47,8 @@ void UStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
             const float NewHealth = FMath::Clamp(OldHealth - FinalDamage, 0.0f, GetMaxHealth());
             SetHealth(NewHealth);
 
-            // SetHealth의 체력 변경 델리게이트에는 이 Damage GE의 GEModData가 전달되지 않는다.
-            // 원본 Context가 유효한 이 콜백에서 피해 출처를 별도로 알린다.
-            // 체력이 먼저 갱신되므로 수신자는 사망/비활성화 여부도 확인할 수 있다.
+            // SetHealth()의 체력 변경 델리게이트에는 이 GameEffect의 Context가 전달되지 않는다.
+            // 따라서 원본 Context가 유효한 이 콜백에서 브로드캐스트를 통해 피해 출처를 별도로 알린다.
             if (NewHealth < OldHealth)
             {
                 OnDamageReceived.Broadcast(Data.EffectSpec.GetContext());
