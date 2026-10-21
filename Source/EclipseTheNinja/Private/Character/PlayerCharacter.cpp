@@ -28,16 +28,17 @@
 #include "Component/AssassinateTargetComponent.h"
 #include "GAS/Ability/GAAssassinate.h"
 #include "Ability/GACloneTech.h"
+#include "Component/InteractBoxComponent.h"
 
 APlayerCharacter::APlayerCharacter()
 {
     PrimaryActorTick.bCanEverTick = true;
-    InteractBox = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractCollision"));
-    InteractBox->SetupAttachment(RootComponent);
-    InteractBox->SetBoxExtent(InteractBoxSize);
-    InteractBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    InteractBox->SetCollisionResponseToAllChannels(ECR_Overlap);
-    InteractBox->SetGenerateOverlapEvents(true);
+    InteractComponent = CreateDefaultSubobject<UInteractBoxComponent>(TEXT("InteractComponent"));
+    InteractComponent->SetupAttachment(RootComponent);
+    InteractComponent->SetBoxExtent(InteractBoxSize);
+    InteractComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    InteractComponent->SetCollisionResponseToAllChannels(ECR_Overlap);
+    InteractComponent->SetGenerateOverlapEvents(true);
 
     AssassinateTargetingComponent = CreateDefaultSubobject<UAssassinationTargetingComponent>(TEXT("AssassinateTargeting"));
 
@@ -84,8 +85,8 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
     Super::BeginPlay();
-    InteractBox->SetBoxExtent(InteractBoxSize);
-    InteractBox->SetAbsolute(false, true, true);
+    InteractComponent->SetBoxExtent(InteractBoxSize);
+    InteractComponent->SetAbsolute(false, true, true);
     WarnIfAbilityMissing(EAbilityInputID::Assassinate);
     WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
     WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
@@ -313,6 +314,10 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
         if (CloneRecallAction)
         {
             EnhancedInputComponent->BindAction(CloneRecallAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneRecall);
+        }
+        if (MoveScrollAction)
+        {
+            EnhancedInputComponent->BindAction(MoveScrollAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoMouseScroll);
         }
         // 카메라 이동 중 좌클릭은 모드를 유지한 채 쿠나이를 던진다.
         EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
@@ -647,44 +652,45 @@ void APlayerCharacter::DoInteract()
         }
     }
 
-    // Clone-tech interactables (levers, clone launch, traps) use a separate interface.
-    TArray<AActor*> Candidates;
-    InteractBox->GetOverlappingActors(Candidates);
-    for (AActor* Candidate : Candidates)
-    {
-        if (IsValid(Candidate) && Candidate != this && Candidate->Implements<UInteractable>()
-            && IInteractable::Execute_bIsInteractReady(Candidate))
-        {
-            IInteractable::Execute_Interact(Candidate, this);
-            return;
-        }
-    }
+	this->InteractComponent->TryInteract();
+    //// Clone-tech interactables (levers, clone launch, traps) use a separate interface.
+    //TArray<AActor*> Candidates;
+    //InteractBox->GetOverlappingActors(Candidates);
+    //for (AActor* Candidate : Candidates)
+    //{
+    //    if (IsValid(Candidate) && Candidate != this && Candidate->Implements<UInteractable>()
+    //        && IInteractable::Execute_bIsInteractReady(Candidate))
+    //    {
+    //        IInteractable::Execute_Interact(Candidate, this);
+    //        return;
+    //    }
+    //}
 
-    // do a sphere trace to look for interactive objects
-    FHitResult OutHit;
+    //// do a sphere trace to look for interactive objects
+    //FHitResult OutHit;
 
-    const FVector Start = GetActorLocation();
-    const FVector End = Start + FVector(100.0f, 0.0f, 0.0f);
+    //const FVector Start = GetActorLocation();
+    //const FVector End = Start + FVector(100.0f, 0.0f, 0.0f);
 
-    FCollisionShape ColSphere;
-    ColSphere.SetSphere(InteractionRadius);
+    //FCollisionShape ColSphere;
+    //ColSphere.SetSphere(InteractionRadius);
 
-    FCollisionObjectQueryParams ObjectParams;
-    ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-    ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+    //FCollisionObjectQueryParams ObjectParams;
+    //ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+    //ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(this);
+    //FCollisionQueryParams QueryParams;
+    //QueryParams.AddIgnoredActor(this);
 
-    if (GetWorld()->SweepSingleByObjectType(OutHit, Start, End, FQuat::Identity, ObjectParams, ColSphere, QueryParams))
-    {
-        // have we hit an interactable?
-        if (ISideScrollingInteractable* Interactable = Cast<ISideScrollingInteractable>(OutHit.GetActor()))
-        {
-            // interact
-            Interactable->Interaction(this);
-        }
-    }
+    //if (GetWorld()->SweepSingleByObjectType(OutHit, Start, End, FQuat::Identity, ObjectParams, ColSphere, QueryParams))
+    //{
+    //    // have we hit an interactable?
+    //    if (ISideScrollingInteractable* Interactable = Cast<ISideScrollingInteractable>(OutHit.GetActor()))
+    //    {
+    //        // interact
+    //        Interactable->Interaction(this);
+    //    }
+    //}
 }
 
 void APlayerCharacter::DoCameraMoveStart()
@@ -907,6 +913,26 @@ void APlayerCharacter::DoCloneRecall()
 		// Recall하기
 		CloneAbility->OnRecallClone();
 	}
+}
+
+void APlayerCharacter::DoMouseScroll(const FInputActionValue& InValue)
+{
+	const float	Axis = InValue.Get<float>();
+	int32		Direction = 0;
+
+	if (Axis < 0)
+	{
+		Direction--;
+	}
+	else if (Axis > 0)
+	{
+		Direction++;
+	}
+	this->InteractComponent->OnScrollInput(Direction);
+	//if (Axis > 0)
+	//{
+	//	this->InteractComponent->
+	//}
 }
 
 void APlayerCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)

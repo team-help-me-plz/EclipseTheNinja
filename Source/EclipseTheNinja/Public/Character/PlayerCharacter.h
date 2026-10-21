@@ -16,7 +16,7 @@ class UInputMappingContext;
 class UEnhancedInputLocalPlayerSubsystem;
 class UAnimMontage;
 class UGABaseAttack;
-class UBoxComponent;
+class UInteractBoxComponent;
 class UAssassinationTargetingComponent;
 class UGAAssassinate;
 struct FInputActionValue;
@@ -35,7 +35,7 @@ class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter, public IInte
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
-	TObjectPtr<UBoxComponent> InteractBox;
+	TObjectPtr<UInteractBoxComponent> InteractComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Collision|Interact")
 	FVector InteractBoxSize = FVector(80.f, 1000.f, 100.f);
@@ -78,6 +78,10 @@ protected:
 	/** CloneDespawn Input Action */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> CloneRecallAction;
+
+	/** Move Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> MoveScrollAction;
 
 	/** Impulse to manually push physics objects while we're in midair */
 	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Jump")
@@ -163,6 +167,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void DoCloneRecall();
+
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void DoMouseScroll(const FInputActionValue& InValue);
 
 	bool HasCursorTarget() const { return bHasCursorTarget; }
 	bool IsFacingCursor() const { return bCursorFacingActive; }
