@@ -7,6 +7,8 @@
 #include "Character/BaseCharacter.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
+#include "Component/ActivateHighlightComponent.h"
+#include "Component/InteractHighlightComponent.h"
 
 #include "Components/BoxComponent.h"
 #include "AbilitySystemComponent.h"
@@ -39,6 +41,10 @@ AFallingObject::AFallingObject()
 	this->FallingIndicator->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	this->FallingIndicator->SetCastShadow(false);
 	this->FallingIndicator->SetVisibility(false);
+	// 낙하 위치 표시용 큐브에는 테두리를 그리지 않는다
+	this->FallingIndicator->ComponentTags.Add(UInteractHighlightComponent::NoHighlightTag);
+
+	this->ActivateHighlight = CreateDefaultSubobject<UActivateHighlightComponent>(TEXT("ActivateHighlight"));
 
 	this->CheckpointBoundComponent = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBoundComponent"));
 }
@@ -101,9 +107,10 @@ void AFallingObject::ShowActivationIndicator_Implementation()
 	{
 		return ;
 	}
+	this->ActivateHighlight->ShowHighlight();
 
 	this->FindFallingLocation();
-	
+
 	const FVector	ObjectStart = this->FallingBody->GetComponentLocation();
 	const FVector	ObjectExtent = this->FallingBody->GetScaledBoxExtent();
 	const float		ObjectHeight = ObjectStart.Z - FallingLocation.Z;
@@ -121,6 +128,7 @@ void AFallingObject::ShowActivationIndicator_Implementation()
 void AFallingObject::HideActivationIndicator_Implementation()
 {
 	this->FallingIndicator->SetVisibility(false);
+	this->ActivateHighlight->HideHighlight();
 }
 
 void AFallingObject::ResetToInitial_Implementation()

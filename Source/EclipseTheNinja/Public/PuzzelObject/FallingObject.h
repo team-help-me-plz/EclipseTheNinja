@@ -13,6 +13,7 @@ class UCuttableComponent;
 class UCheckpointBoundComponent;
 class UBoxComponent;
 class AMeshAssembly;
+class UActivateHighlightComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API AFallingObject : public AActor, public IActivatable, public ICheckpointResettable
@@ -79,6 +80,9 @@ protected:
 	// 떨어질 위치를 보여줄 컴포넌트
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Falling|Indicator")
 	TObjectPtr<UStaticMeshComponent>	FallingIndicator = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UActivateHighlightComponent>	ActivateHighlight = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|Damage")
 	float	FallingDamage = 10.f;

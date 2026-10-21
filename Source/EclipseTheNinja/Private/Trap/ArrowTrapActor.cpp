@@ -6,6 +6,7 @@
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Component/ActivateHighlightComponent.h"
 
 #include "Components/StaticMeshComponent.h"
 
@@ -25,6 +26,7 @@ AArrowTrapActor::AArrowTrapActor()
 	this->ArrowSpawnPos->SetupAttachment(GetRootComponent());
 
 	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+	this->ActivateHighlight = CreateDefaultSubobject<UActivateHighlightComponent>(TEXT("ActivateHighlight"));
 }
 
 void AArrowTrapActor::ResetToInitial_Implementation()
@@ -67,6 +69,16 @@ void AArrowTrapActor::ToggleActivate_Implementation()
 		false
 	);
 	this->SpawnArrow();
+}
+
+void AArrowTrapActor::ShowActivationIndicator_Implementation()
+{
+	this->ActivateHighlight->ShowHighlight();
+}
+
+void AArrowTrapActor::HideActivationIndicator_Implementation()
+{
+	this->ActivateHighlight->HideHighlight();
 }
 
 void AArrowTrapActor::SpawnArrow()

@@ -3,6 +3,7 @@
 
 #include "Clone/CloneCharacter.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Component/InteractHighlightComponent.h"
 
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/TargetPoint.h"
@@ -20,6 +21,8 @@ ACloneCharacter::ACloneCharacter()
 
 	Movement->SetPlaneConstraintNormal(FVector::YAxisVector);
 	Movement->bConstrainToPlane = true;
+
+	this->InteractHighlight = CreateDefaultSubobject<UInteractHighlightComponent>(TEXT("InteractHighlight"));
 }
 
 // Called when the game starts or when spawned
@@ -29,6 +32,7 @@ void ACloneCharacter::BeginPlay()
 
 	InitializeWalkState();
 	this->bIsSpawned = true;
+	this->RefreshInteractState();
 }
 
 void ACloneCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -83,6 +87,8 @@ void ACloneCharacter::OnReturnToPool_Implementation()
 
 	GetWorldTimerManager().ClearTimer(this->InteractionCooldownTimer);
 	this->bIsInteractCooldown = false;
+	this->SelectCount = 0;
+	this->RefreshInteractState();
 
 	this->SafePointLocation = FVector::ZeroVector;
 	this->SafePointRotate = FRotator::ZeroRotator;
@@ -177,20 +183,45 @@ void ACloneCharacter::Interact_Implementation(AActor* InActor)
 		this->InteractInterval,
 		false
 	);
+	this->RefreshInteractState();
 	InCharacter->LaunchCharacter(this->InteractVelocity, false, true);
 }
 
 void ACloneCharacter::ShowInteractionIndicator_Implementation()
 {
+	this->SelectCount++;
+	this->RefreshHighlight();
 }
 
 void ACloneCharacter::HideInteractionIndicator_Implementation()
 {
+	this->SelectCount = FMath::Max(0, this->SelectCount - 1);
+	this->RefreshHighlight();
 }
 
 bool ACloneCharacter::bIsInteractReady_Implementation()
 {
-	return (true);
+	return (this->InteractState == EInteractState::Ready);
+}
+
+EInteractState ACloneCharacter::GetInteractState_Implementation()
+{
+	return (this->InteractState);
+}
+
+void ACloneCharacter::RefreshInteractState()
+{
+	// 분신은 몇 번이든 상호작용할 수 있으므로 Done이 되지 않는다
+	this->InteractState = this->bIsInteractCooldown ? EInteractState::Cooldown : EInteractState::Ready;
+	this->RefreshHighlight();
+}
+
+void ACloneCharacter::RefreshHighlight()
+{
+	if (IsValid(this->InteractHighlight))
+	{
+		this->InteractHighlight->SetHighlight(this->InteractState, (this->SelectCount > 0));
+	}
 }
 
 void ACloneCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)
@@ -219,4 +250,5 @@ void ACloneCharacter::ReturnToSafePoint_Implementation()
 void	ACloneCharacter::ResetInteractionCooldown()
 {
 	this->bIsInteractCooldown = false;
+	this->RefreshInteractState();
 }

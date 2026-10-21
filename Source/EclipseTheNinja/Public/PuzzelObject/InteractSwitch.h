@@ -12,6 +12,7 @@
 class AMeshAssembly;
 class USphereComponent;
 class UCheckpointBoundComponent;
+class UInteractHighlightComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API AInteractSwitch : public AActor, public IInteractable, public ICheckpointResettable
@@ -38,6 +39,7 @@ public:
 	virtual void	ResetToInitial_Implementation() override;
 	virtual void	OnAfterReset_Implementation() override {}
 	virtual bool	bIsInteractReady_Implementation() override;
+	virtual EInteractState	GetInteractState_Implementation() override;
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
@@ -48,6 +50,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
 
 	//UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	//TObjectPtr<USphereComponent>	InteractSphere = nullptr;
@@ -66,8 +71,18 @@ protected:
 private:
 	void	ResetInteractionCooldown();
 
+	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신
+	void	RefreshInteractState();
+	void	RefreshHighlight();
+
 	// Interact 함수가 한 번이라도 불렸는가
 	bool	bIsInteracted = false;
+
+	EInteractState	InteractState = EInteractState::Ready;
+	// 선택(강조)을 요청한 수. InteractBox 선택, 발판 강조, 분신 조준 커서가 각각 Show/Hide를 짝지어 호출한다
+	int32			SelectCount = 0;
+	// TargetActor의 Activate 테두리를 켜 둔 상태인가 (Show/Hide를 짝지어 호출하기 위함)
+	bool			bIsShowingTargetIndicator = false;
 
 	FTimerHandle	InteractionCooldownTimer;
 	bool			bIsInteractCooldown = false;

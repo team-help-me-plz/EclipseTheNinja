@@ -151,6 +151,7 @@ void UAbilityTask_WaitCloneTargeting::UpdateTargetCandidate()
 	AActor*				Avatar = this->Ability ? this->Ability->GetAvatarActorFromActorInfo() : nullptr;
 	if (!PC || !World || !IsValid(Avatar))
 	{
+		SetHoveredActor(nullptr);
 		return ;
 	}
 
@@ -158,6 +159,7 @@ void UAbilityTask_WaitCloneTargeting::UpdateTargetCandidate()
 	FVector	RayDirection;
 	if (!PC->DeprojectMousePositionToWorld(RayOrigin, RayDirection))
 	{
+		SetHoveredActor(nullptr);
 		return ;
 	}
 
@@ -168,6 +170,22 @@ void UAbilityTask_WaitCloneTargeting::UpdateTargetCandidate()
 	const bool	bCursorHit = World->LineTraceSingleByChannel(
 		CursorHit, RayOrigin, RayOrigin + RayDirection * 100000.0f,
 		ECC_Visibility, QueryParams);
+
+	AActor* HitActor = CursorHit.GetActor();
+
+	while (IsValid(HitActor) && !HitActor->Implements<UInteractable>())
+	{
+		HitActor = HitActor->GetParentActor();
+	}
+	// 다 쓴(Done) 액터를 제외하고 커서 아래 상호작용 액터를 강조한다 (쿨다운 중이면 쿨다운 테두리)
+	if (IsValid(HitActor) && IInteractable::Execute_GetInteractState(HitActor) != EInteractState::Done)
+	{
+		SetHoveredActor(HitActor);
+	}
+	else
+	{
+		SetHoveredActor(nullptr);
+	}
 
 	// 마우스 광선과 사이드뷰 이동 평면(Y 고정)의 교점 계산
 	if (FMath::IsNearlyZero(RayDirection.Y))
@@ -183,12 +201,6 @@ void UAbilityTask_WaitCloneTargeting::UpdateTargetCandidate()
 	FVector	CursorOnPlane = RayOrigin + RayDirection * DistanceToPlane;
 	CursorOnPlane.Y = PlaneY;
 
-	AActor* HitActor = CursorHit.GetActor();
-
-	while (IsValid(HitActor) && !HitActor->Implements<UInteractable>())
-	{
-		HitActor = HitActor->GetParentActor();
-	}
 	if (IsValid(HitActor) && HitActor->Implements<UInteractable>() && IInteractable::Execute_bIsInteractReady(HitActor))
 	{
 		FVector	TraceStart = HitActor->GetActorLocation();
@@ -325,8 +337,26 @@ void UAbilityTask_WaitCloneTargeting::CleanupTargeting()
 		this->DestinationEffect->DestroyComponent();
 		this->DestinationEffect = nullptr;
 	}
+	SetHoveredActor(nullptr);
 	this->bHasValidTarget = false;
 	this->PendingCommand = FCloneCommandType{};
+}
+
+void UAbilityTask_WaitCloneTargeting::SetHoveredActor(AActor* InActor)
+{
+	if (this->HoveredActor.Get() == InActor)
+	{
+		return ;
+	}
+	if (AActor* PrevActor = this->HoveredActor.Get())
+	{
+		IInteractable::Execute_HideInteractionIndicator(PrevActor);
+	}
+	this->HoveredActor = InActor;
+	if (IsValid(InActor))
+	{
+		IInteractable::Execute_ShowInteractionIndicator(InActor);
+	}
 }
 
 void UAbilityTask_WaitCloneTargeting::OnDestroy(bool bInOwnerFinished)
