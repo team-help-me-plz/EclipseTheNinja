@@ -272,13 +272,13 @@ bool UAssassinateTargetComponent::FindBelowPlan(const ACharacter* Assassin, FBel
 	return true;
 }
 
-EAssassinationType UAssassinateTargetComponent::EvaluateAssassinationType(ACharacter* Assassin, bool bCheckZone) const
+EAssassinationType UAssassinateTargetComponent::EvaluateAssassinationType(ACharacter* Assassin, bool bCheckZone, bool bAllowGround) const
 {
 	if (!IsValid(Assassin)) return EAssassinationType::None;
 	if (bCheckZone && !IsAssassinInZone(Assassin)) return EAssassinationType::None;
 
 	// 높이로 방식이 갈리고, 각 방식은 실행 위치까지 막혀 있지 않아야 한다.
-	if (IsApproachClear(Assassin)) return EAssassinationType::Ground;
+	if (bAllowGround && IsApproachClear(Assassin)) return EAssassinationType::Ground;
 	if (IsAerialApproachClear(Assassin)) return EAssassinationType::Aerial;
 	if (IsBelowApproachClear(Assassin)) return EAssassinationType::Below;
 	return EAssassinationType::None;

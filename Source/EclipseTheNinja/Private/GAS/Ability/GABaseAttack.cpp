@@ -11,6 +11,7 @@
 #include "Engine/World.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "GAS/StatAttributeSet.h"
+#include "GAS/Ability/GAWallAttach.h"
 #include "NativeGameplayTags.h"
 #include "Character/BaseCharacter.h"
 #include "Character/Enemy.h"
@@ -46,6 +47,8 @@ UGABaseAttack::UGABaseAttack()
 
 	// 가지고 있으면 활성화되지 않는 태그
 	ActivationBlockedTags.AddTag(TAG_Attacking);
+	// 벽에 매달린 동안에는 기본 공격 불가
+	ActivationBlockedTags.AddTag(UGAWallAttach::GetWallAttachingTag());
 }
 
 FGameplayTag UGABaseAttack::GetHitEventTag()

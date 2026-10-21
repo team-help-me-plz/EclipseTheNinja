@@ -67,10 +67,12 @@ void UAssassinationTargetingComponent::SelectCandidate()
 
 	// 적과 같은 바닥이면 등 뒤 암살, 적보다 높은 발판 위면 뛰어내리는 공중 암살이다.
 
-	// 서 있을 때만 타겟을 선정한다. 점프·낙하 중에는 표시하지 않는다.
+	// 서 있거나 벽에 매달렸을 때만 타겟을 선정한다. 점프·낙하 중에는 표시하지 않는다.
+	// 매달린 상태에서는 걸어서 다가갈 수 없으므로 공중·아래 암살만 찾는다.
 	const UCharacterMovementComponent* Movement = PlayerCharacter->GetCharacterMovement();
+	const bool bWallAttached = PlayerCharacter->IsWallAttached();
 	EAssassinationType SearchType = EAssassinationType::None;
-	if (Movement->IsMovingOnGround()) SearchType = EAssassinationType::Ground;
+	if (Movement->IsMovingOnGround() || bWallAttached) SearchType = EAssassinationType::Ground;
 
 	// 서 있는 상태가 아닌 경우
 	if (SearchType == EAssassinationType::None)
@@ -97,7 +99,7 @@ void UAssassinationTargetingComponent::SelectCandidate()
 		}
 		// 높이로 방식을 정하고, 실행 위치까지 막혀 있으면 실행해도 취소되므로 테두리도 표시하지 않는다.
 		// 후보는 이미 암살 영역 안에 들어온 적이므로 영역은 다시 확인하지 않는다.
-		const EAssassinationType EnemyType = Enemy->EvaluateAssassinationType(PlayerCharacter, false);
+		const EAssassinationType EnemyType = Enemy->EvaluateAssassinationType(PlayerCharacter, false, !bWallAttached);
 
 		// 평지·공중·아래 모두 아닌 경우 건너 뛴다.
 		if (EnemyType == EAssassinationType::None)
