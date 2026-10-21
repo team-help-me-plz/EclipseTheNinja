@@ -8,7 +8,10 @@ class ACharacter;
 class AKunaiProjectile;
 class UAnimMontage;
 
-/** 플레이어/적 공용 투척. 입력과 BT는 이 어빌리티를 지급한 뒤 활성화만 한다. */
+/**
+* 플레이어/적 공용 투척 어빌리티.
+* 입력과 BT는 이 어빌리티를 지급한 뒤 활성화만 한다.
+*/
 UCLASS()
 class ECLIPSETHENINJA_API UGAThrowKunai : public UGameplayAbility
 {
@@ -40,10 +43,17 @@ public:
         bool bWasCancelled) override;
 
 protected:
-    /** 이벤트 Target > 적의 전투 대상 > 투척 시작 시 저장한 플레이어 커서 > 정면. 필요하면 GA BP에서 변경한다. */
+    /**
+    * 표창을 던질 방향을 계산하는 함수. GA BP에서 재정의할 수 있다.
+    * 우선순위: 이벤트 Target > 적의 전투 대상 > 투척 시작 시 저장한 플레이어 커서 > 정면
+    */
     UFUNCTION(BlueprintNativeEvent, Category = "Kunai")
     FVector GetThrowDirection(ACharacter* Character, const FVector& SpawnLocation) const;
 
+    /**
+    * Kunai Release 노티파이 이벤트를 받는 태스크 콜백 함수.
+    * 실제로 표창을 생성하여 방향을 계산하고 투척한다.
+    */
     UFUNCTION()
     void OnKunaiReleased(FGameplayEventData Payload);
 
@@ -54,7 +64,7 @@ protected:
     void OnMontageInterrupted();
 
 protected:
-    /** 투척 프레임에 Kunai Release Notify를 배치한다. 프로젝트 에셋은 BP 기본값에서 연결한다. */
+    /** 투척 프레임에 Kunai Release Notify가 배치된 애니메이션 몽타주 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Animation")
     TObjectPtr<UAnimMontage> ThrowMontage;
 
@@ -83,11 +93,10 @@ protected:
     FName ThrowSocketName;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Projectile", meta = (Units = "cm"))
-    FVector SpawnOffset = FVector(60.0f, 0.0f, 40.0f);
+    FVector SpawnOffset = FVector(0.0f, 0.0f, 0.0f);
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Animation", meta = (ClampMin = "0.01"))
     float PlayRate = 1.0f;
-
 
 private:
     UPROPERTY(Transient)
@@ -97,4 +106,5 @@ private:
     FVector InitialPlayerForward = FVector::ForwardVector;
     bool bHasInitialPlayerCursor = false;
     bool bReleased = false;
+
 };

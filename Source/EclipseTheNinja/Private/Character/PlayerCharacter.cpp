@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 
 #include "Character/PlayerCharacter.h"
@@ -20,7 +20,6 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Ability/GABaseAttack.h"
-#include "GAS/Ability/GAThrowKunai.h"
 #include "Components/BoxComponent.h"
 #include "Engine/TargetPoint.h"
 #include "Interface/Interactable.h"
@@ -91,6 +90,7 @@ void APlayerCharacter::BeginPlay()
     WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
     WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
     WarnIfAbilityMissing(EAbilityInputID::CloneTech);
+    WarnIfAbilityMissing(EAbilityInputID::ThrowKunai);
     JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
     FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
@@ -319,7 +319,8 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
         {
             EnhancedInputComponent->BindAction(MoveScrollAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoMouseScroll);
         }
-        // 카메라 이동 중 좌클릭은 모드를 유지한 채 쿠나이를 던진다.
+
+        // 카메라 이동 중 좌클릭은 모드를 유지한 채 표창을 던진다.
         EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
 
         // Jumping
@@ -565,27 +566,31 @@ void APlayerCharacter::SetAssassinationFacing(float Yaw)
 
 void APlayerCharacter::DoThrowKunai()
 {
-    if (!CanThrowKunai() || !ASC) return;
-
-    // 새 에셋 경로를 하드코딩하지 않고 기존 BP의 시작 어빌리티 목록에서 투척 GA를 찾는다.
-    for (const FAbilityInfo& Info : AbilityClassArray)
+    if (!CanThrowKunai() || !ASC)
     {
-        if (!Info.AbilityClass || !Info.AbilityClass->IsChildOf(UGAThrowKunai::StaticClass())) continue;
-
-        // 좌클릭 입력이 Tick보다 먼저 와도 현재 커서로 조준한다.
-        UpdateCursorTarget();
-        if (bHasCursorTarget)
-        {
-            const float DirectionX = CursorWorldLocation.X - GetActorLocation().X;
-            if (FMath::Abs(DirectionX) > CursorFacingDeadZone)
-            {
-                FacingTargetYaw = DirectionX > 0.0f ? 0.0f : 180.0f;
-            }
-        }
-        SnapToFacingTarget();
-        ASC->TryActivateAbilityByClass(Info.AbilityClass);
         return;
     }
+
+    // 투척 어빌리티가 지급되지 않았으면 몸 방향도 바꾸지 않는다.
+    if (!FindAbilitySpecByInputID(EAbilityInputID::ThrowKunai))
+    {
+        return;
+    }
+
+    // 좌클릭 입력이 Tick보다 먼저 와도 현재 커서로 조준한다.
+    UpdateCursorTarget();
+    if (bHasCursorTarget)
+    {
+        const float DirectionX = CursorWorldLocation.X - GetActorLocation().X;
+        if (FMath::Abs(DirectionX) > CursorFacingDeadZone)
+        {
+            FacingTargetYaw = DirectionX > 0.0f ? 0.0f : 180.0f;
+        }
+    }
+
+    SnapToFacingTarget();
+
+    TryActivateAbilityByInputID(EAbilityInputID::ThrowKunai);
 }
 
 void APlayerCharacter::DoMove(float Forward)
@@ -652,7 +657,7 @@ void APlayerCharacter::DoInteract()
         }
     }
 
-	this->InteractComponent->TryInteract();
+    this->InteractComponent->TryInteract();
     //// Clone-tech interactables (levers, clone launch, traps) use a separate interface.
     //TArray<AActor*> Candidates;
     //InteractBox->GetOverlappingActors(Candidates);
@@ -893,46 +898,46 @@ void APlayerCharacter::DoCloneTechEnd()
 
 void APlayerCharacter::DoCloneRecall()
 {
-	if (bIsDead) return;
-	if (!IsValid(ASC)) return;
+    if (bIsDead) return;
+    if (!IsValid(ASC)) return;
 
-	/* TODO: Player 상태가 발각됐거나 전투중이면 바로 리턴하는 코드가 필요해용
-	*/
-	// 기본 어빌리티와 같은 입력 ID 규칙으로 분신 회수 대상을 찾는다.
-	FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::CloneTech);
-	// 분신이 없어지면 UGACloneTech는 EndAbility가 호출되므로 Activate 검사는 하지 않는다
-	if (!Spec)
-	{
-		return;
-	}
-	// CloneAbility 얻기
-	UGACloneTech* CloneAbility = Cast<UGACloneTech>(Spec->GetPrimaryInstance());
+    /* TODO: Player 상태가 발각됐거나 전투중이면 바로 리턴하는 코드가 필요해용
+    */
+    // 기본 어빌리티와 같은 입력 ID 규칙으로 분신 회수 대상을 찾는다.
+    FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::CloneTech);
+    // 분신이 없어지면 UGACloneTech는 EndAbility가 호출되므로 Activate 검사는 하지 않는다
+    if (!Spec)
+    {
+        return;
+    }
+    // CloneAbility 얻기
+    UGACloneTech* CloneAbility = Cast<UGACloneTech>(Spec->GetPrimaryInstance());
 
-	if (CloneAbility)
-	{
-		// Recall하기
-		CloneAbility->OnRecallClone();
-	}
+    if (CloneAbility)
+    {
+        // Recall하기
+        CloneAbility->OnRecallClone();
+    }
 }
 
 void APlayerCharacter::DoMouseScroll(const FInputActionValue& InValue)
 {
-	const float	Axis = InValue.Get<float>();
-	int32		Direction = 0;
+    const float	Axis = InValue.Get<float>();
+    int32		Direction = 0;
 
-	if (Axis < 0)
-	{
-		Direction--;
-	}
-	else if (Axis > 0)
-	{
-		Direction++;
-	}
-	this->InteractComponent->OnScrollInput(Direction);
-	//if (Axis > 0)
-	//{
-	//	this->InteractComponent->
-	//}
+    if (Axis < 0)
+    {
+        Direction--;
+    }
+    else if (Axis > 0)
+    {
+        Direction++;
+    }
+    this->InteractComponent->OnScrollInput(Direction);
+    //if (Axis > 0)
+    //{
+    //	this->InteractComponent->
+    //}
 }
 
 void APlayerCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)

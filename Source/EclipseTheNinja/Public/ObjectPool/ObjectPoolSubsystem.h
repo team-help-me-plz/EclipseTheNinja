@@ -9,7 +9,7 @@
 
 class UObjectPoolDataAsset;
 
-// 풀 액터가 반환을 마친 뒤 호출된다. 반환은 파괴가 아니라 OnDestroyed가 오지 않으므로 부착물 정리 등에 사용한다.
+// 풀 액터가 반환을 마친 뒤 호출되는 델리게이트 (부착물 정리 등에 사용)
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnPoolActorReturned, AActor*);
 
 // 클래스 하나에 대한 풀
@@ -113,7 +113,7 @@ public:
     // 액터가 속한 월드의 서브시스템으로 ReleaseActor를 호출하는 헬퍼. 서브시스템이 없으면 Destroy한다
     static void Release(AActor* InActor);
 
-    // 사용 중이던 풀 액터가 풀에 반환된 직후 브로드캐스트 (비활성화 처리까지 끝난 상태)
+    // 사용 중이던 풀 액터가 풀에 반환된 직후 비활성화 처리까지 끝난 다음 브로드캐스트할 델리게이트
     FOnPoolActorReturned OnActorReturnedToPool;
 
 protected:

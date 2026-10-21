@@ -129,11 +129,10 @@ protected:
 	// 체력 어트리뷰트가 변경되었을 때 호출될 함수
 	void OnHealthChanged(const FOnAttributeChangeData& Data);
 
-	// Damage GE의 원본 Context로 공격자를 확인한다. 체력 변경 델리게이트의 GEModData에 의존하지 않는다.
+	// 전달된 Damage GE의 원본 Context로 공격자를 확인한 뒤 감지 상태를 갱신하는 함수
 	void OnDamageReceived(const FGameplayEffectContextHandle& Context);
 
 	virtual void PlayHitReaction() override;
-
 
 	// 사망 처리용 함수
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
