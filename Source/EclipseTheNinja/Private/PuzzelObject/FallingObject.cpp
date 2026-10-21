@@ -51,6 +51,9 @@ void AFallingObject::BeginPlay()
 	if (AActor* ChildActor = this->FallingMeshAssembly->GetChildActor())
 	{
 		this->FallingBody->IgnoreActorWhenMoving(ChildActor, true);
+		// 외형은 충돌을 갖지 않는다. 충돌과 판정은 FallingBody가 담당한다
+		// (외형 메시가 Pawn을 Block하면 떨어지며 캐릭터를 파고들어 끼이게 된다)
+		ChildActor->SetActorEnableCollision(false);
 	}
 	this->FallingBody->OnComponentBeginOverlap.AddDynamic(this, &AFallingObject::OnFallingBodyBeginOverlap);
 	this->FallingBody->OnComponentEndOverlap.AddDynamic(this, &AFallingObject::OnFallingBodyEndOverlap);
@@ -71,6 +74,11 @@ void AFallingObject::Tick(float DeltaTime)
 		float	Step = FMath::Clamp(FallSpeed * DeltaTime, 0.f, Remaining);
 		FHitResult	ObjectHit;
 		this->FallingBody->AddWorldOffset(FVector(0.f, 0.f, -Step), true, &ObjectHit);
+		// 캐릭터에 붙은 컴포넌트에 막혔다면 착지로 보지 않고, 그 캐릭터를 무시한 채 계속 떨어진다
+		if (ObjectHit.bBlockingHit && this->IgnorePawnWhileFalling(ObjectHit.GetActor()))
+		{
+			return ;
+		}
 		if (ObjectHit.bBlockingHit || Remaining - Step <= KINDA_SMALL_NUMBER)
 		{
 			this->ObjectLand();
@@ -123,6 +131,7 @@ void AFallingObject::ResetToInitial_Implementation()
 	this->bIsPendingBlock = false;
 	this->FallSpeed = 0.f;
 	this->HitActors.Reset();
+	this->ClearIgnoredPawns();
 	this->FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	this->FallingBody->SetRelativeLocation(this->InitialBodyRelativeLocation);
 	this->RopeComponent->RestoreRope();
@@ -213,10 +222,23 @@ void AFallingObject::FindFallingLocation()
 	ResponseParams.CollisionResponse.SetResponse(ECC_WorldStatic, ECR_Block);
 	ResponseParams.CollisionResponse.SetResponse(ECC_WorldDynamic, ECR_Block);
 
+	// 캐릭터에 붙은 컴포넌트가 걸리면 캐릭터 머리 위가 착지 지점이 되므로, 그 캐릭터를 무시하고 다시 찾는다
+	constexpr int32	MaxRetry = 8;
 	FHitResult	ObjectHit;
-	const bool	bIsObjectHit = World->SweepSingleByChannel(
-		ObjectHit, RayOrigin, RayEnd, ObjectRot, ECC_WorldDynamic, ObjectShape, QueryParams, ResponseParams
-	);
+	bool		bIsObjectHit = false;
+	for (int32 Retry = 0; Retry < MaxRetry; ++Retry)
+	{
+		bIsObjectHit = World->SweepSingleByChannel(
+			ObjectHit, RayOrigin, RayEnd, ObjectRot, ECC_WorldDynamic, ObjectShape, QueryParams, ResponseParams
+		);
+		APawn*	HitPawn = bIsObjectHit ? Cast<APawn>(ObjectHit.GetActor()) : nullptr;
+		if (!HitPawn)
+		{
+			break ;
+		}
+		QueryParams.AddIgnoredActor(HitPawn);
+		bIsObjectHit = false;
+	}
 	this->FallingLocation = (bIsObjectHit && !ObjectHit.bStartPenetrating) ? ObjectHit.Location : RayEnd;
 }
 
@@ -246,7 +268,32 @@ void AFallingObject::ObjectLand()
 	this->bIsLanded = true;
 	this->FallSpeed = 0.f;
 	//SetActorTickEnabled(false);
+	this->ClearIgnoredPawns();
 	this->TryBlockPawn();
+}
+
+bool AFallingObject::IgnorePawnWhileFalling(AActor* InActor)
+{
+	APawn*	HitPawn = Cast<APawn>(InActor);
+	if (!HitPawn)
+	{
+		return false;
+	}
+	this->FallingBody->IgnoreActorWhenMoving(HitPawn, true);
+	this->IgnoredPawns.Add(HitPawn);
+	return true;
+}
+
+void AFallingObject::ClearIgnoredPawns()
+{
+	for (const TWeakObjectPtr<APawn>& IgnoredPawn : this->IgnoredPawns)
+	{
+		if (IgnoredPawn.IsValid())
+		{
+			this->FallingBody->IgnoreActorWhenMoving(IgnoredPawn.Get(), false);
+		}
+	}
+	this->IgnoredPawns.Reset();
 }
 
 void AFallingObject::TryBlockPawn()

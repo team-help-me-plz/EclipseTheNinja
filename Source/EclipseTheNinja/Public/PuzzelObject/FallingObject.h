@@ -57,6 +57,10 @@ protected:
 	// 착지 후 Pawn을 Block으로 전환한다. 아래에 Pawn이 남아 있으면 모두 빠져나갈 때까지 미룬다
 	void	TryBlockPawn();
 
+	// 낙하 중 캐릭터의 컴포넌트에 막히면 그 캐릭터를 무시하고 계속 떨어지게 한다. 캐릭터였으면 true
+	bool	IgnorePawnWhileFalling(AActor* InActor);
+	void	ClearIgnoredPawns();
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TObjectPtr<USceneComponent>		RootScene = nullptr;
 
@@ -107,4 +111,7 @@ private:
 
 	// 이번 낙하에서 이미 데미지를 받은 대상
 	TSet<TWeakObjectPtr<AActor>>	HitActors;
+
+	// 낙하 중 이동 Sweep에서 무시하고 있는 캐릭터
+	TArray<TWeakObjectPtr<APawn>>	IgnoredPawns;
 };
