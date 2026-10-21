@@ -42,6 +42,8 @@ public:
 	virtual EInteractState	GetInteractState_Implementation() override;
 
 protected:
+	virtual void	ResetInteractionCooldown();
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<USceneComponent>			RootScene = nullptr;
 
@@ -54,9 +56,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
 
-	//UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	//TObjectPtr<USphereComponent>	InteractSphere = nullptr;
-
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|Target")
 	TObjectPtr<AActor>			TargetActor = nullptr;
 
@@ -64,19 +63,19 @@ protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|State")
 	bool	bIsReinteractable = false;
 	
-	//// 디폴트 맵의 Y축 중앙이 300임을 이용(700.f~1300.f)해 500.f로 일단 설정함
-	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Radius")
-	//float	InteractRadius = 500.f;
-
-private:
-	void	ResetInteractionCooldown();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact|Cooldown", meta = (ClampMin = "0.05"))
+	float	InteractInterval = 0.5f;
 
 	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신
 	void	RefreshInteractState();
 	void	RefreshHighlight();
 
+	FTimerHandle	InteractionCooldownTimer;
+	bool			bIsInteractCooldown = false;
 	// Interact 함수가 한 번이라도 불렸는가
-	bool	bIsInteracted = false;
+	bool			bIsInteracted = false;
+
+private:
 
 	EInteractState	InteractState = EInteractState::Ready;
 	// 선택(강조)을 요청한 수. InteractBox 선택, 발판 강조, 분신 조준 커서가 각각 Show/Hide를 짝지어 호출한다
@@ -84,7 +83,4 @@ private:
 	// TargetActor의 Activate 테두리를 켜 둔 상태인가 (Show/Hide를 짝지어 호출하기 위함)
 	bool			bIsShowingTargetIndicator = false;
 
-	FTimerHandle	InteractionCooldownTimer;
-	bool			bIsInteractCooldown = false;
-	float			InteractInterval = 0.5f;
 };
