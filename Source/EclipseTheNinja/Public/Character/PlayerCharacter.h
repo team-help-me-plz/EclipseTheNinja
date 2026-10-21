@@ -170,6 +170,7 @@ public:
 
 	UAssassinationTargetingComponent* GetAssassinationTargetingComponent() const { return AssassinateTargetingComponent; }
 	bool IsAssassinating() const;
+	bool IsWallAttached() const;
 	void SetAssassinationFacing(float Yaw);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cursor Look")

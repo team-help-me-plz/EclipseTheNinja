@@ -21,6 +21,7 @@
 #include "Component/AssassinationTargetingComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/Ability/GABaseAttack.h"
+#include "GAS/Ability/GAWallAttach.h"
 #include "GAS/StatAttributeSet.h"
 #include "NativeGameplayTags.h"
 
@@ -37,6 +38,8 @@ UGAAssassinateBase::UGAAssassinateBase()
 	ActivationOwnedTags.AddTag(UGABaseAttack::GetAttackingTag());
 	ActivationBlockedTags.AddTag(TAG_Assassinating);
 	ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
+	// 벽에 매달린 상태에서 시작하면 매달리기를 먼저 끝낸다 (ActivateAbility 전에 취소된다)
+	CancelAbilitiesWithTag.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
 }
 
 FGameplayTag UGAAssassinateBase::GetAssassinatingTag()
@@ -156,6 +159,15 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	PlayerCustomMode = PlayerMovement->CustomMovementMode;
 	PlayerMovement->StopMovementImmediately();
 	Player->StopJumping();
+
+	// 공중에서 시작하는 경우는 벽에 매달려 있던 경우뿐이다 (매달리기가 취소되며 Falling이 된다).
+	// 준비 동작 동안 떨어지지 않게 그 자리에 고정하고, 끝나면 낙하 상태로 돌려 바닥을 다시 찾게 한다.
+	if (PlayerMovement->IsFalling())
+	{
+		PlayerMovementMode = MOVE_Falling;
+		PlayerCustomMode = 0;
+		PlayerMovement->SetMovementMode(MOVE_Flying);
+	}
 
 	// 둘 다 움직임 멈춤
 	UCharacterMovementComponent* EnemyMovement = Enemy->GetCharacterMovement();

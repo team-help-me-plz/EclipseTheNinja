@@ -9,8 +9,8 @@
 bool UGABelowAssassinate::CanAssassinateTarget(const APlayerCharacter* Player,
 	const UAssassinateTargetComponent* Target, const AEnemy* Enemy) const
 {
-	// 적이 선 발판보다 낮은 바닥에 서 있을 때만 올라간다. 높이·모서리·경로는 대상 컴포넌트가 확인한다.
-	if (!Player->GetCharacterMovement()->IsMovingOnGround()) return false;
+	// 적이 선 발판보다 낮은 바닥에 서 있거나 발판 옆 벽에 매달려 있을 때만 올라간다. 높이·모서리·경로는 대상 컴포넌트가 확인한다.
+	if (!Player->GetCharacterMovement()->IsMovingOnGround() && !Player->IsWallAttached()) return false;
 	return Target->IsBelowApproachClear(Player);
 }
 

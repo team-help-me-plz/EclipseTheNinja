@@ -77,9 +77,10 @@ public:
 	 * 지금 위치의 암살자에게 이 적을 어떤 방식으로 암살할 수 있는지 돌려준다(평지 > 공중 > 아래 순서로 확인).
 	 * 적의 경계 상태와 암살자의 이동 상태는 보지 않는다. 타겟 선정과 테스트 맵 검증이 같은 판정을 쓴다.
 	 * @param bCheckZone true면 암살 영역(박스) 안에 있는지도 확인한다. 게임에서는 영역 진입 이벤트로 이미 걸러진다.
+	 * @param bAllowGround false면 평지 암살은 확인하지 않는다. 벽에 매달린 상태처럼 걸어서 다가갈 수 없을 때 쓴다.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Assassinate")
-	EAssassinationType EvaluateAssassinationType(ACharacter* Assassin, bool bCheckZone) const;
+	EAssassinationType EvaluateAssassinationType(ACharacter* Assassin, bool bCheckZone, bool bAllowGround = true) const;
 
 	/** 암살자 캡슐이 암살 영역(박스)과 겹치는지 위치로 확인한다. 겹침 이벤트가 없는 에디터 월드 검증용이다. */
 	bool IsAssassinInZone(const ACharacter* Assassin) const;

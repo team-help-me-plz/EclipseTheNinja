@@ -560,6 +560,12 @@ bool APlayerCharacter::IsAssassinating() const
 	return ASC->HasMatchingGameplayTag(UGAAssassinate::GetAssassinatingTag());
 }
 
+bool APlayerCharacter::IsWallAttached() const
+{
+	if (!IsValid(ASC)) return false;
+	return ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag());
+}
+
 void APlayerCharacter::SetAssassinationFacing(float Yaw)
 {
 	SetCursorFacingActive(false);
@@ -827,10 +833,15 @@ void APlayerCharacter::MultiJump()
 
 	if (IsValid(ASC))
 	{
-		if (ASC->TryActivateAbility(FindAbilitySpecByInputID(EAbilityInputID::WallAttach)->Handle))
+		// 매달리기가 부여되지 않았으면 기존 코요테 점프 검사를 이어간다.
+		FGameplayAbilitySpec* WallAttachSpec = FindAbilitySpecByInputID(EAbilityInputID::WallAttach);
+		if (WallAttachSpec)
 		{
-			bCanCoyoteJump = false;
-			return;
+			if (ASC->TryActivateAbility(WallAttachSpec->Handle))
+			{
+				bCanCoyoteJump = false;
+				return;
+			}
 		}
 	}
 

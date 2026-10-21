@@ -14,8 +14,8 @@
 bool UGAAerialAssassinate::CanAssassinateTarget(const APlayerCharacter* Player,
 	const UAssassinateTargetComponent* Target, const AEnemy* Enemy) const
 {
-	// 적보다 높은 발판 위에 서 있을 때만 뛰어내린다. 높이 조건은 IsAerialApproachClear가 확인한다.
-	if (!Player->GetCharacterMovement()->IsMovingOnGround()) return false;
+	// 적보다 높은 발판 위에 서 있거나 벽에 매달려 있을 때만 뛰어내린다. 높이 조건은 IsAerialApproachClear가 확인한다.
+	if (!Player->GetCharacterMovement()->IsMovingOnGround() && !Player->IsWallAttached()) return false;
 	return Target->IsAerialApproachClear(Player);
 }
 
