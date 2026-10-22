@@ -6,7 +6,9 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "TimerManager.h"
+#include "Widgets/GameEndCountdownWidget.h"
 
 ALevelClearTrigger::ALevelClearTrigger()
 {
@@ -29,6 +31,18 @@ void ALevelClearTrigger::BeginPlay()
     Super::BeginPlay();
 
     this->ClearTrigger->OnComponentBeginOverlap.AddDynamic(this, &ALevelClearTrigger::OnTriggerBeginOverlap);
+}
+
+void ALevelClearTrigger::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    // 카운트다운 도중 월드가 내려가면 티커가 남지 않도록 해제
+    if (this->QuitTickerHandle.IsValid())
+    {
+        FTSTicker::GetCoreTicker().RemoveTicker(this->QuitTickerHandle);
+        this->QuitTickerHandle.Reset();
+    }
+
+    Super::EndPlay(EndPlayReason);
 }
 
 void ALevelClearTrigger::OnTriggerBeginOverlap(
@@ -58,10 +72,12 @@ void ALevelClearTrigger::ClearLevel()
     this->bIsCleared = true;
 
     UE_LOG(LogTemp, Log, TEXT("[ALevelClearTrigger::ClearLevel()] 레벨 클리어 : %s -> %s"),
-        *UGameplayStatics::GetCurrentLevelName(this), *this->NextLevel.ToString());
+        *UGameplayStatics::GetCurrentLevelName(this),
+        this->bQuitGameOnClear ? TEXT("게임 종료") : *this->NextLevel.ToString());
 
     // 이동 대기 중 플레이어가 움직이지 않도록 입력 차단
-    if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0))
+    APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+    if (PlayerController)
     {
         if (APawn* PlayerPawn = PlayerController->GetPawn())
         {
@@ -70,6 +86,12 @@ void ALevelClearTrigger::ClearLevel()
     }
 
     this->OnLevelCleared.Broadcast();
+
+    if (this->bQuitGameOnClear)
+    {
+        StartQuitCountdown(PlayerController);
+        return;
+    }
 
     if (this->NextLevel.IsNull())
     {
@@ -91,4 +113,71 @@ void ALevelClearTrigger::ClearLevel()
 void ALevelClearTrigger::TravelToNextLevel()
 {
     UGameplayStatics::OpenLevelBySoftObjectPtr(this, this->NextLevel);
+}
+
+void ALevelClearTrigger::StartQuitCountdown(APlayerController* PlayerController)
+{
+    this->RemainingQuitSeconds = this->QuitCountdownSeconds;
+
+    // 안내 메시지와 남은 초를 화면 중앙에 표시
+    if (PlayerController)
+    {
+        this->CountdownWidget = CreateWidget<UGameEndCountdownWidget>(
+            PlayerController,
+            UGameEndCountdownWidget::StaticClass()
+        );
+    }
+
+    if (this->CountdownWidget)
+    {
+        this->CountdownWidget->SetMessage(FText::Format(this->QuitMessageFormat, this->QuitCountdownSeconds));
+        this->CountdownWidget->SetCount(this->RemainingQuitSeconds);
+        this->CountdownWidget->AddToViewport(100);
+    }
+
+    // 카운트다운 동안 적·함정 등 월드가 멈추도록 일시정지
+    if (this->bPauseGameOnQuitCountdown)
+    {
+        UGameplayStatics::SetGamePaused(this, true);
+    }
+
+    // 일시정지 중에는 월드 타이머가 멈추므로 실제 시간 기준인 코어 티커로 1초마다 센다
+    this->QuitTickerHandle = FTSTicker::GetCoreTicker().AddTicker(
+        FTickerDelegate::CreateUObject(this, &ALevelClearTrigger::TickQuitCountdown),
+        1.0f
+    );
+}
+
+bool ALevelClearTrigger::TickQuitCountdown(float DeltaTime)
+{
+    --this->RemainingQuitSeconds;
+
+    if (this->RemainingQuitSeconds <= 0)
+    {
+        this->QuitTickerHandle.Reset();
+        QuitGame();
+
+        // false를 반환하면 티커가 제거된다
+        return false;
+    }
+
+    if (this->CountdownWidget)
+    {
+        this->CountdownWidget->SetCount(this->RemainingQuitSeconds);
+    }
+
+    return true;
+}
+
+void ALevelClearTrigger::QuitGame()
+{
+    UE_LOG(LogTemp, Log, TEXT("[ALevelClearTrigger::QuitGame()] 카운트다운 종료, 게임을 종료합니다."));
+
+    // PIE에서는 플레이 세션이 끝나고, 패키징 빌드에서는 프로그램이 종료된다
+    UKismetSystemLibrary::QuitGame(
+        this,
+        UGameplayStatics::GetPlayerController(this, 0),
+        EQuitPreference::Quit,
+        false
+    );
 }
