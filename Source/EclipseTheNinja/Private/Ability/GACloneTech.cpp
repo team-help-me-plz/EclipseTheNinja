@@ -16,6 +16,33 @@
 #include "CollisionShape.h"
 #include "AbilitySystemComponent.h"
 
+namespace
+{
+	// 사이드뷰 평면(Y 고정)을 유지한 채 겹침을 X/Z 방향으로만 보정한다
+	bool	FindTeleportSpotOnPlane(UWorld* World, const AActor* TestActor,
+		FVector& InOutLocation, const FRotator& Rotation, int32 MaxIterations = 4)
+	{
+		const double	PlaneY = InOutLocation.Y;
+
+		for (int32 i = 0; i < MaxIterations; ++i)
+		{
+			FVector	Adjustment = FVector::ZeroVector;
+			if (!World->EncroachingBlockingGeometry(TestActor, InOutLocation, Rotation, &Adjustment))
+			{
+				return (true);
+			}
+			Adjustment.Y = 0.0;
+			if (Adjustment.IsNearlyZero())
+			{
+				return (false);
+			}
+			InOutLocation += Adjustment;
+			InOutLocation.Y = PlaneY;
+		}
+		return (!World->EncroachingBlockingGeometry(TestActor, InOutLocation, Rotation));
+	}
+}
+
 UGACloneTech::UGACloneTech()
 {
 	this->InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -156,12 +183,6 @@ void UGACloneTech::HandleTargetAccepted(const FCloneCommandType& InCommand)
 		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, true);
 		return ;
 	}
-	if (!CommitAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo))
-	{
-		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, true);
-		return ;
-	}
-
 	const bool		bIsRightDir = InCommand.TargetLocation.X - Character->GetActorLocation().X > 0.0f;
 	const FVector	CloneDir = bIsRightDir ? FVector::XAxisVector : -FVector::XAxisVector;
 	const FVector	ClonePos = Character->GetActorLocation() + this->CloneDist * CloneDir;
@@ -170,10 +191,17 @@ void UGACloneTech::HandleTargetAccepted(const FCloneCommandType& InCommand)
 	// 기존 AdjustIfPossibleButDontSpawnIfColliding 스폰과 동일하게, 겹치면 위치를 보정하고 보정할 수 없으면 생성하지 않는다
 	// (풀에서 꺼낸 액터는 텔레포트로 배치되므로 직접 검사)
 	FVector	SpawnPos = ClonePos;
-	if (!GetWorld()->FindTeleportSpot(this->CloneClass->GetDefaultObject<ACloneCharacter>(), SpawnPos, CloneRotate))
+	if (!FindTeleportSpotOnPlane(GetWorld(), this->CloneClass->GetDefaultObject<ACloneCharacter>(), SpawnPos, CloneRotate))
 	{
+		UUIMessageSubsystem::ShowMessage(GetCurrentActorInfo()->PlayerController.Get(), this->CannotSpawnText);
 		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, true);
 		return ;
+	}
+
+	if (!CommitAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo))
+	{
+		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, true);
+		return;
 	}
 
 	// 분신 풀이 등록되어 있지 않으면 일반 스폰된다
@@ -299,6 +327,7 @@ void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle,
 	this->bIsSwaped = true;
 	Character->SetActorLocation(this->SpawnedClone->GetActorLocation());
 	this->SpawnedClone->SetActorLocation(PlayerLocation);
+	this->SpawnedClone->StopCloneMovement();
 	this->OnCloneCannotSwap.Broadcast();
 }
 

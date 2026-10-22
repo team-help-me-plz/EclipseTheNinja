@@ -51,6 +51,8 @@ public:
 	// 수명이 끝나면 Destroy 대신 풀에 반환 (풀이 등록되지 않았으면 Destroy)
 	virtual void	LifeSpanExpired() override;
 
+	void	StopCloneMovement();
+
 	// 오브젝트 풀: 스폰 위치 기준 이동 상태 초기화 / 명령, 쿨다운, 안전 지점 정리
 	virtual void	OnSpawnFromPool_Implementation() override;
 	virtual void	OnReturnToPool_Implementation() override;
@@ -69,7 +71,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Move")
+	float	TurnPauseTime = 0.2f;
+
 private:
+	float	TurnPauseRemaining = 0.f;
 	void	ResetInteractionCooldown();
 
 	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신
