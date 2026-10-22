@@ -40,10 +40,23 @@ void AArrowTrapActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	this->bIsFire = this->bIsStartFire;
+
 	// 이 함정이 쓸 화살을 미리 생성하도록 요청 (화살 풀이 등록되어 있을 때만 적용, 함정 수만큼 합산됨)
 	if (UObjectPoolSubsystem* PoolSubsystem = GetWorld()->GetSubsystem<UObjectPoolSubsystem>())
 	{
 		PoolSubsystem->RequestWarmupByClass(this->ArrowClass, this->ArrowWarmupCount);
+	}
+	if (this->bIsFire)
+	{
+		GetWorldTimerManager().SetTimer(
+			this->AutoFireTimer,
+			this,
+			&AArrowTrapActor::SpawnArrow,
+			this->FireInterval,
+			true,
+			0.f
+		);
 	}
 }
 
@@ -68,7 +81,29 @@ void AArrowTrapActor::ToggleActivate_Implementation()
 		this->ActivateInterval,
 		false
 	);
-	this->SpawnArrow();
+	if (this->bIsAutoFire)
+	{
+		if (this->bIsFire)
+		{
+			GetWorldTimerManager().ClearTimer(this->AutoFireTimer);
+		}
+		else
+		{
+			GetWorldTimerManager().SetTimer(
+				this->AutoFireTimer,
+				this,
+				&AArrowTrapActor::SpawnArrow,
+				this->FireInterval,
+				true,
+				0.f
+			);
+		}
+	}
+	else
+	{
+		this->SpawnArrow();
+	}
+	this->bIsFire = !this->bIsFire;
 }
 
 void AArrowTrapActor::ShowActivationIndicator_Implementation()

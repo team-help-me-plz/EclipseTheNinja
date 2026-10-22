@@ -34,14 +34,13 @@ ATrapArrowActor::ATrapArrowActor()
 	this->ProjectileMovement->ProjectileGravityScale = 0.f;
 	this->ProjectileMovement->bRotationFollowsVelocity = true;
 	this->ProjectileMovement->bShouldBounce = false;
-
 }
 
 // Called when the game starts or when spawned
 void ATrapArrowActor::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	//PostInitializeComponents();
 }
 
@@ -71,6 +70,11 @@ void ATrapArrowActor::PostInitializeComponents()
 	this->SphereCollision->OnComponentBeginOverlap.AddDynamic(this, &ATrapArrowActor::OnArrowBeginOverlap);
 }
 
+void ATrapArrowActor::LifeSpanExpired()
+{
+	UObjectPoolSubsystem::Release(this);
+}
+
 // Called every frame
 void ATrapArrowActor::Tick(float DeltaTime)
 {
@@ -82,6 +86,8 @@ void ATrapArrowActor::SetLaunch(float InVelocity)
 {
 	this->ProjectileMovement->MaxSpeed = InVelocity;
 	this->ProjectileMovement->SetVelocityInLocalSpace(FVector(InVelocity, 0.f, 0.f));
+
+	SetLifeSpan(Lifetime);
 }
 
 void ATrapArrowActor::OnSpawnFromPool_Implementation()

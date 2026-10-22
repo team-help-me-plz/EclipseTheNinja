@@ -70,11 +70,25 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap|ObjectPool", meta = (ClampMin = "0"))
 	int32								ArrowWarmupCount = 5;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap", meta = (ClampMin = "0"))
+	float			ActivateInterval = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap", meta = (ClampMin = "0"))
+	float			FireInterval = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap")
+	bool	bIsAutoFire = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap")
+	bool	bIsStartFire = false;
+
 private:
 	void	ResetActivateCooldown();
 
+	bool	bIsFire = false;
+
 	FTimerHandle	ActivateCooldownTimer;
 	bool			bIsActivateCooldown = false;
-	float			ActivateInterval = 0.5f;
 
+	FTimerHandle	AutoFireTimer;
 };

@@ -34,6 +34,7 @@ protected:
 		const FHitResult& SweepResult);
 
 	virtual void PostInitializeComponents() override;
+	virtual void LifeSpanExpired() override;
 
 public:	
 	// Called every frame
@@ -54,5 +55,8 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	TObjectPtr<UProjectileMovementComponent>	ProjectileMovement = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile")
+	float Lifetime = 3.0f;
 
 };
