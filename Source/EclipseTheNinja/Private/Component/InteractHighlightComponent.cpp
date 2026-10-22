@@ -19,11 +19,11 @@ UInteractHighlightComponent::UInteractHighlightComponent()
 
 	// 모든 상호작용 액터가 같은 테두리를 쓰도록 기본 MI를 지정한다 (Blueprint에서 덮어쓸 수 있음)
 	static ConstructorHelpers::FObjectFinder<UMaterialInstance> DefaultMI(
-		TEXT("/Game/Blueprint/Week_2/InteractSelect/MI_InteractOutline_Default.MI_InteractOutline_Default"));
+		TEXT("/Game/Materials/InteractSelect/MI_InteractOutline_Default.MI_InteractOutline_Default"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInstance> SelectedMI(
-		TEXT("/Game/Blueprint/Week_2/InteractSelect/MI_InteractOutline_Selected.MI_InteractOutline_Selected"));
+		TEXT("/Game/Materials/InteractSelect/MI_InteractOutline_Selected.MI_InteractOutline_Selected"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInstance> CooldownMI(
-		TEXT("/Game/Blueprint/Week_2/InteractSelect/MI_InteractOutline_CooldownSelected.MI_InteractOutline_CooldownSelected"));
+		TEXT("/Game/Materials/InteractSelect/MI_InteractOutline_CooldownSelected.MI_InteractOutline_CooldownSelected"));
 
 	if (DefaultMI.Succeeded())
 	{
