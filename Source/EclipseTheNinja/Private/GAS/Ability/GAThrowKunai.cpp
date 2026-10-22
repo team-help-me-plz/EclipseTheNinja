@@ -198,6 +198,14 @@ void UGAThrowKunai::OnKunaiReleased(FGameplayEventData Payload)
             QueryParams.AddIgnoredActor(*It);
         }
     }
+    else if (Character->IsA<AEnemy>())
+    {
+        // 겹쳐 있거나 손 앞에 서 있는 아군도 비행 중과 동일하게 통과한다.
+        for (TActorIterator<AEnemy> It(Character->GetWorld()); It; ++It)
+        {
+            QueryParams.AddIgnoredActor(*It);
+        }
+    }
 
     // 손/오프셋이 벽 너머에 있으면 벽을 건너뛰어 발사하지 않는다.
     // 몸과 손 사이에 캐릭터(Pawn)가 있으면 취소하지 않고, 아래에서 생성 직후 명중으로 처리한다.

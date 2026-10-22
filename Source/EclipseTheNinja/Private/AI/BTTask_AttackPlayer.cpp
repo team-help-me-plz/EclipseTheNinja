@@ -63,10 +63,21 @@ EBTNodeResult::Type UBTTask_AttackPlayer::UpdateAttack(UBehaviorTreeComponent& O
 
     if (!Pawn->IsReadyForAI()) return EBTNodeResult::InProgress;
 
+    // 공격 중 이동 고정 여부는 적의 전투 정책을 따른다.
+    // 이 처리를 아래 거리/시야/대상 변경 검사보다 먼저 수행해야, 투척 도중 대상이 이동해도 몽타주를 마칠 수 있다.
+    // Blackboard Decorator에 의한 중단은 감지 컴포넌트의 전투 키 유지 처리와 함께 방지한다.
+    if (bAttackStarted && Pawn->ShouldLockMovementDuringAttack())
+    {
+        Pawn->StopHorizontalMovement();
+        if (Pawn->IsPlayingHitReaction()) return EBTNodeResult::Failed;
+        if (Pawn->GetWorld()->GetTimeSeconds() - AttackStartedAt >= AttackTimeout) return EBTNodeResult::Failed;
+        return Pawn->IsAttackActive() ? EBTNodeResult::InProgress : EBTNodeResult::Succeeded;
+    }
+
     // 시야를 잃거나 공격 거리에서 벗어나거나 피격되면 공격 태스크를 끝낸다.
     AActor* Target = Cast<AActor>(BB->GetValueAsObject(TargetKey.SelectedKeyName));
     if (!BB->GetValueAsBool(SightKey.SelectedKeyName)) return EBTNodeResult::Failed;
-    if (!Pawn->IsWithinAttackRange(Target)) return EBTNodeResult::Failed;
+    if (!Pawn->CanStartAIAttack(Target)) return EBTNodeResult::Failed;
     if (Pawn->IsPlayingHitReaction()) return EBTNodeResult::Failed;
 
     Pawn->StopHorizontalMovement();

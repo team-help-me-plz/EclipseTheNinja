@@ -77,12 +77,23 @@ void AKunaiProjectile::InitializeKunai(
     {
         for (TActorIterator<ACloneCharacter> It(GetWorld()); It; ++It)
         {
-            IgnoreFriendlyClone(*It);
+            IgnoreFriendlyActor(*It);
         }
-
-        ActorSpawnedHandle = GetWorld()->AddOnActorSpawnedHandler(
-            FOnActorSpawned::FDelegate::CreateUObject(this, &AKunaiProjectile::IgnoreFriendlyClone));
     }
+    else if (bEnemyThrow)
+    {
+        for (TActorIterator<AEnemy> It(GetWorld()); It; ++It)
+        {
+            IgnoreFriendlyActor(*It);
+        }
+    }
+    // 진영과 무관하게 표창끼리는 충돌하지 않는다. 풀에 대기 중인 표창도 포함한다.
+    for (TActorIterator<AKunaiProjectile> It(GetWorld()); It; ++It)
+    {
+        IgnoreFriendlyActor(*It);
+    }
+    ActorSpawnedHandle = GetWorld()->AddOnActorSpawnedHandler(
+        FOnActorSpawned::FDelegate::CreateUObject(this, &AKunaiProjectile::IgnoreFriendlyActor));
 
     SetLifeSpan(FMath::Max(0.1f, Lifetime));
 
@@ -94,7 +105,7 @@ void AKunaiProjectile::InitializeKunai(
 
 void AKunaiProjectile::IgnoreActorCollision(AActor* InActor)
 {
-    if (!IsValid(InActor))
+    if (!IsValid(InActor) || InActor == this)
     {
         return;
     }
@@ -118,11 +129,13 @@ void AKunaiProjectile::IgnoreThrowerCollision()
     IgnoreActorCollision(GetInstigator());
 }
 
-void AKunaiProjectile::IgnoreFriendlyClone(AActor* InClone)
+void AKunaiProjectile::IgnoreFriendlyActor(AActor* InActor)
 {
-    if (bPlayerThrow && IsValid(InClone) && InClone->IsA<ACloneCharacter>())
+    if (IsValid(InActor) && (InActor->IsA<AKunaiProjectile>()
+        || (bPlayerThrow && InActor->IsA<ACloneCharacter>())
+        || (bEnemyThrow && InActor->IsA<AEnemy>())))
     {
-        IgnoreActorCollision(InClone);
+        IgnoreActorCollision(InActor);
     }
 }
 
@@ -138,6 +151,13 @@ bool AKunaiProjectile::SweepLaunchPath(
     const FCollisionQueryParams& QueryParams,
     FHitResult& OutHit) const
 {
+    if (!World) return false;
+    FCollisionQueryParams LaunchParams(QueryParams);
+    // 비행 중뿐 아니라 손 앞에 다른 진영의 표창이 있는 경우에도 발사를 막지 않는다.
+    for (TActorIterator<AKunaiProjectile> It(World); It; ++It)
+    {
+        LaunchParams.AddIgnoredActor(*It);
+    }
     return World && World->SweepSingleByChannel(
         OutHit,
         Start,
@@ -145,7 +165,7 @@ bool AKunaiProjectile::SweepLaunchPath(
         FQuat::Identity,
         Collision->GetCollisionObjectType(),
         FCollisionShape::MakeSphere(FMath::Max(1.0f, GetCollisionRadius())),
-        QueryParams,
+        LaunchParams,
         FCollisionResponseParams(Collision->GetCollisionResponseToChannels())
     );
 }

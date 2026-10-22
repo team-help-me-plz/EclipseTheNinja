@@ -73,8 +73,41 @@ public:
 	UFUNCTION(BlueprintPure, Category = "AI|Target")
 	bool IsValidAITarget(AActor* Target) const;
 
+	/**
+	 * 적 종류가 정의한 거리 조건을 검사한다. 기본 근접 적은 AttackDistance 이내의 3차원 거리로 판단한다.
+	 * 파생 클래스는 이 조건을 이동의 목표 구간으로 재정의할 수 있으므로, BT의 공격 전환은 CanStartAIAttack을 사용한다.
+	 */
 	UFUNCTION(BlueprintPure, Category = "AI|Combat")
-	bool IsWithinAttackRange(AActor* Target) const;
+	virtual bool IsWithinAttackRange(AActor* Target) const;
+
+	/**
+	 * Chase/Attack 태스크와 감지 컴포넌트가 공유하는 공격 분기 진입 조건. 상태를 바꾸거나 공격을 실행하지 않는다.
+	 * 기본 근접 적은 공격 거리만 검사하고 실제 쿨타임은 TryStartAIBaseAttack에서 검사한다.
+	 * 원거리처럼 쿨타임 중에도 이동해야 하는 적은 이 함수를 재정의해 준비가 끝날 때까지 이동 분기를 유지한다.
+	 * true여도 실제 GAS 활성화는 실패할 수 있으며, 시작 성공 여부는 TryStartAIBaseAttack의 반환값으로 확인한다.
+	 */
+	virtual bool CanStartAIAttack(AActor* Target) const;
+
+	/**
+	 * Chase 태스크에서 공격 분기로 넘어갈 수 없을 때 호출하는 전투 이동 처리.
+	 * 기본 구현은 ChaseSpeed로 대상의 X좌표를 향해 이동한다. 파생 클래스는 후퇴·거리 유지 등으로 재정의할 수 있다.
+	 * 태스크 최초 실행에서는 DeltaSeconds가 0일 수 있으므로 이동량 계산 시 이를 고려해야 한다.
+	 */
+	virtual void UpdateCombatMovement(AActor* Target, float DeltaSeconds);
+
+	/**
+	 * Combat 경계 단계에서 대상을 계속 관측할 반경(cm). 감지 컴포넌트가 레이캐스트 검사에 사용한다.
+	 * 기본 근접 적은 현재 안쪽 발각 반경을 반환한다. 파생 클래스는 다른 반경을 선택할 수 있다.
+	 * 최초 발견 과정과 장애물 검사는 감지 컴포넌트가 담당한다.
+	 */
+	virtual float GetCombatSightRadius() const;
+
+	/**
+	 * 이미 시작한 공격을 이동 없이 끝까지 기다릴지 결정하는 정책. 기본 근접 적은 false다.
+	 * true인 적은 Attack 태스크의 거리/대상 변경 검사를 보류하고, 감지 컴포넌트가 전투 분기 키를 유지한다.
+	 * 공격을 새로 시작하는 함수는 아니며 피격·사망·타임아웃에 의한 중단까지 막지는 않는다.
+	 */
+	virtual bool ShouldLockMovementDuringAttack() const { return false; }
 
 	UFUNCTION(BlueprintPure, Category = "AI|Movement")
 	float GetAIChaseSpeed() const { return ChaseSpeed; }
@@ -109,6 +142,25 @@ public:
 	virtual void OnReturnToPool_Implementation() override;
 
 protected:
+	/**
+	 * 공통 공격 실행부가 어빌리티 활성화·실행 중 판정·취소에 사용할 입력 ID. 기본값은 BasicAttack이다.
+	 * 파생 클래스가 변경하면 Blueprint의 AbilityClassArray에도 같은 ID로 어빌리티를 지정해야 한다.
+	 */
+	virtual EAbilityInputID GetAIAttackInputID() const { return EAbilityInputID::BasicAttack; }
+
+	/**
+	 * 공격 시작 사이의 최소 간격(초). 기본 근접 적은 AttackInterval을 사용한다.
+	 * TryStartAIBaseAttack이 활성화에 성공했을 때 NextAttackTime을 갱신하며, 실행 실패 시에는 갱신하지 않는다.
+	 */
+	virtual float GetAIAttackCooldown() const { return AttackInterval; }
+
+	/**
+	 * 거리·피격·쿨타임 등 공통 검사를 통과한 뒤 TryStartAIBaseAttack이 호출하는 실제 어빌리티 활성화 지점.
+	 * 기본 구현은 BasicAttackMontage가 지정된 경우 선택한 입력 ID의 어빌리티를 활성화한다.
+	 * 다른 공격 형태는 이 함수와 입력 ID를 재정의한다. 몽타주 완료 대기는 BT/GAS가 별도로 담당한다.
+	 */
+	virtual bool ActivateAIAttack();
+
 	// Called when the game starts or when spawned
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> PendingAssassinationMontage;
@@ -202,8 +254,6 @@ protected:
 	/** 공격 시작 사이의 간격(초). 진행 중인 공격은 유지한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Combat", meta = (ClampMin = "0.1", Units = "s"))
 	float AttackInterval = 3.f;
-
-
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI")
 	EEnemyBehaviorState BehaviorState = EEnemyBehaviorState::Patrol;

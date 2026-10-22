@@ -434,7 +434,7 @@ AActor* AEnemy::GetCombatTarget() const
 
 bool AEnemy::IsAttackActive() const
 {
-	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack);
+	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(GetAIAttackInputID());
 	return Spec && Spec->IsActive();
 }
 
@@ -486,10 +486,7 @@ void AEnemy::SetBehaviorState(EEnemyBehaviorState NewState)
 	if (NewState == EEnemyBehaviorState::Idle || NewState == EEnemyBehaviorState::Patrol)
 	{
 		// Cancel attack before losing its tracked target. EndAbility clears montage tasks/tags.
-		if (const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack))
-		{
-			ASC->CancelAbilityHandle(Spec->Handle);
-		}
+		CancelAIBaseAttack();
 	}
 	BehaviorState = NewState;
 	StopHorizontalMovement();
@@ -534,6 +531,27 @@ bool AEnemy::IsWithinAttackRange(AActor* Target) const
 		&& FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) <= FMath::Square(FMath::Max(1.0f, AttackDistance));
 }
 
+bool AEnemy::CanStartAIAttack(AActor* Target) const
+{
+	return IsWithinAttackRange(Target);
+}
+
+void AEnemy::UpdateCombatMovement(AActor* Target, float DeltaSeconds)
+{
+	if (IsValidAITarget(Target) && DeltaSeconds > 0.0f)
+		MoveAlongX(Target->GetActorLocation().X, ChaseSpeed, DeltaSeconds);
+}
+
+float AEnemy::GetCombatSightRadius() const
+{
+	return EnemyDetectComponent ? EnemyDetectComponent->GetCurrentDiscoveryRadius() : 0.0f;
+}
+
+bool AEnemy::ActivateAIAttack()
+{
+	return BasicAttackMontage && TryActivateAbilityByInputID(GetAIAttackInputID());
+}
+
 void AEnemy::FaceLocation(const FVector& Location)
 {
 	FaceDirection(Location.X - GetActorLocation().X);
@@ -541,20 +559,25 @@ void AEnemy::FaceLocation(const FVector& Location)
 
 bool AEnemy::TryStartAIBaseAttack(AActor* Target)
 {
-	if (!IsWithinAttackRange(Target) || IsPlayingHitReaction() || !ASC || IsAttackActive()) return false;
+	if (!CanStartAIAttack(Target)) return false;
+	if (IsPlayingHitReaction() || !ASC || IsAttackActive()) return false;
 	const double Now = GetWorld()->GetTimeSeconds();
 	if (Now < NextAttackTime) return false;
 	CombatTarget = Cast<APawn>(Target);
 	SetBehaviorState(EEnemyBehaviorState::Attack);
 	StopHorizontalMovement();
 	FaceLocation(Target->GetActorLocation());
-	NextAttackTime = Now + FMath::Max(0.1f, AttackInterval);
-	return BasicAttackMontage && TryActivateAbilityByInputID(EAbilityInputID::BasicAttack);
+	const bool bActivated = ActivateAIAttack();
+	if (bActivated)
+	{
+		NextAttackTime = Now + FMath::Max(0.1f, GetAIAttackCooldown());
+	}
+	return bActivated;
 }
 
 void AEnemy::CancelAIBaseAttack()
 {
-	if (const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack))
+	if (const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(GetAIAttackInputID()))
 	{
 		ASC->CancelAbilityHandle(Spec->Handle);
 	}
