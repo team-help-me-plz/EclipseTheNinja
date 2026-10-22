@@ -46,6 +46,7 @@ protected:
     /**
     * 표창을 던질 방향을 계산하는 함수. GA BP에서 재정의할 수 있다.
     * 우선순위: 이벤트 Target > 적의 전투 대상 > 투척 시작 시 저장한 플레이어 커서 > 정면
+    * 대상과 커서의 위치는 모두 몽타주 재생 시작 시점에 저장한 값을 사용한다.
     */
     UFUNCTION(BlueprintNativeEvent, Category = "Kunai")
     FVector GetThrowDirection(ACharacter* Character, const FVector& SpawnLocation) const;
@@ -101,6 +102,10 @@ protected:
 private:
     UPROPERTY(Transient)
     TWeakObjectPtr<AActor> RequestedTarget;
+
+    /** 몽타주 재생 시작 시점의 목표 대상 위치. 이벤트 Target 또는 적의 전투 대상이 있을 때만 유효하다. */
+    FVector InitialTargetLocation = FVector::ZeroVector;
+    bool bHasInitialTargetLocation = false;
 
     FVector InitialPlayerCursorLocation = FVector::ZeroVector;
     FVector InitialPlayerForward = FVector::ForwardVector;

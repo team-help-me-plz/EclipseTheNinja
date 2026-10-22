@@ -45,6 +45,7 @@ EBTNodeResult::Type UBTTask_AttackPlayer::ExecuteTask(UBehaviorTreeComponent& Ow
     if (!AI) return EBTNodeResult::Failed;
 
     Enemy = Cast<AEnemy>(AI->GetPawn());
+    TaskStartedAt = AI->GetWorld()->GetTimeSeconds();
 
     return UpdateAttack(OwnerComp);
 }
@@ -101,6 +102,12 @@ EBTNodeResult::Type UBTTask_AttackPlayer::UpdateAttack(UBehaviorTreeComponent& O
         bAttackStarted = true;
         StartedTarget = Target;
         AttackStartedAt = Now;
+    }
+
+    else if (Now - TaskStartedAt >= AttackStartTimeout)
+    {
+        // 거리 안에서 공격 시작이 계속 실패하면 무기한 대기하지 않고 태스크를 끝낸다.
+        return EBTNodeResult::Failed;
     }
 
     // 아직 공격할 수 없으면 다음 Tick에서 다시 시도한다.

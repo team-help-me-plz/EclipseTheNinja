@@ -71,6 +71,16 @@ protected:
 	virtual bool ActivateAIAttack() override;
 
 	/**
+	 * DirectionX(+1/-1) 방향으로 KunaiRetreatProbeDistance만큼 후퇴할 수 있는지 검사한다.
+	 * 활동 영역(CombatAreaRadius) 밖으로 더 멀어지거나, 벽에 막히거나, 앞에 걸을 수 있는 바닥이 없으면 false다.
+	 */
+	bool CanRetreatAlongX(float DirectionX) const;
+
+	/** 후퇴 전에 벽과 낭떠러지를 미리 확인할 거리(cm). 막혀 있으면 후퇴를 멈추고 제자리에서 쿨타임을 기다린다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Kunai", meta = (ClampMin = "1.0", Units = "cm"))
+	float KunaiRetreatProbeDistance = 50.0f;
+
+	/**
 	 * 쿨타임 동안 확보할 대상과의 X축 거리(cm). Blueprint 기본값과 배치 인스턴스에서 조절할 수 있다.
 	 * 기본 600cm이며 실행 시 최소 100cm로 보정한다. 공격 준비가 끝나면 이 거리 도달 여부와 관계없이 투척한다.
 	 */

@@ -1,7 +1,11 @@
 #include "Character/KunaiEnemy.h"
 
 #include "Component/EnemyDetectionComponent.h"
+#include "CollisionQueryParams.h"
+#include "CollisionShape.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 bool AKunaiEnemy::IsWithinAttackRange(AActor* Target) const
 {
@@ -34,9 +38,84 @@ void AKunaiEnemy::UpdateCombatMovement(AActor* Target, float DeltaSeconds)
 	// X좌표가 정확히 같으면 몸이 바라보는 방향의 뒤쪽을 선택해 이동 방향이 0이 되는 것을 방지한다.
 	const float Side = FMath::IsNearlyZero(OffsetX) ? -GetActorForwardVector().X : FMath::Sign(OffsetX);
 	const float DestinationX = Target->GetActorLocation().X + Side * FMath::Max(100.0f, KunaiKeepDistance);
+
+	// 대상에게서 멀어지는 이동만 후퇴로 본다. 벽·낭떠러지·활동 영역 경계에 막히면 제자리에서 대상을 보며 쿨타임을 기다린다.
+	const float MoveDirectionX = FMath::Sign(DestinationX - GetActorLocation().X);
+	const bool bRetreating = MoveDirectionX * Side > 0.0f;
+	if (bRetreating && !CanRetreatAlongX(MoveDirectionX))
+	{
+		StopHorizontalMovement();
+		FaceLocation(Target->GetActorLocation());
+		return;
+	}
+
 	MoveAlongX(DestinationX, ChaseSpeed, DeltaSeconds);
 	// MoveAlongX는 이동 방향으로 몸을 돌리므로, 후퇴 시에도 대상을 바라보도록 다시 정렬한다.
 	FaceLocation(Target->GetActorLocation());
+}
+
+bool AKunaiEnemy::CanRetreatAlongX(float DirectionX) const
+{
+	const UCapsuleComponent* Capsule = GetCapsuleComponent();
+	const UCharacterMovementComponent* Movement = GetCharacterMovement();
+	const UWorld* World = GetWorld();
+	if (!Capsule || !Movement || !World || FMath::IsNearlyZero(DirectionX))
+	{
+		return false;
+	}
+
+	const FVector Location = GetActorLocation();
+	const float ProbeDistance = FMath::Max(1.0f, KunaiRetreatProbeDistance);
+	const FVector Step = FVector(DirectionX * ProbeDistance, 0.0f, 0.0f);
+
+	// 활동 영역 밖으로 더 멀어지는 후퇴는 막는다. 이미 밖에 있다면 영역 쪽으로 돌아가는 이동은 허용한다.
+	const float AreaRadius = FMath::Max(1.0f, CombatAreaRadius);
+	const float CurrentOffset = FMath::Abs(Location.X - BehaviorOrigin.X);
+	const float NextOffset = FMath::Abs(Location.X + Step.X - BehaviorOrigin.X);
+	if (NextOffset > AreaRadius && NextOffset > CurrentOffset)
+	{
+		return false;
+	}
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(KunaiEnemyRetreat), false, this);
+	const ECollisionChannel Channel = Capsule->GetCollisionObjectType();
+	const FCollisionResponseParams Response(Capsule->GetCollisionResponseToChannels());
+
+	// 벽: 오를 수 있는 계단 높이만큼 바닥을 띄운 캡슐로 후퇴 방향을 쓸어 막히는지 확인한다.
+	const float Radius = Capsule->GetScaledCapsuleRadius();
+	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+	const float StepHeight = FMath::Clamp(Movement->MaxStepHeight, 0.0f, HalfHeight);
+	const FVector SweepStart = Location + FVector(0.0f, 0.0f, StepHeight * 0.5f);
+	FHitResult WallHit;
+	const bool bWallBlocked = World->SweepSingleByChannel(
+		WallHit,
+		SweepStart,
+		SweepStart + Step,
+		FQuat::Identity,
+		Channel,
+		FCollisionShape::MakeCapsule(Radius, FMath::Max(Radius, HalfHeight - StepHeight * 0.5f)),
+		Params,
+		Response
+	);
+	if (bWallBlocked)
+	{
+		return false;
+	}
+
+	// 낭떠러지: 후퇴한 위치의 캡슐 앞쪽 아래에 걸을 수 있는 바닥이 있는지 확인한다.
+	const FVector GroundStart = Location + Step + FVector(DirectionX * Radius, 0.0f, 0.0f);
+	const FVector GroundEnd = GroundStart - FVector(0.0f, 0.0f, HalfHeight + StepHeight + 10.0f);
+	FHitResult GroundHit;
+	const bool bHasGround = World->LineTraceSingleByChannel(
+		GroundHit,
+		GroundStart,
+		GroundEnd,
+		Channel,
+		Params,
+		Response
+	);
+
+	return bHasGround && Movement->IsWalkable(GroundHit);
 }
 
 float AKunaiEnemy::GetCombatSightRadius() const

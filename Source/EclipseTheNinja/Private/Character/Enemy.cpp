@@ -572,6 +572,13 @@ bool AEnemy::TryStartAIBaseAttack(AActor* Target)
 	{
 		NextAttackTime = Now + FMath::Max(0.1f, GetAIAttackCooldown());
 	}
+	else
+	{
+		// 활성화 조건(지상 여부, 어빌리티/몽타주 설정 등)이 계속 실패해도 공격 분기에 갇히지 않도록 재시도를 늦춘다.
+		// 쿨타임으로 공격 준비 여부를 판단하는 적은 이 시간 동안 이동 분기로 돌아간다.
+		NextAttackTime = Now + FMath::Max(0.1f, AttackActivationRetryDelay);
+	}
+
 	return bActivated;
 }
 

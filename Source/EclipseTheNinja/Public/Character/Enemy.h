@@ -255,6 +255,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Combat", meta = (ClampMin = "0.1", Units = "s"))
 	float AttackInterval = 3.f;
 
+	/**
+	 * 공통 검사를 통과했지만 어빌리티 활성화가 실패했을 때 다음 시도까지 기다릴 시간(초).
+	 * 활성화 실패가 계속되어도 매 틱 재시도하며 제자리에 멈춰 있지 않고, 그동안 BT가 이동 분기를 다시 고르게 한다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Combat", meta = (ClampMin = "0.1", Units = "s"))
+	float AttackActivationRetryDelay = 0.5f;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI")
 	EEnemyBehaviorState BehaviorState = EEnemyBehaviorState::Patrol;
 

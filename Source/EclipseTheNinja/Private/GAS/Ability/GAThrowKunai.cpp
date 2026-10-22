@@ -105,6 +105,24 @@ void UGAThrowKunai::ActivateAbility(
     bReleased = false;
     RequestedTarget = TriggerEventData ? const_cast<AActor*>(TriggerEventData->Target.Get()) : nullptr;
     bHasInitialPlayerCursor = false;
+    bHasInitialTargetLocation = false;
+
+    // 목표 지점은 몽타주 재생 전에 확정한다.
+    // 준비 동작 중 대상이 이동해도 이번 투척은 시작 시점의 위치를 향하며, 시작 시 바라본 방향과 어긋나지 않는다.
+    const AActor* AimTarget = RequestedTarget.Get();
+    if (!AimTarget)
+    {
+        if (const AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo()))
+        {
+            AimTarget = Enemy->GetCombatTarget();
+        }
+    }
+
+    if (AimTarget)
+    {
+        InitialTargetLocation = AimTarget->GetActorLocation();
+        bHasInitialTargetLocation = true;
+    }
 
     if (const APlayerCharacter* Player = Cast<APlayerCharacter>(GetAvatarActorFromActorInfo()))
     {
@@ -140,17 +158,10 @@ void UGAThrowKunai::ActivateAbility(
 
 FVector UGAThrowKunai::GetThrowDirection_Implementation(ACharacter* Character, const FVector& SpawnLocation) const
 {
-    if (const AActor* Target = RequestedTarget.Get())
+    // 이벤트 Target 또는 적의 전투 대상은 ActivateAbility에서 확정한 위치를 사용한다.
+    if (bHasInitialTargetLocation)
     {
-        return (Target->GetActorLocation() - SpawnLocation).GetSafeNormal();
-    }
-
-    if (const AEnemy* Enemy = Cast<AEnemy>(Character))
-    {
-        if (const AActor* Target = Enemy->GetCombatTarget())
-        {
-            return (Target->GetActorLocation() - SpawnLocation).GetSafeNormal();
-        }
+        return (InitialTargetLocation - SpawnLocation).GetSafeNormal();
     }
 
     if (Character->IsA<APlayerCharacter>())
@@ -336,6 +347,7 @@ void UGAThrowKunai::EndAbility(
 {
     RequestedTarget.Reset();
     bHasInitialPlayerCursor = false;
+    bHasInitialTargetLocation = false;
 
     // Super가 몽타주/이벤트/타임아웃 태스크와 State.Attacking을 정리한다.
     // 이미 날아간 표창은 독립적으로 충돌하거나 수명이 끝날 때 제거된다.
