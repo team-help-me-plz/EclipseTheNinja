@@ -2,8 +2,12 @@
 
 
 #include "Trap/DamageTrap.h"
-#include "Components/BoxComponent.h"
 #include "Interface/Interactor.h"
+#include "Character/BaseCharacter.h"
+#include "GAS/StatAttributeSet.h"
+#include "GAS/Effects/GEBasicAttackDamage.h"
+
+#include "Components/BoxComponent.h"
 #include "GameFramework/Character.h"
 
 // Sets default values
@@ -42,7 +46,7 @@ void ADamageTrap::OnCollisionBeginOverlap(UPrimitiveComponent* OverlappedCompone
     {
         return;
     }
-    ACharacter* InCharacter = Cast<ACharacter>(OtherActor);
+    ABaseCharacter* InCharacter = Cast<ABaseCharacter>(OtherActor);
     if (!InCharacter)
     {
         return;
@@ -51,7 +55,32 @@ void ADamageTrap::OnCollisionBeginOverlap(UPrimitiveComponent* OverlappedCompone
     {
         return;
     }
+    // 콜백 안에서 순간이동하면 같은 프레임에 남은 본별 오버랩이 다시 들어오므로 쿨다운으로 막는다
+    const double CurrentTime = GetWorld()->GetTimeSeconds();
+    if (const double* LastHitTime = this->LastHitTimes.Find(OtherActor))
+    {
+        if (CurrentTime - *LastHitTime < this->HitCooldown)
+        {
+            return;
+        }
+    }
+    this->LastHitTimes.Add(OtherActor, CurrentTime);
     // 데미지 주기
+	UAbilitySystemComponent* TargetASC = InCharacter->GetAbilitySystemComponent();
+	// 플레이어면 데미지 주기
+	if (TargetASC && TargetASC->GetSet<UStatAttributeSet>()
+		&& TargetASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) > 0.f)
+	{
+		FGameplayEffectContextHandle	Context = TargetASC->MakeEffectContext();
+		Context.AddInstigator(this, this);
+
+		FGameplayEffectSpecHandle	Spec = TargetASC->MakeOutgoingSpec(UGEBasicAttackDamage::StaticClass(), 1.f, Context);
+		if (Spec.IsValid())
+		{
+			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), this->TrapDamage);
+			TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+		}
+	}
     IInteractor::Execute_ReturnToSafePoint(OtherActor);
 }
 
