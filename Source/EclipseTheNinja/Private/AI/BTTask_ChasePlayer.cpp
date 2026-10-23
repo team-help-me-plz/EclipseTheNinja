@@ -54,13 +54,10 @@ EBTNodeResult::Type UBTTask_ChasePlayer::UpdateChase(UBehaviorTreeComponent& Own
 
     Enemy->SetBehaviorState(EEnemyBehaviorState::Chase);
 
-    // 공격 거리에 들어오면 추적을 끝내고 다음 공격 태스크로 진행한다.
-    if (Enemy->IsWithinAttackRange(Target)) return EBTNodeResult::Succeeded;
-    if (DeltaSeconds <= 0.0f) return EBTNodeResult::InProgress;
-
-    const float TargetX = Target->GetActorLocation().X;
-    const float ChaseSpeed = Enemy->GetAIChaseSpeed();
-    Enemy->MoveAlongX(TargetX, ChaseSpeed, DeltaSeconds);
+    // 공격 전환 시점과 접근/후퇴 방식은 적의 전투 정책을 따른다.
+    // 원거리 적은 쿨타임 동안 이 태스크에서 거리를 조절하고, 준비되면 BT가 공격 분기를 다시 선택하도록 종료한다.
+    if (Enemy->CanStartAIAttack(Target)) return EBTNodeResult::Succeeded;
+    Enemy->UpdateCombatMovement(Target, DeltaSeconds);
 
     return EBTNodeResult::InProgress;
 }

@@ -46,8 +46,12 @@ public:
 
     float GetCollisionRadius() const;
 
-    // 투척 전 캐릭터 중심에서 발사 위치(손)까지의 충돌을 검사하는 함수
-    // 비행 중과 같은 기준이 되도록 발사체 Collision의 채널과 응답을 그대로 사용한다 (CDO에서 호출)
+    /**
+     * 투척 전 캐릭터 중심에서 발사 위치(손)까지 검사한다. true이면 OutHit에 최초 차단 충돌을 기록한다.
+     * 비행 중과 같은 구체 반지름·충돌 채널·응답을 사용하며, 발사체를 만들기 전 클래스 CDO에서 호출한다.
+     * 전달된 QueryParams의 발사자/아군 제외 조건을 복사한 뒤 모든 표창을 추가로 제외한다.
+     * 이 필터 덕분에 다른 진영의 표창이 손 앞에 있어도 발사가 취소되지 않는다. 벽/지형 검사는 유지한다.
+     */
     bool SweepLaunchPath(
         const UWorld* World,
         const FVector& Start,
@@ -85,8 +89,13 @@ private:
     /** 발사체의 Owner, Instigator의 컴포넌트들을 모두 무시하도록 설정한 뒤 IgnoringCharacterComponents에 추가하는 함수 */
     void IgnoreThrowerCollision();
 
-    /** 플레이어가 투척한 표창일 경우, 플레이어가 소환한 분신의 컴포넌트들을 모두 무시하도록 설정한 뒤 IgnoringCharacterComponents에 추가하는 함수 */
-    void IgnoreFriendlyClone(AActor* InClone);
+    /**
+     * 이 표창이 통과해야 하는 액터를 골라 IgnoreActorCollision에 전달한다.
+     * 진영에 관계없이 모든 표창끼리 통과하며, 플레이어 표창은 분신을, 적 표창은 다른 적을 추가로 통과한다.
+     * InitializeKunai에서 기존 액터에 적용하고 ActorSpawned 콜백으로 새 액터에도 적용한다.
+     * 풀에서 다시 활성화되는 표창은 InitializeKunai가 재검사하며, ClearThrowState가 이전 무시 설정을 정리한다.
+     */
+    void IgnoreFriendlyActor(AActor* InActor);
 
     /** 충돌한 액터를 기준으로 표창이 박힐 위치에 대한 정보인 FKunaiAttachTarget구조체를 생성해 반환하는 함수 */
     FKunaiAttachTarget ResolveAttachTarget(AActor* OtherActor, const FHitResult& Hit, const FVector& IncomingDirection) const;

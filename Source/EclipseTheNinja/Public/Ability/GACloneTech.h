@@ -91,6 +91,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Despawn")
 	FText	CannotSwapText = FText::FromString(TEXT("위치를 교환할 수 없습니다."));
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Spawn")
+	FText	CannotSpawnText = FText::FromString(TEXT("분신을 소환할 수 없는 위치입니다."));
+
 private:
 	UFUNCTION()
 	void HandleTargetAccepted(const FCloneCommandType& Command);

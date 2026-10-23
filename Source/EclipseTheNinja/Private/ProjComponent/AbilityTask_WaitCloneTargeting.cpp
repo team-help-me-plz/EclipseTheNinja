@@ -132,6 +132,11 @@ void UAbilityTask_WaitCloneTargeting::Activate()
 			ENCPoolMethod::None,
 			false
 		);
+	// 조준 슬로모션 중에도 위치 표시 이펙트는 원래 속도로 재생
+	if (IsValid(this->DestinationEffect.Get()))
+	{
+		this->DestinationEffect->SetCustomTimeDilation(1.0f / this->TargetingTimeDilation);
+	}
 	UpdateTargetCandidate();
 }
 

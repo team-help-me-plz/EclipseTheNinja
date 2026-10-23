@@ -12,8 +12,8 @@ UActivateHighlightComponent::UActivateHighlightComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInstance> ActivateMI(
-		TEXT("/Game/Blueprint/Week_2/InteractSelect/MI_InteractOutline_Selected.MI_InteractOutline_Selected"));
-
+		TEXT("/Game/Materials/InteractSelect/MI_InteractOutline_Selected.MI_InteractOutline_Selected"));
+	
 	if (ActivateMI.Succeeded())
 	{
 		this->ActivateHighlight = ActivateMI.Object;

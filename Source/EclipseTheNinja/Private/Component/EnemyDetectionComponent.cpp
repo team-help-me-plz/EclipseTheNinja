@@ -266,10 +266,9 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
     // 소유한 액터의 BeginPlay가 호출되고, 죽지 않은 경우
     else if (OwnerEnemy->IsReadyForAI())
     {
-        // 시야 거리: 전투 중에는 발각 원(빨간 원)까지만 보고, 일반/경계 상태에서는 감지 원까지 본다.
-        // 전투 중 발각 원 밖으로 나가면 놓친 것으로 처리해 마지막 목격 위치로 이동하고, 10초 후 복귀한다.
+        // 최초 발각은 공통 규칙, 전투 중 시야는 적의 전투 정책을 따른다.
         const float SightRadius = AlertLevel == EEnemyAlertLevel::Combat
-            ? GetCurrentDiscoveryRadius() : GetCurrentDetectionRadius();
+            ? OwnerEnemy->GetCombatSightRadius() : GetCurrentDetectionRadius();
         APawn* Player = FindVisibleTarget(SightRadius);
 
         // 플레이어가 유효하고, 플레이어가 시야 거리 안에서 보이면
@@ -362,18 +361,29 @@ void UEnemyDetectionComponent::UpdateBlackboard()
     {
         bCanFight = true;
     }
+    // 공격 중 이동을 고정하는 정책이면 거리/시야 Decorator의 중단도 완료까지 보류한다.
+    // 실제 감지 상태와 UI는 계속 갱신한다. 몽타주가 끝나면 다음 감지 갱신에서 그대로 반영된다.
+    // 공격 태스크만 거리 검사를 생략해도 Decorator가 먼저 Abort할 수 있어, 관련 Blackboard 값도 함께 유지해야 한다.
+    // 공격을 시작한 CombatTarget을 사용하므로 투척 준비 중 다른 대상이 보이더라도 이번 공격 대상은 바뀌지 않는다.
+    const bool bCommittedAttack = OwnerEnemy->ShouldLockMovementDuringAttack() && OwnerEnemy->IsAttackActive()
+        && !OwnerEnemy->IsPlayingHitReaction() && OwnerEnemy->IsValidAITarget(OwnerEnemy->GetCombatTarget());
+    if (bCommittedAttack)
+    {
+        Target = Cast<APawn>(OwnerEnemy->GetCombatTarget());
+        bCanFight = true;
+    }
     // Observer가 중간 상태를 보고 잘못된 태스크를 실행하지 않도록 한 번에 알린다.
     // 값 갱신 노티파이를 잠시 정지
     BB->PauseObserverNotifications();
 
     // 블랙 보드 변수에 값 세팅
     BB->SetValueAsObject(EnemyDetectionKeys::TargetActor, bCanFight ? Target : nullptr);
-    BB->SetValueAsBool(EnemyDetectionKeys::HasSight, bHasLineOfSight);
+    BB->SetValueAsBool(EnemyDetectionKeys::HasSight, bCommittedAttack || bHasLineOfSight);
     BB->SetValueAsBool(EnemyDetectionKeys::HasLastLocation, bHasLastKnownLocation);
-    BB->SetValueAsBool(EnemyDetectionKeys::InAttackRange, bCanFight && OwnerEnemy->IsWithinAttackRange(Target));
+    BB->SetValueAsBool(EnemyDetectionKeys::InAttackRange, bCommittedAttack || (bCanFight && OwnerEnemy->CanStartAIAttack(Target)));
     BB->SetValueAsBool(EnemyDetectionKeys::IsDead, OwnerEnemy->IsDead());
     BB->SetValueAsBool(EnemyDetectionKeys::IsHitReacting, !OwnerEnemy->IsDead() && OwnerEnemy->IsPlayingHitReaction());
-    BB->SetValueAsEnum(EnemyDetectionKeys::AlertLevel, static_cast<uint8>(AlertLevel));
+    BB->SetValueAsEnum(EnemyDetectionKeys::AlertLevel, static_cast<uint8>(bCommittedAttack ? EEnemyAlertLevel::Combat : AlertLevel));
     
     // 마지막 목격 위치가 있으면 기록하고 
     if (bHasLastKnownLocation)

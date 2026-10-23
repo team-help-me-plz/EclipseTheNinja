@@ -21,6 +21,10 @@ ACloneCharacter::ACloneCharacter()
 
 	Movement->SetPlaneConstraintNormal(FVector::YAxisVector);
 	Movement->bConstrainToPlane = true;
+	// 컨트롤러 회전 대신 이동 방향으로 서서히 회전 (사이드뷰에서 정면을 거쳐 뒤를 돌아본다)
+	this->bUseControllerRotationYaw = false;
+	Movement->bOrientRotationToMovement = true;
+	Movement->RotationRate = FRotator(0.f, 540.f, 0.f);
 
 	this->InteractHighlight = CreateDefaultSubobject<UInteractHighlightComponent>(TEXT("InteractHighlight"));
 }
@@ -66,6 +70,12 @@ void ACloneCharacter::LifeSpanExpired()
 	UObjectPoolSubsystem::Release(this);
 }
 
+void ACloneCharacter::StopCloneMovement()
+{
+	this->bIsArrived = true;
+	ConsumeMovementInputVector();
+}
+
 void ACloneCharacter::OnSpawnFromPool_Implementation()
 {
 	InitializeWalkState();
@@ -104,10 +114,25 @@ void ACloneCharacter::Tick(float DeltaTime)
 
 	if (!this->bIsArrived)
 	{
-		FVector	LocationDiff = GetActorLocation() - this->TargetLocation;
+		FVector	LocationDiff = this->TargetLocation - GetActorLocation();
 		if (LocationDiff.SquaredLength() > this->TargetLocationMargin)
 		{
-			AddMovementInput(this->WalkDir, 1.f, true);
+			if (LocationDiff.X * this->WalkDir.X < 0)
+			{
+				this->WalkDir *= -1.f;
+				this->TurnPauseRemaining = this->TurnPauseTime;
+			}
+			if (this->TurnPauseRemaining > 0.f)
+			{
+				const FRotator	TargetRot = this->WalkDir.Rotation();
+			
+				this->TurnPauseRemaining -= DeltaTime;
+				SetActorRotation(FMath::RInterpConstantTo(GetActorRotation(), TargetRot, DeltaTime, 540.f));
+			}
+			else
+			{
+				AddMovementInput(this->WalkDir, 1.f, true);
+			}
 		}
 		else
 		{

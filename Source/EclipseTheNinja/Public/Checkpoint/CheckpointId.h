@@ -32,4 +32,25 @@ enum class ECheckpointId : uint8
     Proto_S1_SpikeBridge,       // 가시 구덩이 + 분신 상호작용 스위치 + 이동 다리
     Proto_S2_TrapGauntlet,      // 화살 함정 회랑 + 무너지는 판자
     Proto_S2_Courtyard,         // 경비 2명 마당 + 가시밭 위치 교체 + 마지막 관문
+
+    // Lvl_Week_2_Prototype_1 (STAGE 4 - 외곽 성곽)
+    W2P1_MoatWall,              // 해자 + 분신 도약으로 외벽 오르기 + 성벽 위 원거리 경비
+    W2P1_Courtyard,             // 공중 암살 + 겹친 레버 선택 (낙하물 / 안쪽 문)
+    W2P1_SluiceGate,            // 배수로 발판을 분신이 눌러 여는 문 + 화살 함정 회랑
+    W2P1_Storehouse,            // 넓은 가시밭 : 분신을 건너편에 보내 위치 교환
+    W2P1_WatchPost,             // 발코니 원거리 경비 (하단 암살) + 출구 레버
+
+    // Lvl_Week_2_Prototype_2 (STAGE 5 - 천수각)
+    W2P2_Lift,                  // 분신이 발판을 누르는 동안만 올라가는 승강기
+    W2P2_Gallery,               // 엄폐물 회랑 + 원거리 경비 하단 암살
+    W2P2_Armory,                // 레버·분신 버튼으로 낙하물을 떨어뜨려 가시밭에 디딤돌 만들기
+    W2P2_Roof,                  // 벽 점프로 지붕 오르기 + 호위 무사 암살 + 최종 관문
+
+    // Lvl_Week_2_Prototype_3 (STAGE 4 고밀도판 - 외곽 성곽), Lvl_Week_2_Prototype_5 (같은 구조의 밤 판)
+    W2P3_MoatGate,              // 부서지는 판자 + 높은 벽(분신 도약) + 발판 문 + 낙하물 버튼
+    W2P3_InnerYard,             // 긴 가시밭 위치 교환 + 발판 유지 승강기 + 화살 함정 + 발코니 하단 암살
+
+    // Lvl_Week_2_Prototype_4 (STAGE 5 고밀도판 - 천수각), Lvl_Week_2_Prototype_6 (같은 구조의 밤 판)
+    W2P4_Armory,                // 가시 속 버튼으로 움직이는 플랫폼 + 하단 암살 + 벽 점프 수직 통로
+    W2P4_UpperKeep,             // 가시 너머 플랫폼에 분신 -> 발판 -> 도착 직전 교환 + 레버 낙하물 + 최종 관문
 };
