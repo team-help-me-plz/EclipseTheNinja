@@ -21,6 +21,9 @@ public:
 	static FGameplayTag GetWallAttachAbilityTag();
 	static FGameplayTag GetWallAttachingTag();
 
+	// 매달린 동안 메시에 더하는 오프셋 (X: 벽 쪽, Z: 위). 모서리에서 내려오는 동안 미리 맞춰 두는 데 쓴다.
+	FVector GetHangMeshOffset() const { return FVector(AnimXOffset, 0.f, AnimZOffset); }
+
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr,
 		const FGameplayTagContainer* TargetTags = nullptr,
@@ -78,8 +81,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0"))
 	float MinHeightAboveGround = 40.f;
 
+	// 메시 오프셋을 주고 되돌리는 시간. 이전 몽타주(모서리 내려가기 등)가 섞여 빠지는 동안 메시가 튀지 않게 한다. 0이면 즉시.
+	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0", Units = "s"))
+	float MeshOffsetBlendTime = 0.25f;
+
 private:
-	// 매달리기 전 메시 상대 위치 (종료 시 복원)
+	// 메시 상대 위치를 Target까지 MeshOffsetBlendTime 동안 옮긴다. 어빌리티가 끝난 뒤에도 끝까지 이어진다.
+	void BlendMeshTo(ACharacter* Player, const FVector& Target);
+	void TickMeshBlend();
+
+	// 캐릭터 클래스 기본 메시 상대 위치 (종료 시 복원)
 	FVector BaseMeshRelativeLocation = FVector::ZeroVector;
 	bool bMeshOffsetApplied = false;
+
+	TWeakObjectPtr<ACharacter> BlendCharacter;
+	FVector MeshBlendFrom = FVector::ZeroVector;
+	FVector MeshBlendTo = FVector::ZeroVector;
+	double MeshBlendStartTime = 0.0;
+	FTimerHandle MeshBlendTimer;
+	// 모서리에서 내려와 GALedgeHang의 정지 자세 몽타주로 매달려 있는지
+	bool bHoldingLedgePose = false;
 };

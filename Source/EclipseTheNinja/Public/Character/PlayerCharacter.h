@@ -271,6 +271,9 @@ protected:
 	/** Called for drop from platform input */
 	void Drop(const FInputActionValue& Value);
 
+	/** 아래 입력을 처음 누른 순간. 모서리에 서 있으면 아래 벽으로 내려가 매달린다. */
+	void DropStarted(const FInputActionValue& Value);
+
 	/** Called for drop from platform input release */
 	void DropReleased(const FInputActionValue& Value);
 

@@ -29,6 +29,8 @@
 #include "Ability/GACloneTech.h"
 #include "Component/InteractBoxComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
+#include "GAS/Ability/GALedgeHang.h"
+#include "GAS/Ability/GALedgeClimb.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -152,7 +154,9 @@ void APlayerCharacter::UpdateCursorFacing(float DeltaSeconds)
 
 	if (IsValid(ASC))
 	{
-		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag()))
+		// 매달려 있거나 모서리에서 내려가는 중에는 벽을 바라본 채로 둔다.
+		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag())
+			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangingTag()))
 		{
 			return;
 		}
@@ -347,6 +351,7 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::OnCameraMoveEndInput);
 
 		// Dropping from platform
+		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &APlayerCharacter::DropStarted);
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Drop);
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Completed, this, &APlayerCharacter::DropReleased);
 
@@ -401,6 +406,10 @@ void APlayerCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uin
 
 void APlayerCharacter::PossessedBy(AController* NewController)
 {
+	// 모서리 매달리기·올라가기는 BP 배열에 없으면 C++ 기본 클래스로 채운다. 이미 지정돼 있으면 그대로 둔다.
+	MigrateLegacyAbility(EAbilityInputID::LedgeHang, nullptr, UGALedgeHang::StaticClass());
+	MigrateLegacyAbility(EAbilityInputID::LedgeClimb, nullptr, UGALedgeClimb::StaticClass());
+
 	// 어빌리티 배열은 부모의 PossessedBy에서 부여한다.
 	Super::PossessedBy(NewController);
 
@@ -432,6 +441,12 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 {
 	FVector2D MoveVector = Value.Get<FVector2D>();
 
+	// 위 입력(W, IA_Move의 X축)을 매달린 상태에서 누르면 모서리 위로 올라간다
+	if (MoveVector.X > 0.5f && IsWallAttached())
+	{
+		TryActivateAbilityByInputID(EAbilityInputID::LedgeClimb);
+	}
+
 	// route the input
 	DoMove(MoveVector.Y);
 }
@@ -440,6 +455,19 @@ void APlayerCharacter::Drop(const FInputActionValue& Value)
 {
 	// route the input
 	DoDrop(Value.Get<float>());
+}
+
+void APlayerCharacter::DropStarted(const FInputActionValue& Value)
+{
+	if (bIsDead || IsAssassinating()) return;
+	if (!GetCharacterMovement()->IsMovingOnGround()) return;
+
+	// 통과 가능한 발판 위에서는 기존 아래+점프 내려가기를 우선한다.
+	const UPrimitiveComponent* Floor = GetCharacterMovement()->CurrentFloor.HitResult.GetComponent();
+	if (IsValid(Floor) && Floor->GetCollisionObjectType() == SoftCollisionObjectType) return;
+
+	// 모서리에 서 있으면 아래 벽으로 내려가 매달린다.
+	TryActivateAbilityByInputID(EAbilityInputID::LedgeHang);
 }
 
 void APlayerCharacter::DropReleased(const FInputActionValue& Value)
@@ -612,10 +640,11 @@ void APlayerCharacter::DoMove(float Forward)
 {
 	if (IsAssassinating()) return;
 
-	// 매달린 동안 일반 이동 입력이 목표 방향을 바꾸지 않게 한다.
+	// 매달린 동안(모서리에서 내려가는 중 포함) 일반 이동 입력이 목표 방향을 바꾸지 않게 한다.
 	if (IsValid(ASC))
 	{
-		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag()))
+		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag())
+			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangingTag()))
 		{
 			return;
 		}

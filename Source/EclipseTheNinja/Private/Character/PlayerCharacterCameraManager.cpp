@@ -186,6 +186,14 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 		float FinalX = FMath::Clamp(CurrentActorLocation.X + MoveOffset.X, CameraXMinBounds, CameraXMaxBounds);
 		FVector TargetCameraLocation(FinalX, CurrentY, CurrentActorLocation.Z + CameraZOffset + MoveOffset.Y);
 
+		// 순간이동 보정은 캐릭터 기준 오프셋이라 캐릭터가 움직이는 중에도 늦게 따라오지 않는다
+		TeleportOffset = FMath::VInterpTo(TeleportOffset, FVector::ZeroVector, DeltaTime, TeleportSmoothSpeed);
+		if (TeleportOffset.SizeSquared() < 0.01f)
+		{
+			TeleportOffset = FVector::ZeroVector;
+		}
+		TargetCameraLocation += TeleportOffset;
+
 		if (bIsCameraExploreMode || !bFollowInstantlyInNormalMode)
 		{
 			OutVT.POV.Location = FMath::VInterpTo(GetCameraLocation(), TargetCameraLocation, DeltaTime, CameraReturnSpeed);
@@ -212,4 +220,9 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 void APlayerCharacterCameraManager::SetCameraExploreMode(bool IsAiming)
 {
 	bIsCameraExploreMode = IsAiming;
+}
+
+void APlayerCharacterCameraManager::SmoothTeleport(const FVector& Delta)
+{
+	TeleportOffset -= Delta;
 }

@@ -24,6 +24,14 @@ public:
 	// 카메라 모드 변환 (일반, 이동모드)
 	void SetCameraExploreMode(bool bEnabled);
 
+	// 캐릭터가 순간이동했을 때 카메라가 튀지 않도록, 이동한 반대만큼 오프셋을 줬다가 TeleportSmoothSpeed로 0까지 줄인다.
+	// Delta는 캐릭터가 이동한 양이다.
+	void SmoothTeleport(const FVector& Delta);
+
+	// SmoothTeleport 오프셋이 줄어드는 속도
+	UPROPERTY(EditAnywhere, Category = "Side Scrolling Camera", meta = (ClampMin = 0, ClampMax = 20))
+	float TeleportSmoothSpeed = 4.f;
+
 	/** Use continuous cursor direction and eased strength; disable for independent axis movement. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera", meta = (DisplayName = "Use Smooth Camera Explore"))
 	bool bUseSmoothCameraExplore = true;
@@ -100,5 +108,8 @@ protected:
 
 	// 탐색 모드에서 돌아올 때 캐릭터 기준으로 남은 카메라 거리. 0으로 줄어든다.
 	FVector ExploreReturnOffset = FVector::ZeroVector;
+
+	// SmoothTeleport로 남은 카메라 오프셋. 0으로 줄어든다.
+	FVector TeleportOffset = FVector::ZeroVector;
 };
 
