@@ -10,6 +10,7 @@ class UAbilitySystemComponent;
 class UStatAttributeSet;
 class UAnimMontage;
 class UGABaseAttack;
+class UGameplayEffect;
 struct FGameplayAbilitySpec;
 
 /** Player와 Enemy가 공유하는 이동 설정, GAS, 전투 데이터의 부모 클래스. */
@@ -36,6 +37,9 @@ protected:
     virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
     virtual void PostLoad() override;
     void InitializeAbilitySystem();
+
+    // 시작 스탯 GE를 한 번만 적용한다. 재빙의 시 다시 적용해 체력이 회복되지 않도록 한다.
+    void ApplyDefaultStats();
 
     // 어빌리티 배열에 지정된 어빌리티를 부여하고, 이미 있으면 입력 ID와 레벨만 갱신한다.
     void GiveInitAbility();
@@ -73,6 +77,10 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
     TObjectPtr<UStatAttributeSet> StatAttributeSet;
 
+    /** 시작 시 스탯을 덮어쓸 Instant GE. 캐릭터 종류마다 다른 GE를 지정한다. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS")
+    TSubclassOf<UGameplayEffect> DefaultStatsEffect;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
     TObjectPtr<UAnimMontage> BasicAttackMontage;
 
@@ -98,6 +106,9 @@ protected:
     TObjectPtr<UAnimMontage> DeathMontage;
 
     FDelegateHandle HealthChangedDelegateHandle;
+
+    // 시작 스탯 GE를 이미 적용했는지 여부.
+    bool bDefaultStatsApplied = false;
 
     float MonategeDuration = 0.f;
 

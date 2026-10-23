@@ -20,6 +20,8 @@ class ECLIPSETHENINJA_API AKunaiEnemy : public AEnemy
 	GENERATED_BODY()
 
 public:
+	AKunaiEnemy();
+
 	/**
 	 * 대상이 쿨타임 중 정지할 목표 거리 구간 안에 있는지 검사한다.
 	 * 횡스크롤 이동에 맞춰 X축 거리만 사용하며, 목표 거리 ± 허용 오차 안이면 true를 반환한다.

@@ -1,4 +1,5 @@
 #include "Character/KunaiEnemy.h"
+#include "GAS/Effects/GEDefaultStats.h"
 
 #include "Component/EnemyDetectionComponent.h"
 #include "CollisionQueryParams.h"
@@ -6,6 +7,12 @@
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
+
+AKunaiEnemy::AKunaiEnemy()
+{
+	// 원거리 적은 근거리 적보다 체력이 낮은 스탯으로 시작한다.
+	DefaultStatsEffect = UGERangedEnemyDefaultStats::StaticClass();
+}
 
 bool AKunaiEnemy::IsWithinAttackRange(AActor* Target) const
 {

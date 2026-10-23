@@ -19,6 +19,7 @@
 #include "Character/PlayerCharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/StatAttributeSet.h"
+#include "GAS/Effects/GEDefaultStats.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "Components/BoxComponent.h"
 #include "Engine/TargetPoint.h"
@@ -34,6 +35,7 @@ APlayerCharacter::APlayerCharacter()
 {
     PrimaryActorTick.bCanEverTick = true;
     InteractComponent = CreateDefaultSubobject<UInteractBoxComponent>(TEXT("InteractComponent"));
+    DefaultStatsEffect = UGEPlayerDefaultStats::StaticClass();
     InteractComponent->SetupAttachment(RootComponent);
     InteractComponent->SetBoxExtent(InteractBoxSize);
     InteractComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);

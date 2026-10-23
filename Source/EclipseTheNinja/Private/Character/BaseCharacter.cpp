@@ -30,7 +30,31 @@ void ABaseCharacter::InitializeAbilitySystem()
 {
     // 이 캐릭터를 GAS의 소유자와 실행 대상으로 연결한다.
     ASC->InitAbilityActorInfo(this, this);
+    ApplyDefaultStats();
     GiveInitAbility();
+}
+
+void ABaseCharacter::ApplyDefaultStats()
+{
+    if (bDefaultStatsApplied || !HasAuthority() || !ASC || !DefaultStatsEffect)
+    {
+        return;
+    }
+
+    FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+    Context.AddSourceObject(this);
+
+    const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(
+        DefaultStatsEffect,
+        1.0f,
+        Context
+    );
+
+    if (Spec.IsValid())
+    {
+        ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+        bDefaultStatsApplied = true;
+    }
 }
 
 void ABaseCharacter::BeginPlay()

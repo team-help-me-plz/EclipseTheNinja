@@ -5,6 +5,7 @@
 #include "Clone/CloneCharacter.h"
 #include "Component/EnemyDetectionComponent.h"
 #include "GAS/StatAttributeSet.h"
+#include "GAS/Effects/GEDefaultStats.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffectExtension.h"
 #include "Components/WidgetComponent.h"
@@ -35,6 +36,10 @@ AEnemy::AEnemy()
 	EnemyDetectComponent = CreateDefaultSubobject<UEnemyDetectionComponent>(TEXT("EnemyDetectionComp"));
 	AIControllerClass = AAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+
+	// 기본 적은 근거리 적 스탯으로 시작한다.
+	DefaultStatsEffect = UGEMeleeEnemyDefaultStats::StaticClass();
+
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->bUseControllerDesiredRotation = false;
 	GetCharacterMovement()->bCanWalkOffLedges = false;
