@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Abilities/GameplayAbility.h"
+#include "Ability/GACooldownBase.h"
 #include "GAThrowKunai.generated.h"
 
 class ACharacter;
@@ -11,9 +11,10 @@ class UAnimMontage;
 /**
 * 플레이어/적 공용 투척 어빌리티.
 * 입력과 BT는 이 어빌리티를 지급한 뒤 활성화만 한다.
+* 쿨타임 UI가 감시할 수 있도록 UGACooldownBase를 상속한다.
 */
 UCLASS()
-class ECLIPSETHENINJA_API UGAThrowKunai : public UGameplayAbility
+class ECLIPSETHENINJA_API UGAThrowKunai : public UGACooldownBase
 {
     GENERATED_BODY()
 
