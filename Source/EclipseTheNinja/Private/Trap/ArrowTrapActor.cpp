@@ -136,7 +136,7 @@ void AArrowTrapActor::SpawnArrow()
 	);
 	if (SpawnedArrow)
 	{
-		SpawnedArrow->SetLaunch(this->ArrowSpeed);
+		SpawnedArrow->SetLaunch(this->ArrowSpeed, this->TrapDamage);
 
 		// 체크포인트 리스폰 시 날아가던 화살 제거하기 위해
 		// 체크포인트 서브시스템에 등록

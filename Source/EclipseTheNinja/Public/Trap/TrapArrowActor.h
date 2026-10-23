@@ -40,7 +40,7 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
-	void	SetLaunch(float InVelocity);
+	void	SetLaunch(float InVelocity, float InDamage);
 
 	// 오브젝트 풀: 발사체 이동 대상 복구 / 정지
 	virtual void	OnSpawnFromPool_Implementation() override;
@@ -58,5 +58,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile")
 	float Lifetime = 3.0f;
+
+	float ArrowDamage = 0.0f;
+
+	// 한 번 처리한 화살이 같은 이동에서 남은 오버랩으로 다시 처리되지 않도록 막는다
+	bool bHasHit = false;
 
 };

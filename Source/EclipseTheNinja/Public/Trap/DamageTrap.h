@@ -50,4 +50,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UBoxComponent>	CollisionBox = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap|Damage")
+	float	TrapDamage = 10.f;
+
+	// 같은 액터가 이 시간 안에 다시 겹치면 무시 (메시 본별 중복 오버랩 방지)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap|Damage")
+	float	HitCooldown = 0.5f;
+
+	TMap<TWeakObjectPtr<AActor>, double>	LastHitTimes;
+
 };
