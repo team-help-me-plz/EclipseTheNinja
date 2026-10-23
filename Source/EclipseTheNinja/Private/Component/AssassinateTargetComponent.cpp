@@ -53,7 +53,8 @@ void UAssassinateTargetComponent::RegisterBoundary()
 		AssassinateBoundary->AttachToComponent(OwnerRoot, FAttachmentTransformRules::KeepRelativeTransform);
 	}
 
-	AssassinateBoundary->SetHiddenInGame(false);
+	// 에디터 뷰포트에서는 보이고, 게임에서는 숨긴다.
+	AssassinateBoundary->SetHiddenInGame(true);
 	AssassinateBoundary->SetVisibility(true);
 
 	if (!AssassinateBoundary->IsRegistered())
