@@ -14,4 +14,8 @@ void	UAbilityCooldownContainerWidget::InitWidget(APawn* InPawn)
 	{
 		this->CloneTechCooldown->InitWidget(InPawn);
 	}
+	if (this->KunaiCooldown)
+	{
+		this->KunaiCooldown->InitWidget(InPawn);
+	}
 }
