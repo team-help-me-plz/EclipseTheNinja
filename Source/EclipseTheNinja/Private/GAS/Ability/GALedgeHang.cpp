@@ -9,6 +9,9 @@
 #include "AbilitySystemGlobals.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/Skeleton.h"
+#include "DrawDebugHelpers.h"
 #include "Character/PlayerCharacter.h"
 #include "Character/PlayerCharacterCameraManager.h"
 #include "Components/CapsuleComponent.h"
@@ -26,8 +29,9 @@
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHang, "Ability.Movement.LedgeHang");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHanging, "State.Movement.LedgeHanging");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHold, "State.Movement.LedgeHold");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeMeshAligned, "State.Movement.LedgeMeshAligned");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHangPose, "State.Movement.LedgeHangPose");
-static const ECollisionChannel ECC_WallAttach = ECC_GameTraceChannel2;
+static const ECollisionChannel ECC_LedgeWallAttach = ECC_GameTraceChannel2; // GAWallAttach와 같은 채널 (unity 빌드에서 이름이 겹치지 않게 따로 이름을 둔다)
 
 UGALedgeHang::UGALedgeHang()
 {
@@ -54,6 +58,11 @@ FGameplayTag UGALedgeHang::GetLedgeHangingTag()
 FGameplayTag UGALedgeHang::GetLedgeHoldTag()
 {
 	return TAG_LedgeHold;
+}
+
+FGameplayTag UGALedgeHang::GetLedgeMeshAlignedTag()
+{
+	return TAG_LedgeMeshAligned;
 }
 
 FGameplayTag UGALedgeHang::GetLedgeHangPoseTag()
@@ -188,6 +197,11 @@ void UGALedgeHang::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	// 벽(바깥 방향의 반대)을 바라본다. 커서·이동 입력 회전도 이 방향으로 고정된다.
 	Player->SetAssassinationFacing(Plan.OutDir > 0.f ? 180.f : 0.f);
 
+	// 손 맞추기의 메시 이동 기준은 캐릭터 클래스 기본 메시 위치다
+	const ACharacter* DefaultCharacter = Player->GetClass()->GetDefaultObject<ACharacter>();
+	BaseMeshRelativeLocation = (DefaultCharacter && DefaultCharacter->GetMesh()) ? DefaultCharacter->GetMesh()->GetRelativeLocation() : FVector::ZeroVector;
+	DrawDropDebug(Player);
+
 	LoadedDropMontage = DropMontage.LoadSynchronous();
 	if (IsValid(LoadedDropMontage))
 	{
@@ -269,6 +283,7 @@ void UGALedgeHang::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 		MoveTask->OnTimedOutAndDestinationReached.AddDynamic(this, &UGALedgeHang::OnDropFinished);
 		MoveTask->OnTimedOut.AddDynamic(this, &UGALedgeHang::OnDropFinished);
 		MoveTask->ReadyForActivation();
+		StartMeshShiftBlend(Player, Duration);
 		return;
 	}
 
@@ -326,6 +341,9 @@ void UGALedgeHang::OnStepOutFinished()
 	DropTask->OnTimedOutAndDestinationReached.AddDynamic(this, &UGALedgeHang::OnDropFinished);
 	DropTask->OnTimedOut.AddDynamic(this, &UGALedgeHang::OnDropFinished);
 	DropTask->ReadyForActivation();
+
+	// 내려가는 동안 메시를 벽 쪽으로 옮겨 끝 자세의 손이 모서리에 닿게 한다
+	StartMeshShiftBlend(Cast<ACharacter>(GetAvatarActorFromActorInfo()), Duration);
 }
 
 void UGALedgeHang::OnHangPoseReady()
@@ -381,10 +399,63 @@ void UGALedgeHang::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 		}
 	}
 
-	// 공격중 태그가 빠져야 매달리기가 활성화되므로 먼저 끝낸다. 내려가기 몽타주도 여기서 섞여 빠진다.
+#if ENABLE_DRAW_DEBUG
+	// 실제 손 위치(자홍)와 손 목표 사이를 그려 얼마나 어긋났는지 보여 준다
+	if (bDrawDebugDrop && bHang && IsValid(Player) && Player->GetMesh())
+	{
+		for (const FName& BoneName : HandBoneNames)
+		{
+			if (!Player->GetMesh()->DoesSocketExist(BoneName)) continue;
+			const FVector Hand = Player->GetMesh()->GetSocketLocation(BoneName);
+			DrawDebugSphere(GetWorld(), Hand, 5.f, 8, FColor::Magenta, false, DebugDrawTime);
+			DrawDebugLine(GetWorld(), Hand, Plan.HandTarget, FColor::Magenta, false, DebugDrawTime, 0, 1.f);
+			DrawDebugString(GetWorld(), Hand, FString::Printf(TEXT("%s X%+.0f Z%+.0f"), *BoneName.ToString(),
+				(Hand.X - Plan.HandTarget.X) * -Plan.OutDir, Hand.Z - Plan.HandTarget.Z), nullptr, FColor::Magenta, DebugDrawTime, true);
+		}
+
+		// 진단: 계획값과, 매달리는 순간·이후의 실제 손 위치와 재생 중인 몽타주를 남긴다
+		UE_LOG(LogTemp, Log, TEXT("DropDiag plan: hang=%s target=%s predicted=%s meshShift=%s"),
+			*Plan.HangLocation.ToCompactString(), *Plan.HandTarget.ToCompactString(), *Plan.PredictedHand.ToCompactString(), *Plan.MeshShift.ToCompactString());
+		const TWeakObjectPtr<ACharacter> WeakPlayer = Player;
+		const FVector Target = Plan.HandTarget;
+		const TArray<FName> Bones = HandBoneNames;
+		auto LogHand = [WeakPlayer, Target, Bones](const TCHAR* Label)
+		{
+			const ACharacter* P = WeakPlayer.Get();
+			if (!IsValid(P) || !P->GetMesh()) return;
+			const USkeletalMeshComponent* Mesh = P->GetMesh();
+			const UAnimInstance* Anim = Mesh->GetAnimInstance();
+			const UAnimMontage* Montage = Anim ? Anim->GetCurrentActiveMontage() : nullptr;
+			const FVector Root = Mesh->GetBoneLocation(Mesh->GetBoneName(0));
+			for (const FName& BoneName : Bones)
+			{
+				if (!Mesh->DoesSocketExist(BoneName)) continue;
+				const FVector Hand = Mesh->GetSocketLocation(BoneName);
+				UE_LOG(LogTemp, Log, TEXT("DropDiag %s: %s handZ-target=%+.1f handX-target=%+.1f handZ-actor=%+.1f rootZ-actor=%+.1f actor=%s meshRel=%s montage=%s pos=%.3f weight=%.2f"),
+					Label, *BoneName.ToString(), Hand.Z - Target.Z, Hand.X - Target.X, Hand.Z - P->GetActorLocation().Z, Root.Z - P->GetActorLocation().Z,
+					*P->GetActorLocation().ToCompactString(), *Mesh->GetRelativeLocation().ToCompactString(), *GetNameSafe(Montage),
+					Montage ? Anim->Montage_GetPosition(Montage) : -1.f, Montage && Anim->GetActiveInstanceForMontage(Montage) ? Anim->GetActiveInstanceForMontage(Montage)->GetWeight() : 0.f);
+			}
+		};
+		LogHand(TEXT("handoff"));
+		for (const float Delay : { 0.15f, 0.5f, 1.0f })
+		{
+			FTimerHandle Unused;
+			GetWorld()->GetTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([LogHand, Delay]()
+			{
+				LogHand(*FString::Printf(TEXT("+%.2fs"), Delay));
+			}), Delay, false);
+		}
+	}
+#endif
+
+	// 공격중 태그가 빠져야 매달리기가 활성화되므로 먼저 끝낸다. 내려가기 몽타주도 여기서 섞여 빠진다. (메시 이동 타이머도 지워진다)
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 
 	if (!IsValid(Player) || !bRestoreMovement) return;
+
+	// 손 맞추기: 매달리면 메시는 StartMeshShiftBlend가 몽타주가 다 빠질 때까지 Idle 위치로 옮기고(매달리기가 끝날 때 되돌린다),
+	// 매달리지 못하면 아래에서 바로 기본 위치로 돌린다
 
 	// 내려가는 동안 메시는 기본 위치에 둔다. 내려가기는 매달림 위치보다 메시 높이 오프셋만큼 위에서 끝나므로,
 	// 캡슐을 매달림 위치로 내리면서 메시를 그만큼 바로 올리면 화면상 메시는 그대로이고 매달리기 Idle(+오프셋)로 이어진다.
@@ -411,7 +482,19 @@ void UGALedgeHang::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 			ASC->AddLooseGameplayTag(TAG_LedgeHold);
 		}
 
+		// 손 맞추기로 메시를 이미 매달리기 Idle 위치에 뒀으면 매달리기가 메시를 다시 옮기지 않게 알린다
+		const bool bMeshAligned = !bHolding && Plan.bHandAligned;
+		if (bMeshAligned)
+		{
+			ASC->AddLooseGameplayTag(TAG_LedgeMeshAligned);
+		}
+
 		bAttached = ASC->TryActivateAbilitiesByTag(FGameplayTagContainer(UGAWallAttach::GetWallAttachAbilityTag()));
+
+		if (bMeshAligned && !bAttached)
+		{
+			ASC->RemoveLooseGameplayTag(TAG_LedgeMeshAligned);
+		}
 
 		// 매달리지 못하면 내려가기가 끝난 자리와 메시 기본 위치로 돌려 그대로 떨어진다
 		if (bRaiseMesh && !bAttached)
@@ -442,6 +525,10 @@ void UGALedgeHang::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 	if (!bAttached)
 	{
 		Player->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+		if (Plan.bHandAligned && Player->GetMesh())
+		{
+			Player->GetMesh()->SetRelativeLocation(BaseMeshRelativeLocation);
+		}
 	}
 }
 
@@ -527,7 +614,7 @@ bool UGALedgeHang::FindLedgeInDirection(const ACharacter* Player, float OutDir, 
 	FHitResult WallHit;
 	const FVector WallStart(Probe.X, Probe.Y, FeetZ - 20.f);
 	const FVector WallEnd(Location.X, Location.Y, FeetZ - 20.f);
-	if (!GetWorld()->LineTraceSingleByChannel(WallHit, WallStart, WallEnd, ECC_WallAttach, Params)) return false;
+	if (!GetWorld()->LineTraceSingleByChannel(WallHit, WallStart, WallEnd, ECC_LedgeWallAttach, Params)) return false;
 	if (WallHit.bStartPenetrating) return false;
 	if (FMath::Abs(WallHit.ImpactNormal.Z) > 0.1f) return false;
 	if (WallHit.ImpactNormal.X * OutDir < 0.9f) return false;
@@ -543,7 +630,38 @@ bool UGALedgeHang::FindLedgeInDirection(const ACharacter* Player, float OutDir, 
 	}
 
 	const FVector StepOut(EdgeX + OutDir * (Radius + 1.f), Location.Y, Location.Z + 2.f);
-	const FVector Hang(StepOut.X, Location.Y, LedgeTopZ - ResolveHangDepth(HalfHeight));
+	float HangZ = LedgeTopZ - ResolveHangDepth(HalfHeight);
+
+	// 손 맞추기: 내려가기 끝 자세의 손이 모서리에 닿도록 매달림 높이를 정한다.
+	// 캡슐은 벽에 붙어 있어야 하므로(매달리기가 벽 표면에 맞춘다) 벽 쪽 차이는 메시를 옮겨 맞춘다.
+	const FVector LedgeCorner(EdgeX, Location.Y, LedgeTopZ);
+	FVector HandTarget = LedgeCorner;
+	FVector HandOffset = FVector::ZeroVector;
+	FVector MeshShiftWorld = FVector::ZeroVector;
+	FVector IdleMeshShiftWorld = FVector::ZeroVector;
+	const bool bHandAligned = bAlignHandToLedge && GetDropEndHandOffset(Player, OutDir, HandOffset);
+	if (bHandAligned)
+	{
+		HandTarget = FVector(EdgeX - OutDir * HandLedgeAdjust.X, Location.Y, LedgeTopZ + HandLedgeAdjust.Y);
+		MeshShiftWorld.X = HandTarget.X - (StepOut.X + HandOffset.X);
+		// 매달리기 Idle은 메시를 높이 오프셋만큼 올려 둔다
+		IdleMeshShiftWorld = FVector(MeshShiftWorld.X, 0.f, GetHangMeshZOffset(Player));
+
+		if (HangIdleHandHeight > 0.f && HoldMontage.IsNull())
+		{
+			// 최종 자세(매달리기 Idle)의 손이 목표에 오도록 매달림 높이를 정하고,
+			// 내려가는 동안은 끝 자세의 손이 목표에 오도록 메시 높이를 따로 맞춘다 (끝 자세와 Idle은 루트 기준 손 높이가 다르다)
+			HangZ = HandTarget.Z - HangIdleHandHeight;
+			MeshShiftWorld.Z = HandTarget.Z - HangZ - HandOffset.Z;
+		}
+		else
+		{
+			// 끝 자세와 Idle의 손 높이가 같다고 보고, 내려가는 동안 메시를 Idle 높이까지 올리고 캡슐은 그만큼 낮춘다
+			MeshShiftWorld.Z = IdleMeshShiftWorld.Z;
+			HangZ = HandTarget.Z - HandOffset.Z - MeshShiftWorld.Z;
+		}
+	}
+	const FVector Hang(StepOut.X, Location.Y, HangZ);
 
 	// 4. 밖으로 나가는 경로와 내려가는 경로가 막혀 있지 않아야 한다
 	const FCollisionShape Shape = FCollisionShape::MakeCapsule(FMath::Max(1.f, Radius - 2.f), FMath::Max(1.f, HalfHeight - 2.f));
@@ -555,7 +673,7 @@ bool UGALedgeHang::FindLedgeInDirection(const ACharacter* Player, float OutDir, 
 
 	// 5. 매달린 높이에도 벽이 있어야 한다 (매달리기 판정과 같은 채널)
 	FHitResult HangWallHit;
-	if (!GetWorld()->LineTraceSingleByChannel(HangWallHit, Hang, Hang - Dir * (Radius + 20.f), ECC_WallAttach, Params)) return false;
+	if (!GetWorld()->LineTraceSingleByChannel(HangWallHit, Hang, Hang - Dir * (Radius + 20.f), ECC_LedgeWallAttach, Params)) return false;
 
 	// 6. 매달린 발밑이 바닥과 충분히 떨어져 있어야 한다 (너무 낮은 턱이면 그냥 내려가면 된다)
 	const FVector HangFeet = Hang - FVector(0.f, 0.f, HalfHeight);
@@ -565,9 +683,153 @@ bool UGALedgeHang::FindLedgeInDirection(const ACharacter* Player, float OutDir, 
 	OutPlan.StepOutLocation = StepOut;
 	OutPlan.EdgeStandLocation = Location;
 	OutPlan.HangLocation = Hang;
-	// 매달리기 Idle은 메시를 높이 오프셋만큼 올리므로 내려가기는 그만큼 위에서 끝낸다
-	OutPlan.MeshZOffset = GetHangMeshZOffset(Player);
+	// 매달리기 Idle은 메시를 높이 오프셋만큼 올리므로 내려가기는 그만큼 위에서 끝낸다 (손 맞추기는 내려가는 동안 메시를 올려 둔다)
+	OutPlan.MeshZOffset = bHandAligned ? 0.f : GetHangMeshZOffset(Player);
 	OutPlan.DropEndLocation = Hang + FVector(0.f, 0.f, OutPlan.MeshZOffset);
 	OutPlan.OutDir = OutDir;
+	OutPlan.bHandAligned = bHandAligned;
+	// 메시 상대 위치는 캡슐 기준이므로 매달려 벽을 바라보는 방향으로 바꾼다
+	const FRotator HangFacing(0.f, OutDir > 0.f ? 180.f : 0.f, 0.f);
+	OutPlan.MeshShift = HangFacing.UnrotateVector(MeshShiftWorld);
+	OutPlan.IdleMeshShift = HangFacing.UnrotateVector(IdleMeshShiftWorld);
+	OutPlan.LedgeCorner = LedgeCorner;
+	OutPlan.HandTarget = HandTarget;
+	OutPlan.PredictedHand = Hang + HandOffset + MeshShiftWorld;
 	return true;
+}
+
+bool UGALedgeHang::GetDropEndHandOffset(const ACharacter* Player, float OutDir, FVector& OutOffset) const
+{
+	const UAnimMontage* Montage = DropMontage.LoadSynchronous();
+	if (!IsValid(Montage) || Montage->SlotAnimTracks.Num() == 0 || HandBoneNames.Num() == 0) return false;
+	const TArray<FAnimSegment>& Segments = Montage->SlotAnimTracks[0].AnimTrack.AnimSegments;
+	if (Segments.Num() == 0) return false;
+
+	// 끝 자세는 마지막 구간 애니메이션의 끝 프레임이다
+	const FAnimSegment& LastSegment = Segments.Last();
+	const UAnimSequence* Sequence = Cast<UAnimSequence>(LastSegment.GetAnimReference().Get());
+	if (!IsValid(Sequence) || !Sequence->GetSkeleton()) return false;
+
+	const ACharacter* DefaultCharacter = Player->GetClass()->GetDefaultObject<ACharacter>();
+	if (!DefaultCharacter || !DefaultCharacter->GetMesh()) return false;
+
+	const FReferenceSkeleton& RefSkeleton = Sequence->GetSkeleton()->GetReferenceSkeleton();
+	const FAnimExtractContext Context(static_cast<double>(LastSegment.AnimPlayRate >= 0.f ? LastSegment.AnimEndTime : LastSegment.AnimStartTime));
+
+	FVector HandSum = FVector::ZeroVector;
+	int32 HandCount = 0;
+	for (const FName& BoneName : HandBoneNames)
+	{
+		int32 BoneIndex = RefSkeleton.FindBoneIndex(BoneName);
+		if (BoneIndex == INDEX_NONE) continue;
+
+		// 손에서 루트까지 로컬 변환을 쌓아 컴포넌트 공간 위치를 구한다.
+		// 루트는 루트 모션으로 잠기므로(이동은 코드가 맡는다) 기준 자세를 쓴다.
+		FTransform ComponentSpace = FTransform::Identity;
+		for (; BoneIndex != INDEX_NONE; BoneIndex = RefSkeleton.GetParentIndex(BoneIndex))
+		{
+			FTransform Local = RefSkeleton.GetRefBonePose()[BoneIndex];
+			if (BoneIndex != 0)
+			{
+				Sequence->GetBoneTransform(Local, FSkeletonPoseBoneIndex(BoneIndex), Context, false);
+			}
+			ComponentSpace = ComponentSpace * Local;
+		}
+		HandSum += ComponentSpace.GetTranslation();
+		++HandCount;
+	}
+	if (HandCount == 0) return false;
+
+	const FVector HandInActor = DefaultCharacter->GetMesh()->GetRelativeTransform().TransformPosition(HandSum / HandCount);
+	OutOffset = FRotator(0.f, OutDir > 0.f ? 180.f : 0.f, 0.f).RotateVector(HandInActor);
+	return true;
+}
+
+void UGALedgeHang::StartMeshShiftBlend(ACharacter* Player, float Duration)
+{
+	if (!Plan.bHandAligned || !IsValid(Player) || !Player->GetMesh()) return;
+
+	MeshShiftStartTime = GetWorld()->GetTimeSeconds();
+	MeshShiftDuration = FMath::Max(0.05f, Duration);
+
+	ScheduleMeshShiftTick(++MeshShiftSerial);
+}
+
+void UGALedgeHang::ScheduleMeshShiftTick(int32 Serial)
+{
+	// 어빌리티 타이머는 EndAbility에서 지워지지만 몽타주는 그 뒤에도 섞여 빠지므로, 어빌리티에 묶이지 않은 다음 틱 타이머를 이어 건다.
+	// 새로 시작하면 번호가 바뀌어 이전 것은 멈춘다.
+	const TWeakObjectPtr<UGALedgeHang> WeakThis = this;
+	GetWorld()->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateLambda([WeakThis, Serial]()
+	{
+		UGALedgeHang* Self = WeakThis.Get();
+		if (Self && Self->MeshShiftSerial == Serial && Self->TickMeshShiftBlend())
+		{
+			Self->ScheduleMeshShiftTick(Serial);
+		}
+	}));
+}
+
+bool UGALedgeHang::TickMeshShiftBlend()
+{
+	ACharacter* Player = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!IsValid(Player) || !Player->GetMesh()) return false;
+
+	// 내려가는 중이거나 이어서 매달려 있는 동안만 메시를 맡는다 (올라가기·떨어지기 등으로 넘어가면 그쪽이 맡는다)
+	const UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!IsActive() && !(IsValid(ASC) && ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag()))) return false;
+
+	// 내려가는 동안: 기본 위치 → 끝 자세 위치(MeshShift). 몽타주가 섞여 빠지는 만큼 Idle 위치(IdleMeshShift)로 옮겨 간다.
+	const float Alpha = FMath::Clamp(static_cast<float>(GetWorld()->GetTimeSeconds() - MeshShiftStartTime) / MeshShiftDuration, 0.f, 1.f);
+	const FVector DropShift = Plan.MeshShift * FMath::SmoothStep(0.f, 1.f, Alpha);
+	const float DropWeight = GetDropMontageWeight(Player);
+	Player->GetMesh()->SetRelativeLocation(BaseMeshRelativeLocation + FMath::Lerp(Plan.IdleMeshShift, DropShift, DropWeight));
+
+	return Alpha < 1.f || DropWeight > 0.f;
+}
+
+float UGALedgeHang::GetDropMontageWeight(const ACharacter* Player) const
+{
+	const UAnimInstance* AnimInstance = Player->GetMesh() ? Player->GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInstance || !IsValid(LoadedDropMontage)) return 0.f;
+
+	// 두 구간 몽타주는 같은 몽타주를 다시 재생해 섞으므로 같은 몽타주의 인스턴스를 모두 본다
+	float Weight = 0.f;
+	for (const FAnimMontageInstance* Instance : AnimInstance->MontageInstances)
+	{
+		if (!Instance || Instance->Montage != LoadedDropMontage) continue;
+		if (!Instance->IsStopped()) return 1.f;
+		Weight = FMath::Max(Weight, Instance->GetWeight());
+	}
+	return Weight;
+}
+
+void UGALedgeHang::DrawDropDebug(const ACharacter* Player) const
+{
+#if ENABLE_DRAW_DEBUG
+	if (!bDrawDebugDrop || !IsValid(Player)) return;
+
+	const UWorld* World = GetWorld();
+	const float HalfHeight = Player->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const float Radius = Player->GetCapsuleComponent()->GetScaledCapsuleRadius();
+
+	// 모서리 꼭짓점(흰색), 손 목표(초록), 계획상 손 위치(하늘색)
+	DrawDebugSphere(World, Plan.LedgeCorner, 4.f, 8, FColor::White, false, DebugDrawTime);
+	DrawDebugSphere(World, Plan.HandTarget, 6.f, 8, FColor::Green, false, DebugDrawTime, 0, 1.5f);
+	if (Plan.bHandAligned)
+	{
+		DrawDebugSphere(World, Plan.PredictedHand, 8.f, 8, FColor::Cyan, false, DebugDrawTime);
+	}
+
+	// 경로: 선 자리 → 밖으로 → 내려가기 끝 / 매달림 캡슐(노랑)
+	DrawDebugLine(World, Plan.EdgeStandLocation, Plan.StepOutLocation, FColor::Orange, false, DebugDrawTime, 0, 1.5f);
+	DrawDebugLine(World, Plan.StepOutLocation, Plan.DropEndLocation, FColor::Orange, false, DebugDrawTime, 0, 1.5f);
+	DrawDebugCapsule(World, Plan.HangLocation, HalfHeight, Radius, FQuat::Identity, FColor::Yellow, false, DebugDrawTime);
+
+	DrawDebugString(World, Plan.HangLocation + FVector(0.f, 0.f, HalfHeight + 20.f),
+		Plan.bHandAligned
+			? FString::Printf(TEXT("LedgeHang: hand aligned, depth %.0f, mesh shift %s"), Plan.LedgeCorner.Z - Plan.HangLocation.Z, *Plan.MeshShift.ToCompactString())
+			: FString::Printf(TEXT("LedgeHang: hand bones not found, depth %.0f"), Plan.LedgeCorner.Z - Plan.HangLocation.Z),
+		nullptr, Plan.bHandAligned ? FColor::Green : FColor::Red, DebugDrawTime, true);
+#endif
 }

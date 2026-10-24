@@ -101,4 +101,8 @@ private:
 	FTimerHandle MeshBlendTimer;
 	// 모서리에서 내려와 GALedgeHang의 정지 자세 몽타주로 매달려 있는지
 	bool bHoldingLedgePose = false;
+
+	// 매달린 동안 올라가기(GALedgeClimb) 디버그를 그린다. 타이머는 EndAbility에서 엔진이 지운다.
+	void TickClimbDebug();
+	FTimerHandle ClimbDebugTimer;
 };
