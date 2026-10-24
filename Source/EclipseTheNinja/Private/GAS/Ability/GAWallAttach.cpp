@@ -11,10 +11,15 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimInstance.h"
+#include "TimerManager.h"
+#include "GAS/Ability/GALedgeHang.h"
+#include "GAS/Ability/GALedgeClimb.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttach, "Ability.Movement.WallAttach");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttached, "State.Movement.WallAttached");
 static const ECollisionChannel ECC_WallAttach = ECC_GameTraceChannel2;
+static constexpr float ClimbDebugInterval = 0.05f;
 
 UGAWallAttach::UGAWallAttach()
 {
@@ -90,30 +95,131 @@ void UGAWallAttach::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 	// 벽을 정면으로 바라보게 해서 메시 오프셋의 전방이 항상 벽 쪽이 되도록
 	Player->SetActorRotation(FRotator(0.f, WallNormalX > 0.f ? 180.f : 0.f, 0.f));
 
-	// 애니메이션 위치 보정은 캡슐이 아니라 메시에서 한다
-	if (USkeletalMeshComponent* Mesh = Player->GetMesh())
+#if ENABLE_DRAW_DEBUG
+	// 매달린 동안 올라가기 가능 범위를 계속 보여 준다 (GALedgeClimb의 bDrawDebugClimb)
+	GetWorld()->GetTimerManager().SetTimer(ClimbDebugTimer, this, &UGAWallAttach::TickClimbDebug, ClimbDebugInterval, true, 0.f);
+#endif
+
+	// 모서리에서 내려와 매달린 경우는 내려가기 끝 자세를 정지 몽타주로 붙잡고 있으므로 메시 오프셋을 주지 않는다.
+	// (자세와 위치가 이미 맞아 있어 오프셋을 주면 메시가 튄다)
+	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+	bHoldingLedgePose = IsValid(ASC) && ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHoldTag());
+	if (bHoldingLedgePose)
 	{
-		BaseMeshRelativeLocation = Mesh->GetRelativeLocation();
-		Mesh->SetRelativeLocation(BaseMeshRelativeLocation + FVector(AnimXOffset, 0.f, AnimZOffset));
+		ASC->RemoveLooseGameplayTag(UGALedgeHang::GetLedgeHoldTag());
+
+		// 내려가기의 손 맞추기로 메시가 옮겨져 있을 수 있으므로, 끝날 때 기본 위치로 되돌리게 한다
+		const ACharacter* DefaultCharacter = Player->GetClass()->GetDefaultObject<ACharacter>();
+		if (Player->GetMesh() && DefaultCharacter && DefaultCharacter->GetMesh())
+		{
+			BaseMeshRelativeLocation = DefaultCharacter->GetMesh()->GetRelativeLocation();
+			bMeshOffsetApplied = !Player->GetMesh()->GetRelativeLocation().Equals(BaseMeshRelativeLocation, 0.1f);
+		}
+		return;
+	}
+
+	// 애니메이션 위치 보정은 캡슐이 아니라 메시에서 한다.
+	// 기준은 캐릭터 클래스 기본값으로 잡아, 이전 매달리기의 되돌리기가 진행 중이어도 오프셋이 쌓이지 않게 한다.
+	const ACharacter* DefaultCharacter = Player->GetClass()->GetDefaultObject<ACharacter>();
+	if (Player->GetMesh() && DefaultCharacter && DefaultCharacter->GetMesh())
+	{
+		BaseMeshRelativeLocation = DefaultCharacter->GetMesh()->GetRelativeLocation();
+
+		// 모서리에서 내려오며 손 맞추기로 메시를 이미 매달리기 위치에 뒀으면 그대로 두고, 끝날 때만 되돌린다
+		if (IsValid(ASC) && ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeMeshAlignedTag()))
+		{
+			ASC->RemoveLooseGameplayTag(UGALedgeHang::GetLedgeMeshAlignedTag());
+			bMeshOffsetApplied = true;
+			return;
+		}
+
+		// 모서리에서 내려와 매달린 경우는 GALedgeHang이 높이 오프셋을 이미 줬으므로 벽 쪽(X)만 섞인다
+		BlendMeshTo(Player, BaseMeshRelativeLocation + FVector(AnimXOffset, 0.f, AnimZOffset));
 		bMeshOffsetApplied = true;
+	}
+}
+
+void UGAWallAttach::BlendMeshTo(ACharacter* Player, const FVector& Target)
+{
+	UWorld* World = Player->GetWorld();
+	World->GetTimerManager().ClearTimer(MeshBlendTimer);
+
+	if (MeshOffsetBlendTime <= KINDA_SMALL_NUMBER)
+	{
+		Player->GetMesh()->SetRelativeLocation(Target);
+		return;
+	}
+
+	BlendCharacter = Player;
+	MeshBlendFrom = Player->GetMesh()->GetRelativeLocation();
+	MeshBlendTo = Target;
+	MeshBlendStartTime = World->GetTimeSeconds();
+	World->GetTimerManager().SetTimer(MeshBlendTimer, this, &UGAWallAttach::TickMeshBlend, 0.01f, true);
+}
+
+void UGAWallAttach::TickMeshBlend()
+{
+	ACharacter* Player = BlendCharacter.Get();
+	if (!IsValid(Player) || !Player->GetMesh())
+	{
+		if (IsValid(Player)) Player->GetWorld()->GetTimerManager().ClearTimer(MeshBlendTimer);
+		return;
+	}
+
+	const float Alpha = FMath::Clamp(static_cast<float>(Player->GetWorld()->GetTimeSeconds() - MeshBlendStartTime) / MeshOffsetBlendTime, 0.f, 1.f);
+	Player->GetMesh()->SetRelativeLocation(FMath::Lerp(MeshBlendFrom, MeshBlendTo, FMath::SmoothStep(0.f, 1.f, Alpha)));
+	if (Alpha >= 1.f)
+	{
+		Player->GetWorld()->GetTimerManager().ClearTimer(MeshBlendTimer);
+	}
+}
+
+void UGAWallAttach::TickClimbDebug()
+{
+	const ACharacter* Player = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!IsActive() || !IsValid(Player) || !IsValid(ASC)) return;
+
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (const UGALedgeClimb* Climb = Cast<UGALedgeClimb>(Spec.GetPrimaryInstance()))
+		{
+			// 다음 타이머까지 사라지지 않게 간격보다 조금 길게 남긴다
+			Climb->DrawClimbDebug(Player, ClimbDebugInterval * 1.5f);
+			return;
+		}
 	}
 }
 
 void UGAWallAttach::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo * ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	const APlayerCharacter* Player = Cast<APlayerCharacter>(ActorInfo->AvatarActor.Get());
+	APlayerCharacter* Player = Cast<APlayerCharacter>(ActorInfo->AvatarActor.Get());
+	const bool bReturnMesh = bMeshOffsetApplied;
 	if (IsValid(Player))
 	{
 		UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
 		Movement->SetMovementMode(MOVE_Falling);
 
-		if (bMeshOffsetApplied && Player->GetMesh())
+		// 모서리 매달리기의 정지 자세를 풀어 준다. 이어서 시작하는 올라가기·암살·벽점프 몽타주가 섞여 들어온다.
+		if (bHoldingLedgePose && Player->GetMesh())
 		{
-			Player->GetMesh()->SetRelativeLocation(BaseMeshRelativeLocation);
+			if (UAnimInstance* AnimInstance = Player->GetMesh()->GetAnimInstance())
+			{
+				AnimInstance->Montage_Stop(0.2f);
+			}
 		}
 	}
 	bMeshOffsetApplied = false;
+	bHoldingLedgePose = false;
+
+	// 엔진의 EndAbility는 이 어빌리티의 타이머를 모두 지우므로, 메시 되돌리기는 그 뒤에 시작한다
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+
+	// 이어서 시작하는 올라가기·암살·벽점프 몽타주가 섞여 들어오는 동안 메시를 원래 위치로 되돌린다
+	if (bReturnMesh && IsValid(Player) && Player->GetMesh())
+	{
+		BlendMeshTo(Player, BaseMeshRelativeLocation);
+	}
 }
 
 void UGAWallAttach::OnCompleted()

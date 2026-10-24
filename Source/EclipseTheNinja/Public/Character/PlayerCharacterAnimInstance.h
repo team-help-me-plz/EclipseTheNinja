@@ -79,7 +79,6 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Wall Attach")
 	bool bWallAttached = false;
-
 private:
 	// 캐릭터 머리 상하 각도 계산
 	float CalculateHeadPitch(const APlayerCharacter& Character) const;
