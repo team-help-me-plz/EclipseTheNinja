@@ -187,7 +187,8 @@ protected:
 	// 매달리기 Idle 자세에서 손 본이 캡슐 중심보다 얼마나 위에 있는지 (매달리기의 메시 오프셋을 준 상태 기준).
 	// 내려가기 끝 자세와 매달리기 Idle은 루트 기준 손 높이가 달라서, 최종 매달림 높이는 이 값으로 정하고
 	// 내려가는 동안은 끝 자세의 손이 모서리에 오도록 메시를 옮겼다가, 몽타주가 섞여 빠지는 만큼 Idle 위치로 옮긴다.
-	// bDrawDebugDrop을 켜고 매달린 뒤 로그의 handZ-actor 값으로 잰다. 0이면 끝 자세와 Idle의 손 높이가 같다고 본다.
+	// bDrawDebugDrop을 켜고 매달려 Idle로 넘어간 뒤 자홍 글자의 Z 값(실제 손 - 손 목표)만큼 이 값에 더해 맞춘다.
+	// 0이면 끝 자세와 Idle의 손 높이가 같다고 본다.
 	// HoldMontage를 쓰면 끝 자세를 붙잡고 있으므로 무시한다.
 	UPROPERTY(EditDefaultsOnly, Category = "LedgeHang|Hand", meta = (EditCondition = "bAlignHandToLedge", ClampMin = "0.0", Units = "cm"))
 	float HangIdleHandHeight = 51.f;

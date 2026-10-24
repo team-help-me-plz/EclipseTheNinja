@@ -412,40 +412,6 @@ void UGALedgeHang::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 			DrawDebugString(GetWorld(), Hand, FString::Printf(TEXT("%s X%+.0f Z%+.0f"), *BoneName.ToString(),
 				(Hand.X - Plan.HandTarget.X) * -Plan.OutDir, Hand.Z - Plan.HandTarget.Z), nullptr, FColor::Magenta, DebugDrawTime, true);
 		}
-
-		// 진단: 계획값과, 매달리는 순간·이후의 실제 손 위치와 재생 중인 몽타주를 남긴다
-		UE_LOG(LogTemp, Log, TEXT("DropDiag plan: hang=%s target=%s predicted=%s meshShift=%s"),
-			*Plan.HangLocation.ToCompactString(), *Plan.HandTarget.ToCompactString(), *Plan.PredictedHand.ToCompactString(), *Plan.MeshShift.ToCompactString());
-		const TWeakObjectPtr<ACharacter> WeakPlayer = Player;
-		const FVector Target = Plan.HandTarget;
-		const TArray<FName> Bones = HandBoneNames;
-		auto LogHand = [WeakPlayer, Target, Bones](const TCHAR* Label)
-		{
-			const ACharacter* P = WeakPlayer.Get();
-			if (!IsValid(P) || !P->GetMesh()) return;
-			const USkeletalMeshComponent* Mesh = P->GetMesh();
-			const UAnimInstance* Anim = Mesh->GetAnimInstance();
-			const UAnimMontage* Montage = Anim ? Anim->GetCurrentActiveMontage() : nullptr;
-			const FVector Root = Mesh->GetBoneLocation(Mesh->GetBoneName(0));
-			for (const FName& BoneName : Bones)
-			{
-				if (!Mesh->DoesSocketExist(BoneName)) continue;
-				const FVector Hand = Mesh->GetSocketLocation(BoneName);
-				UE_LOG(LogTemp, Log, TEXT("DropDiag %s: %s handZ-target=%+.1f handX-target=%+.1f handZ-actor=%+.1f rootZ-actor=%+.1f actor=%s meshRel=%s montage=%s pos=%.3f weight=%.2f"),
-					Label, *BoneName.ToString(), Hand.Z - Target.Z, Hand.X - Target.X, Hand.Z - P->GetActorLocation().Z, Root.Z - P->GetActorLocation().Z,
-					*P->GetActorLocation().ToCompactString(), *Mesh->GetRelativeLocation().ToCompactString(), *GetNameSafe(Montage),
-					Montage ? Anim->Montage_GetPosition(Montage) : -1.f, Montage && Anim->GetActiveInstanceForMontage(Montage) ? Anim->GetActiveInstanceForMontage(Montage)->GetWeight() : 0.f);
-			}
-		};
-		LogHand(TEXT("handoff"));
-		for (const float Delay : { 0.15f, 0.5f, 1.0f })
-		{
-			FTimerHandle Unused;
-			GetWorld()->GetTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([LogHand, Delay]()
-			{
-				LogHand(*FString::Printf(TEXT("+%.2fs"), Delay));
-			}), Delay, false);
-		}
 	}
 #endif
 
