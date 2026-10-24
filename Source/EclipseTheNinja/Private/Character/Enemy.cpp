@@ -26,6 +26,8 @@
 #include "Engine/World.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "Component/AssassinateTargetComponent.h"
+#include "Component/AssassinationDropComponent.h"
+#include "UObject/ConstructorHelpers.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 
 // Sets default values
@@ -52,6 +54,14 @@ AEnemy::AEnemy()
 
 	CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 	AssassinateTargetComt = CreateDefaultSubobject<UAssassinateTargetComponent>(TEXT("AssassinateTargetComp"));
+
+	// 기본으로 모든 적이 암살 처치 시 회복 아이템을 떨어뜨린다.
+	AssassinationDropComp = CreateDefaultSubobject<UAssassinationDropComponent>(TEXT("AssassinationDropComp"));
+	static ConstructorHelpers::FClassFinder<AActor> HealPickupClass(TEXT("/Game/Blueprint/Item/BP_HealPickup"));
+	if (HealPickupClass.Succeeded())
+	{
+		AssassinationDropComp->SetDropActorClass(HealPickupClass.Class);
+	}
 }
 
 // Called when the game starts or when spawned
@@ -247,6 +257,9 @@ void AEnemy::Die()
 	// 체크포인트 리스폰으로 되살릴 수 있도록 파괴하지 않고, 연출이 끝나면 숨긴다.
 	GetWorldTimerManager().SetTimer(DeathDeactivateTimer, this, &AEnemy::DeactivateAfterDeath,
 		FMath::Max(0.01f, MontageDuration + FMath::Max(0.0f, DeathDespawnDelay)), false);
+
+	// PendingAssassinationMontage는 ReceiveAssassination 안에서만 유효하므로 여기서 암살 여부를 함께 알린다.
+	OnDied.Broadcast(this, IsValid(PendingAssassinationMontage));
 }
 
 void AEnemy::DeactivateAfterDeath()
@@ -255,6 +268,9 @@ void AEnemy::DeactivateAfterDeath()
 	{
 		return;
 	}
+
+	// 풀 반환 시 대기 위치로 옮겨지므로, 사라지기 전 위치에서 알린다.
+	OnDeathFinished.Broadcast(this);
 
 	// 풀에서 스폰된 적이면 풀에 반환한다. (레벨에 배치된 적은 풀이 관리하지 않으므로 false가 반환된다)
 	if (UObjectPoolSubsystem* PoolSubsystem = GetWorld()->GetSubsystem<UObjectPoolSubsystem>())

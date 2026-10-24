@@ -15,6 +15,7 @@ class UGABaseAttack;
 class UEnemyDetectionComponent;
 class UCheckpointBoundComponent;
 class UAssassinateTargetComponent;
+class UAssassinationDropComponent;
 struct FOnAttributeChangeData;
 struct FGameplayEffectContextHandle;
 
@@ -39,6 +40,14 @@ enum class EEnemyAlertLevel : uint8
 	Combat,
 };
 
+class AEnemy;
+
+/** 사망 처리 시점에 호출된다. bByAssassination은 암살로 처치되었는지 여부 */
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnEnemyDeath, AEnemy*, bool);
+
+/** 사망 연출이 끝나 적이 사라지기 직전(숨김/풀 반환 전)에 호출된다 */
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnEnemyDeathFinished, AEnemy*);
+
 /** 공통 전투 기능에 AI 행동, 피격/사망 처리, 머리 위 UI를 추가한다. */
 UCLASS()
 class ECLIPSETHENINJA_API AEnemy : public ABaseCharacter, public ICheckpointResettable, public IPoolable
@@ -53,6 +62,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Combat|Death")
 	bool IsDead() const { return bIsDead; }
 	void ReceiveAssassination(UAnimMontage* Montage);
+
+	/** 사망 시 알림 (드롭 등 사망에 반응하는 컴포넌트용) */
+	FOnEnemyDeath OnDied;
+
+	/** 사망 연출이 끝나 사라지기 직전 알림 */
+	FOnEnemyDeathFinished OnDeathFinished;
 
 	UFUNCTION(BlueprintPure, Category = "AI|Target")
 	AActor* GetCombatTarget() const;
@@ -286,6 +301,10 @@ protected:
 	/** 이 컴포넌트를 가진 액터는 암살의 대상이 될 수 있다*/
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UAssassinateTargetComponent> AssassinateTargetComt;
+
+	/** 암살로 처치되면 사라질 때 회복 아이템을 떨어뜨리는 컴포넌트. 떨어뜨리지 않을 적은 BP에서 DropActorClass를 비운다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UAssassinationDropComponent> AssassinationDropComp;
 
 	FTimerHandle DeathDeactivateTimer;
 

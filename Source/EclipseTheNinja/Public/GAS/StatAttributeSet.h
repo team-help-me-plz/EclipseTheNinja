@@ -27,6 +27,12 @@ public:
 	// 값의 Clamping용도로 사용
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 
+	/**
+	 * BaseValue 변경 전에 실행되는 함수
+	 * 회복 GE처럼 Health에 직접 더하는 Instant GE가 BaseValue를 MaxHealth 위로 올리지 않도록 Clamp한다.
+	 */
+	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
+
 	// 이펙트가 적용 된 후에 실행되는 함수
 	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
 

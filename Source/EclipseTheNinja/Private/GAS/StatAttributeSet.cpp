@@ -26,6 +26,17 @@ void UStatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, 
     }
 }
 
+void UStatAttributeSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
+{
+    Super::PreAttributeBaseChange(Attribute, NewValue);
+
+    if (Attribute == GetHealthAttribute())
+    {
+        // Health의 BaseValue가 MaxHealth를 넘지 않도록 한다. (회복 GE가 Health에 직접 더하는 경우)
+        NewValue = FMath::Clamp(NewValue, 0, GetMaxHealth());
+    }
+}
+
 void UStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
     // BaseValue가 변경될 때만 실행된다.
