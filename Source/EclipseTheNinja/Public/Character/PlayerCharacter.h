@@ -64,7 +64,6 @@ protected:
 	/** Interact Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* InteractAction;
-
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> BasicAttackAction;
 
