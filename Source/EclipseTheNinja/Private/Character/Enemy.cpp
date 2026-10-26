@@ -27,6 +27,8 @@
 #include "GAS/Ability/GABaseAttack.h"
 #include "Component/AssassinateTargetComponent.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Components/SphereComponent.h"
+#include "Noise/NoiseTypes.h"
 
 // Sets default values
 AEnemy::AEnemy()
@@ -52,6 +54,14 @@ AEnemy::AEnemy()
 
 	CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 	AssassinateTargetComt = CreateDefaultSubobject<UAssassinateTargetComponent>(TEXT("AssassinateTargetComp"));
+
+	NoiseDetectComponent = CreateDefaultSubobject<USphereComponent>(TEXT("NoiseDetectComponent"));
+	NoiseDetectComponent->SetupAttachment(RootComponent);
+	NoiseDetectComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	NoiseDetectComponent->SetCollisionObjectType(ECC_Noise);
+	NoiseDetectComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+	NoiseDetectComponent->SetCollisionResponseToChannel(ECC_Noise, ECR_Overlap);
+	NoiseDetectComponent->SetGenerateOverlapEvents(false);
 }
 
 // Called when the game starts or when spawned
@@ -78,6 +88,11 @@ void AEnemy::BeginPlay()
 	{
 		Die();
 	}
+
+	// 적 감지상태 변화 델리게이트 바인딩
+	EnemyDetectComponent->OnAwarenessChanged.AddDynamic(this, &AEnemy::HandleAwarenessChanged);
+	// 소리 감지 원 크기 초기화
+	SyncNoiseDetectRadius(this->LastNoiseSyncLevel);
 }
 
 void AEnemy::InitializeBehaviorArea()
@@ -425,6 +440,20 @@ bool AEnemy::IsLivingPlayer(const APawn* Player) const
 		|| PlayerASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) > 0.0f;
 }
 
+void AEnemy::HandleAwarenessChanged(float Gauge, EEnemyAlertLevel Level)
+{
+	if (Level != LastNoiseSyncLevel)
+	{
+		SyncNoiseDetectRadius(Level);
+	}
+}
+
+void AEnemy::SyncNoiseDetectRadius(EEnemyAlertLevel Level)
+{
+	LastNoiseSyncLevel = Level;
+	NoiseDetectComponent->SetSphereRadius(EnemyDetectComponent->GetCurrentDetectionRadius(), false);
+}
+
 bool AEnemy::IsInsideCombatArea(const FVector& Location) const
 {
 	return FVector::DistSquared(Location, BehaviorOrigin) <= FMath::Square(FMath::Max(1.0f, CombatAreaRadius));
@@ -560,6 +589,11 @@ bool AEnemy::ActivateAIAttack()
 void AEnemy::FaceLocation(const FVector& Location)
 {
 	FaceDirection(Location.X - GetActorLocation().X);
+}
+
+void AEnemy::NotifyNoise(const FVector& InLocation, const float InRadius, const float InStrength)
+{
+	this->EnemyDetectComponent->NotifyNoise(InLocation, InRadius, InStrength);
 }
 
 bool AEnemy::TryStartAIBaseAttack(AActor* Target)

@@ -15,6 +15,7 @@ class UGABaseAttack;
 class UEnemyDetectionComponent;
 class UCheckpointBoundComponent;
 class UAssassinateTargetComponent;
+class USphereComponent;
 struct FOnAttributeChangeData;
 struct FGameplayEffectContextHandle;
 
@@ -124,6 +125,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement")
 	void FaceLocation(const FVector& Location);
 
+	// 소리 감지 시 불릴 함수
+	void NotifyNoise(const FVector& InLocation, const float InRadius, const float InStrength);
 
 
 	// 체크포인트 리스폰 1단계: 체력/사망/전투 상태, 충돌, 이동, 애니메이션, 감지 상태를 초기화한다.
@@ -204,6 +207,12 @@ protected:
 	UFUNCTION(BlueprintPure, Category = "AI|Target")
 	bool IsLivingPlayer(const APawn* Player) const;
 
+	// EnemyDetectionComponent의 경보 주목도가 바뀔 때 호출하는 함수.
+	UFUNCTION()
+	void HandleAwarenessChanged(float Gauge, EEnemyAlertLevel Level);
+
+	void SyncNoiseDetectRadius(EEnemyAlertLevel Level);
+
 public:
 	// BehaviorOrigin을 중심으로 활동영역 안에 있는지 확인하는 함수
 	UFUNCTION(BlueprintPure, Category = "AI|Detection")
@@ -244,6 +253,9 @@ protected:
 	/** 시작 위치 중심의 활동 영역. 순찰 구간과 경계 수색 지점을 제한한다. 추적/공격은 제한하지 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Detection", meta = (ClampMin = "1.0"))
 	float CombatAreaRadius = 1000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Detection|Noise")
+	TObjectPtr<USphereComponent>	NoiseDetectComponent = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Combat", meta = (ClampMin = "1.0"))
 	float ChaseSpeed = 250.0f;
@@ -313,5 +325,8 @@ protected:
 	/** 빌보드 회전 시 좌우 기울기(Roll)를 고정(0)할지 여부 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Overhead")
 	bool bLockWidgetRoll = true;
+
+	// 최근 적의 주목도
+	EEnemyAlertLevel LastNoiseSyncLevel = EEnemyAlertLevel::Normal;
 
 };
