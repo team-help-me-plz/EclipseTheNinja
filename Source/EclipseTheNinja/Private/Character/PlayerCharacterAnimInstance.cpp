@@ -9,6 +9,7 @@
 #include "AbilitySystemComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
 #include "GAS/Ability/GALedgeHang.h"
+#include "GAS/Ability/GAWallSlide.h"
 
 void UPlayerCharacterAnimInstance::NativeInitializeAnimation()
 {
@@ -41,7 +42,7 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		// 모서리에서 내려가는 중에도 미리 매달리기 상태로 둔다. 내려가기 몽타주가 빠질 때 매달리기 Idle로 바로 섞인다.
 		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag())
-			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangPoseTag()))
+			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangPoseTag()) || ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag()))
 		{
 			bWallAttached = true;
 		}

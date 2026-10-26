@@ -31,6 +31,24 @@ public:
 		bool bReplicateEndAbility, bool bWasCancelled) override;
 
 protected:
+	UFUNCTION()
+	void OnSlideCompleted();
+	UFUNCTION()
+	void OnSlideInterrupted();
+
+protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WallSlide", meta = (ClampMin = "0", Unit="cm"))
 	float SlideMaxHeight = 1000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WallSlide", meta = (ClampMin = "1", Unit = "cm/s"))
+	float SlideSpeed = 600.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WallSlide|Anim")
+	TSoftObjectPtr<UAnimMontage> SlideMontage;
+
+private:
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> LodaedSlideMontage;
+
+	bool bSildeCompleted = false;
 };

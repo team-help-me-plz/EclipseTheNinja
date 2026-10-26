@@ -96,8 +96,8 @@ protected:
 	// 내려가기 몽타주의 루트 모션이 내려간 높이를 쓰면 몽타주 끝 자세의 손이 모서리에 맞는다.
 	float ResolveHangDepth(float CapsuleHalfHeight) const;
 
-	// 매달리기(GAWallAttach)가 메시에 더할 높이 오프셋. 정지 자세를 쓰거나 매달리기가 없으면 0.
-	float GetHangMeshZOffset(const ACharacter* Player) const;
+	// 매달리기(GAWallAttach)가 메시에 더할 오프셋. 정지 자세를 쓰거나 매달리기가 없으면 영벡터.
+	FVector GetHangMeshOffset(const ACharacter* Player) const;
 
 	// 내려가기 몽타주 끝 자세에서 손 본(HandBoneNames 평균)의 위치를, 매달려 벽을 바라보는 캡슐 중심 기준 월드 오프셋으로 구한다.
 	// 메시는 기본 상대 위치로 본다. 몽타주나 본이 없으면 false.

@@ -62,7 +62,7 @@ protected:
 	float WallSearchHalfHeight = 35.f;
 
 	// 벽에 붙은 동안 메시를 벽 쪽으로 옮길 거리 (캡슐은 벽에 딱 붙은 위치에 둔다)
-	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0", Units = "cm"))
+	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "-37", Units = "cm"))
 	float AnimXOffset = 15.f;
 
 	// 벽에 붙은 동안 메시를 위로 옮길 거리 (매달리기 애니메이션이 캡슐 아래로 내려가는 만큼)

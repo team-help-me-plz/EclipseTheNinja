@@ -32,6 +32,7 @@
 #include "GAS/Ability/GAWallAttach.h"
 #include "GAS/Ability/GALedgeHang.h"
 #include "GAS/Ability/GALedgeClimb.h"
+#include "GAS/Ability/GAWallSlide.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -158,7 +159,8 @@ void APlayerCharacter::UpdateCursorFacing(float DeltaSeconds)
 	{
 		// 매달려 있거나 모서리에서 내려가는 중에는 벽을 바라본 채로 둔다.
 		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag())
-			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangingTag()))
+			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangingTag())
+			|| ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag()))
 		{
 			return;
 		}
@@ -359,6 +361,8 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APlayerCharacter::OnCameraMoveEndInput);
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Canceled, this, &APlayerCharacter::OnCameraMoveEndInput);
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
+
+		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCrouch);
 	}
 }
 
@@ -654,7 +658,8 @@ void APlayerCharacter::DoMove(float Forward)
 	if (IsValid(ASC))
 	{
 		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag())
-			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangingTag()))
+			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangingTag())
+			|| ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag()))
 		{
 			return;
 		}
@@ -785,6 +790,19 @@ void APlayerCharacter::DoCameraMoveEnd()
 
 	APC->StopCameraMove();
 	bIsExploring = false;
+}
+
+void APlayerCharacter::DoCrouch()
+{
+	if (IsWallAttached())
+	{
+		// 매달린 상태에서 앉기를 누르면 벽 아래로 내려간다.
+		TryActivateAbilityByInputID(EAbilityInputID::WallSlide);
+	}
+	else
+	{
+		// TODO 웅크리기
+	}
 }
 
 void APlayerCharacter::OnCameraMoveEndInput()
