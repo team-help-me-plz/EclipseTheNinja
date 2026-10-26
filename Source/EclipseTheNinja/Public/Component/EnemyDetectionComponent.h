@@ -75,6 +75,8 @@ public:
     /** 현재 감지 상태를 Blackboard에 다시 기록한다. (BT 재시작 시 사용) */
     void RefreshBlackboard() { UpdateBlackboard(); }
 
+	void NotifyNoise(const FVector& InLocation, const float InRadius, const float InStrength);
+
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -114,7 +116,15 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|Sight", meta=(ClampMin="0.02", Units="s"))
     float DetectionInterval = 0.1f;
 
+    /** Noise 감지 시 주목도가 내려가지 않는 시간 */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|Noise", meta=(ClampMin="0.02", Units="s"))
+    float NoiseAlertMaintain = 1.0f;
+
 private:
+	// 소음 발생 후 일정시간동안 주목도 하한선을 유지하게 하는 함수
+	void	NoiseAlertStart(float InTargetGauge);
+	// 소음 발생 후 일정시간 뒤 주목도 하한선을 해제하는 함수
+	void	NoiseAlertReset();
     // 플레이어와 분신을 같은 기준으로 검사하고 가장 가까운 가시 대상을 선택한다.
     APawn* FindVisibleTarget(float Radius) const;
     // 소유한 액터가 파라미터로 들어온 타겟을 볼 수 있는지 반환하는 함수
@@ -141,4 +151,9 @@ private:
     bool bHasLastKnownLocation = false;
     float TimeWithoutSight = 0.0f;
     float DetectionElapsed = 0.0f;
+
+	FTimerHandle	NoiseTimer;
+	bool			bIsNoise = false;
+	float			NoiseAlertMin = 0.0f;
+	FVector			NoiseLocation = FVector::ZeroVector;
 };
