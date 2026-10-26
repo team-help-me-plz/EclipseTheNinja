@@ -18,6 +18,7 @@ class UAnimMontage;
 class UGABaseAttack;
 class UInteractBoxComponent;
 class UAssassinationTargetingComponent;
+class UNoiseComponent;
 class UGAAssassinate;
 struct FInputActionValue;
 
@@ -42,6 +43,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Assassinate")
 	TObjectPtr<UAssassinationTargetingComponent> AssassinateTargetingComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Noise")
+	TObjectPtr<UNoiseComponent> NoiseComponent;
 
 	// 예전 BP에 저장된 암살 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
 	UPROPERTY()
@@ -201,6 +205,9 @@ public:
 	// 이동 입력으로 턴 클립을 끊을 때의 블렌드 시간.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Turn In Place", meta = (ClampMin = "0", Units = "s"))
 	float MoveTurnBlendOutTime = 0.15f;
+
+	// 점프 시 소리를 발생시키기 위해 Character에 존재하는 함수 오버라이드
+	virtual void OnJumped_Implementation() override;
 
 protected:
 	virtual void BeginPlay() override;
