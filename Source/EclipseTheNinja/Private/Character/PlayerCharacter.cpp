@@ -447,7 +447,6 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	{
 		TryActivateAbilityByInputID(EAbilityInputID::LedgeClimb);
 	}
-
 	// route the input
 	DoMove(MoveVector.Y);
 }
@@ -467,8 +466,18 @@ void APlayerCharacter::DropStarted(const FInputActionValue& Value)
 	const UPrimitiveComponent* Floor = GetCharacterMovement()->CurrentFloor.HitResult.GetComponent();
 	if (IsValid(Floor) && Floor->GetCollisionObjectType() == SoftCollisionObjectType) return;
 
-	// 모서리에 서 있으면 아래 벽으로 내려가 매달린다.
-	TryActivateAbilityByInputID(EAbilityInputID::LedgeHang);
+
+	if (IsWallAttached())
+	{
+		// 매달린 상태에서 S를 누르면 벽 아래로 내려간다.
+		TryActivateAbilityByInputID(EAbilityInputID::WallSlide);
+	}
+	else
+	{
+		// 모서리에 서 있으면 아래 벽으로 내려가 매달린다.
+		TryActivateAbilityByInputID(EAbilityInputID::LedgeHang);
+	}
+
 }
 
 void APlayerCharacter::DropReleased(const FInputActionValue& Value)
