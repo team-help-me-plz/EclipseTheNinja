@@ -10,6 +10,7 @@
 #include "GAS/Ability/GAWallAttach.h"
 #include "GAS/Ability/GALedgeHang.h"
 #include "GAS/Ability/GAWallSlide.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 void UPlayerCharacterAnimInstance::NativeInitializeAnimation()
 {
@@ -24,6 +25,7 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 	// 소유자가 없어지거나 ASC가 없으면 이전 상태를 남기지 않는다.
 	bWallAttached = false;
+	ClimbingSpeed = 0.f;
 
 	Super::NativeUpdateAnimation(DeltaSeconds);
 
@@ -45,6 +47,14 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangPoseTag()) || ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag()))
 		{
 			bWallAttached = true;
+		}
+
+		const UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
+		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag())
+			&& Movement->MovementMode == MOVE_Flying
+			&& !Movement->CurrentRootMotion.HasActiveRootMotionSources())
+		{
+			ClimbingSpeed = Movement->Velocity.Z;
 		}
 	}
 

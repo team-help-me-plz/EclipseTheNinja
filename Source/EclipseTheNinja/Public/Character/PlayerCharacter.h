@@ -133,9 +133,6 @@ protected:
 	/** Last captured horizontal movement input value */
 	float ActionValueY = 0.0f;
 
-	/** Last captured platform drop axis value */
-	float DropValue = 0.0f;
-
 	/** If true, this character has already wall jumped */
 	bool bHasWallJumped = false;
 
@@ -271,14 +268,14 @@ protected:
 	/** Called for movement input */
 	void Move(const FInputActionValue& Value);
 
-	/** Called for drop from platform input */
-	void Drop(const FInputActionValue& Value);
+	// BP 컴파일에러 제거용 임시 함수
+	void Drop(const FInputActionValue& Value) {}
 
-	/** 아래 입력을 처음 누른 순간. 모서리에 서 있으면 아래 벽으로 내려가 매달린다. */
-	void DropStarted(const FInputActionValue& Value);
+	// BP 컴파일에러 제거용 임시 함수
+	void DropStarted(const FInputActionValue& Value) {}
 
-	/** Called for drop from platform input release */
-	void DropReleased(const FInputActionValue& Value);
+	// BP 컴파일에러 제거용 임시 함수
+	void DropReleased(const FInputActionValue& Value) {}
 
 	// 체력 어트리뷰트가 변경되었을 때 호출될 함수
 	void OnHealthChanged(const FOnAttributeChangeData& Data);
@@ -293,9 +290,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoMove(float Forward);
 
-	/** Handles drop inputs from either controls or UI interfaces */
+	// BP 컴파일에러 제거용 임시 함수
 	UFUNCTION(BlueprintCallable, Category = "Input")
-	virtual void DoDrop(float Value);
+	virtual void DoDrop(float Value) {}
+
 
 	/** Handles jump pressed inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category = "Input")
@@ -308,6 +306,11 @@ public:
 	/** Handles interact inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoInteract();
+
+	/** Handles Wall Climbing */
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	virtual void DoWAllMove(float Up);
+
 
 
 	// 카메라 이동 처리

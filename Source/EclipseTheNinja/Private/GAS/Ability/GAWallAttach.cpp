@@ -83,7 +83,8 @@ void UGAWallAttach::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 
 	UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
 	Movement->StopMovementImmediately();
-	Movement->DisableMovement();
+	Movement->SetMovementMode(MOVE_Flying);
+	//Movement->DisableMovement();
 
 	// 캡슐은 벽 표면에 딱 붙인다 (벽 속에 넣으면 Falling 복귀 시 튕겨 나옴)
 	const float WallNormalX = WallHit.ImpactNormal.X > 0.f ? 1.f : -1.f;
