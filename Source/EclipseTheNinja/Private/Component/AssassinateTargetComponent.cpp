@@ -70,6 +70,8 @@ bool UAssassinateTargetComponent::CanAssassinate()
 	AEnemy* Enemy = Cast<AEnemy>(GetOwner());
 	if (!IsValid(Enemy)) return false;
 	if (Enemy->IsDead()) return false;
+	// 적 종류별 조건 (보스는 실드가 켜져 있으면 암살 불가)
+	if (!Enemy->CanBeAssassinated()) return false;
 	// 이 컴포넌트를 대상으로 이미 암살이 진행되고 있으면 암살 불가
 	if (bAssassinationInProgress) return false;
 

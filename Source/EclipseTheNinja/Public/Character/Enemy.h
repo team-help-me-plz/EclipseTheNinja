@@ -62,7 +62,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Combat|Death")
 	bool IsDead() const { return bIsDead; }
-	void ReceiveAssassination(UAnimMontage* Montage);
+
+	/** 암살 성공 시 호출된다. 기본 적은 즉시 사망하고, 보스처럼 규칙이 다른 적은 재정의한다. */
+	virtual void ReceiveAssassination(UAnimMontage* Montage);
+
+	/** 지금 암살 대상으로 지정될 수 있는지. 경계 단계 검사와 별도로 적 종류별 조건(보스 실드 등)을 추가한다. */
+	virtual bool CanBeAssassinated() const { return true; }
 
 	/** 사망 시 알림 (드롭 등 사망에 반응하는 컴포넌트용) */
 	FOnEnemyDeath OnDied;
@@ -135,7 +140,7 @@ public:
 	bool TryStartAIBaseAttack(AActor* Target);
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Combat")
-	void CancelAIBaseAttack();
+	virtual void CancelAIBaseAttack();
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement")
 	void FaceLocation(const FVector& Location);
@@ -196,8 +201,8 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "UI|Overhead")
 	virtual void UpdateOverheadWidgetRotation();
 
-	// 체력 어트리뷰트가 변경되었을 때 호출될 함수
-	void OnHealthChanged(const FOnAttributeChangeData& Data);
+	// 체력 어트리뷰트가 변경되었을 때 호출될 함수. 보스는 체력 구간 기믹을 위해 재정의한다.
+	virtual void OnHealthChanged(const FOnAttributeChangeData& Data);
 
 	// 전달된 Damage GE의 원본 Context로 공격자를 확인한 뒤 감지 상태를 갱신하는 함수
 	void OnDamageReceived(const FGameplayEffectContextHandle& Context);
@@ -238,7 +243,7 @@ public:
 
 	// 기본 공격 어빌리티가 현재 실행중인지 확인하는 함수
 	UFUNCTION(BlueprintPure, Category = "Combat|Attack")
-	bool IsAttackActive() const;
+	virtual bool IsAttackActive() const;
 
 	// 피격 몽타주가 현재 재생 중인지 확인하는 함수
 	UFUNCTION(BlueprintPure, Category = "Combat|Hit Reaction")
@@ -248,9 +253,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void StopHorizontalMovement();
 
-	// 좌우 방향을 바라보게 만드는 함수
+	// 좌우 방향을 바라보게 만드는 함수. TurnRate가 0보다 크면 Tick에서 서서히 돈다.
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void FaceDirection(float DirectionX);
+
+	// 방향 전환이 아직 진행 중인지
+	UFUNCTION(BlueprintPure, Category = "Movement")
+	bool IsTurning() const { return bTurning; }
+
+	// 공격을 시작한 대상. GetCombatTarget과 달리 대상이 죽었는지는 검사하지 않는다.
+	APawn* GetAttackStartedTarget() const { return CombatTarget.Get(); }
+
+	// FaceDirection으로 정한 방향까지 TurnRate만큼 회전한다.
+	void UpdateTurning(float DeltaTime);
 
 	// 프레임마다 DeltaTime을 전달해 DestinationX 방향으로 이동 입력을 넣는다.
 	UFUNCTION(BlueprintCallable, Category = "Movement")
@@ -277,6 +292,14 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Combat", meta = (ClampMin = "1.0"))
 	float ChaseSpeed = 250.0f;
+
+	/** 좌우 방향 전환 속도(도/초). 0이면 즉시 돈다. 크게 도는 동안에는 제자리에서 돌고 나서 이동한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Movement", meta = (ClampMin = "0.0", Units = "deg/s"))
+	float TurnRate = 0.0f;
+
+	// 방향 전환 목표 Yaw와 진행 여부
+	float TargetFacingYaw = 0.0f;
+	bool bTurning = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Combat", meta = (ClampMin = "1.0"))
 	float AttackDistance = 140.0f;

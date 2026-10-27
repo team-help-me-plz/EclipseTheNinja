@@ -1,4 +1,4 @@
-
+﻿
 
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
@@ -84,7 +84,7 @@ void UStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
         {
             //방어력 등 고려 사항이 있으면 여기서 계산
             float FinalDotDamage = LocalDotDamage;	// 각종 계산 추가(방어력, 최소대미지보장, 쉴드, 피해 증가 등등)
-			FinalDotDamage = FMath::Max(1.0f, FinalDotDamage);			// 최소대미지 보장
+            FinalDotDamage = FMath::Max(1.0f, FinalDotDamage);			// 최소대미지 보장
 
             const float OldHealth = GetHealth();
             const float NewHealth = FMath::Clamp(OldHealth - FinalDotDamage, 0.0f, GetMaxHealth());
