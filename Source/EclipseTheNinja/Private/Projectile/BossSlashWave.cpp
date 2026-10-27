@@ -7,6 +7,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "GAS/StatAttributeSet.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "NiagaraComponent.h"
@@ -89,6 +90,17 @@ void ABossSlashWave::InitializeSlashWave(
 	}
 }
 
+void ABossSlashWave::SetDrawDebug(bool bEnable)
+{
+	bDrawDebug = bEnable;
+
+	// 셰이프 컴포넌트는 숨김을 풀면 게임 화면에 외곽선이 그려진다.
+	HitBox->ShapeColor = FColor::Red;
+	Collision->ShapeColor = FColor::Yellow;
+	HitBox->SetHiddenInGame(!bEnable);
+	Collision->SetHiddenInGame(!bEnable);
+}
+
 void ABossSlashWave::OnHitBoxOverlap(
 	UPrimitiveComponent* OverlappedComponent,
 	AActor* OtherActor,
@@ -124,6 +136,14 @@ void ABossSlashWave::TryDamage(AActor* OtherActor, const FHitResult& Hit)
 		return;
 	}
 
+	// 분신은 ASC가 없어 피해를 받지 않는다. 검기를 대신 막은 것으로 보고 맞힌 처리만 한다.
+	if (OtherActor->IsA<ACloneCharacter>())
+	{
+		DamagedActors.Add(OtherActor);
+		OnTargetHit(OtherActor);
+		return;
+	}
+
 	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(OtherActor);
 	if (!SourceASC.IsValid() || !DamageSpec.IsValid() || !TargetASC || !TargetASC->GetSet<UStatAttributeSet>())
 	{
@@ -144,6 +164,26 @@ void ABossSlashWave::TryDamage(AActor* OtherActor, const FHitResult& Hit)
 	}
 
 	SourceASC->ApplyGameplayEffectSpecToTarget(*DamageSpec.Data.Get(), TargetASC);
+	OnTargetHit(OtherActor);
+}
+
+void ABossSlashWave::OnTargetHit(AActor* OtherActor)
+{
+	// 맞힌 순간의 HitBox 위치를 초록으로 남긴다.
+	if (bDrawDebug)
+	{
+		DrawDebugBox(
+			GetWorld(),
+			HitBox->GetComponentLocation(),
+			HitBox->GetScaledBoxExtent(),
+			HitBox->GetComponentQuat(),
+			FColor::Green,
+			false,
+			1.0f,
+			0,
+			2.0f
+		);
+	}
 
 	if (!bPierceTargets)
 	{

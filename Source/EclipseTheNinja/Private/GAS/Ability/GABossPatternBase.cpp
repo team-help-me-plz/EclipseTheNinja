@@ -1,12 +1,12 @@
 #include "GAS/Ability/GABossPatternBase.h"
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
-#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Animation/AnimMontage.h"
 #include "Character/Enemy.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/Ability/GABaseAttack.h"
+#include "GAS/Animation/AnimNotify_BossAttackHit.h"
 
 UGABossPatternBase::UGABossPatternBase()
 {
@@ -75,23 +75,11 @@ void UGABossPatternBase::ActivateAbility(
 	HitTask->EventReceived.AddDynamic(this, &UGABossPatternBase::OnHitEvent);
 	HitTask->ReadyForActivation();
 
-	// 시간 기반 타격 시점을 예약한다.
-	const float SafePlayRate = FMath::Max(0.01f, PlayRate);
-	for (const float HitTime : HitTimes)
-	{
-		UAbilityTask_WaitDelay* DelayTask = UAbilityTask_WaitDelay::WaitDelay(
-			this,
-			FMath::Max(0.0f, HitTime) / SafePlayRate
-		);
-		DelayTask->OnFinish.AddDynamic(this, &UGABossPatternBase::OnHitTimeReached);
-		DelayTask->ReadyForActivation();
-	}
-
 	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this,
 		NAME_None,
 		PatternMontage,
-		SafePlayRate
+		FMath::Max(0.01f, PlayRate)
 	);
 	MontageTask->OnCompleted.AddDynamic(this, &UGABossPatternBase::OnMontageCompleted);
 	MontageTask->OnBlendOut.AddDynamic(this, &UGABossPatternBase::OnMontageCompleted);
@@ -100,7 +88,7 @@ void UGABossPatternBase::ActivateAbility(
 	MontageTask->ReadyForActivation();
 }
 
-void UGABossPatternBase::OnPatternHit()
+void UGABossPatternBase::OnPatternHit(const FBossAttackHitArea& HitArea)
 {
 }
 
@@ -122,16 +110,18 @@ void UGABossPatternBase::OnMontageInterrupted()
 
 void UGABossPatternBase::OnHitEvent(FGameplayEventData Payload)
 {
-	if (IsActive())
+	if (!IsActive())
 	{
-		OnPatternHit();
+		return;
 	}
-}
 
-void UGABossPatternBase::OnHitTimeReached()
-{
-	if (IsActive())
+	// Boss Attack Hit 노티파이는 자신을 OptionalObject로 보내 판정 영역을 함께 전달한다.
+	// 같은 이벤트 태그를 쓰는 Basic Attack Hit 노티파이는 보스 패턴에서 쓰지 않으므로 무시한다.
+	const UAnimNotify_BossAttackHit* HitNotify = Cast<UAnimNotify_BossAttackHit>(Payload.OptionalObject.Get());
+	if (!HitNotify)
 	{
-		OnPatternHit();
+		return;
 	}
+
+	OnPatternHit(HitNotify->GetHitArea());
 }

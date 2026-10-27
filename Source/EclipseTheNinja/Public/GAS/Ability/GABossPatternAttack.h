@@ -4,11 +4,15 @@
 #include "GAS/Ability/GABossPatternBase.h"
 #include "GABossPatternAttack.generated.h"
 
+class AEnemy;
+
 /**
- * 보스 근접 패턴 하나(몽타주 1개 + 앞쪽 타격 판정)를 실행하는 어빌리티.
- * 패턴마다 이 클래스를 부모로 하는 BP를 만들고 몽타주, 피해량, 판정 범위, 타격 시점을 지정한다.
- * 타격 시점 규칙은 UGABossPatternBase를, 쿨타임은 DT_BossPatterns 행의 Cooldown을 따른다.
- * 한 번의 판정에서는 같은 대상에게 한 번만 피해를 준다. 다단히트 패턴은 판정 시점을 여러 개 둔다.
+ * 보스 근접 패턴 하나(몽타주 1개 + 타격마다 판정)를 실행하는 어빌리티.
+ * 패턴마다 이 클래스를 부모로 하는 BP를 만들고 몽타주와 피해량을 지정한다.
+ *
+ * 몽타주의 Boss Attack Hit 노티파이마다 그 노티파이에 지정한 상자 영역을 그 순간 검사한다.
+ * 타격마다 범위와 피해 배율을 따로 줄 수 있다. 쿨타임은 DT_BossPatterns 행의 Cooldown을 따른다.
+ * 한 번의 판정에서는 같은 대상에게 한 번만 피해를 준다. 다단히트 패턴은 노티파이를 여러 개 둔다.
  */
 UCLASS()
 class ECLIPSETHENINJA_API UGABossPatternAttack : public UGABossPatternBase
@@ -16,22 +20,30 @@ class ECLIPSETHENINJA_API UGABossPatternAttack : public UGABossPatternBase
 	GENERATED_BODY()
 
 protected:
-	// 보스 앞쪽을 쓸어 전투 대상에게 피해를 준다.
-	virtual void OnPatternHit() override;
+	// 판정 영역 안의 전투 대상에게 피해를 준다.
+	virtual void OnPatternHit(const FBossAttackHitArea& HitArea) override;
 
-	/** 판정 1회당 피해량. 기획 시트의 대미지 값을 그대로 넣는다. */
+	// 노티파이가 지정한 상자 영역에 겹친 Pawn을 모은다.
+	void QueryHitArea(
+		const AEnemy* Enemy,
+		const FBossAttackHitArea& HitArea,
+		TArray<FHitResult>& OutHits
+	) const;
+
+	// 보스 공격 디버그 토글이나 bDrawDebugHit이 켜져 있으면 판정 영역과 걸린 지점을 그린다.
+	// 전투 대상이 영역 안에 있으면 초록, 없으면 빨강으로 그린다.
+	void DrawDebugHitArea(
+		const AEnemy* Enemy,
+		const FBossAttackHitArea& HitArea,
+		const TArray<FHitResult>& Hits,
+		bool bTargetInArea
+	) const;
+
+	/** 판정 1회당 피해량. Boss Attack Hit 노티파이의 DamageScale이 곱해진다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Damage", meta = (ClampMin = "0.0"))
 	float Damage = 30.0f;
 
-	/** 보스 앞쪽으로 판정 구를 쓸어낼 거리(cm). */
-	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Damage", meta = (ClampMin = "1.0", Units = "cm"))
-	float AttackRange = 250.0f;
-
-	/** 판정 구의 반지름(cm). */
-	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Damage", meta = (ClampMin = "1.0", Units = "cm"))
-	float AttackRadius = 80.0f;
-
-	/** 디버그용 판정 범위 표시. */
+	/** 이 패턴만 판정 범위를 그린다. 보스 BP의 bDrawDebugAttack(SetDrawDebugAttack)이 켜져 있으면 이 값과 상관없이 그린다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Debug")
 	bool bDrawDebugHit = false;
 };

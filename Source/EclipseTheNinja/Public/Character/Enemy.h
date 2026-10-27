@@ -267,9 +267,12 @@ public:
 	// FaceDirection으로 정한 방향까지 TurnRate만큼 회전한다.
 	void UpdateTurning(float DeltaTime);
 
-	// 프레임마다 DeltaTime을 전달해 DestinationX 방향으로 이동 입력을 넣는다.
+	// 프레임마다 DeltaTime을 전달해 DestinationX 방향으로 이동 입력을 넣는다. Speed는 GetMoveSpeedLimit을 넘지 않는다.
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void MoveAlongX(float DestinationX, float Speed, float DeltaTime);
+
+	// MoveAlongX가 넘지 않을 이동 속도(cm/s). 기본은 제한이 없고, 상태에 따라 이동을 늦추는 적이 재정의한다.
+	virtual float GetMoveSpeedLimit() const { return TNumericLimits<float>::Max(); }
 
 protected:
 	/** 시야 감지와 Blackboard 갱신을 담당한다. */

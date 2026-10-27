@@ -5,10 +5,11 @@
 #include "GABossSlashWave.generated.h"
 
 class ABossSlashWave;
+class AEnemy;
 
 /**
  * 보스 원거리 발도 패턴. 발도하며 베는 순간 전투 대상 방향으로 검기 투사체를 날린다.
- * 원거리 적의 표창 투척처럼 타격 시점(Basic Attack Hit 노티파이 또는 HitTimes)마다 검기를 한 발씩 날린다.
+ * 원거리 적의 표창 투척처럼 몽타주의 Boss Attack Hit 노티파이마다 검기를 한 발씩 날린다.
  * 방향은 발사 순간의 대상 위치로 정하며, 위아래 각도는 MaxAimPitch로 제한한다.
  * 사용 거리는 UGABossPatternBase의 설정을, 쿨타임은 DT_BossPatterns 행의 Cooldown을 따른다.
  */
@@ -29,11 +30,20 @@ public:
 	) const override;
 
 protected:
-	// 검기를 만들어 대상 방향으로 날린다.
-	virtual void OnPatternHit() override;
+	// 검기를 만들어 대상 방향으로 날린다. 노티파이의 판정 영역은 쓰지 않는다.
+	virtual void OnPatternHit(const FBossAttackHitArea& HitArea) override;
 
 	// 발사 위치에서 대상까지의 방향. 대상이 없으면 보스 정면으로 날린다.
 	FVector GetLaunchDirection(const AActor* Avatar, const FVector& SpawnLocation) const;
+
+	// 발사 위치, 실제 비행 방향, 조준 대상까지의 선을 그린다.
+	void DrawDebugLaunch(
+		const UWorld* World,
+		const AEnemy* Enemy,
+		const FVector& SpawnLocation,
+		const FVector& Direction,
+		float Duration
+	) const;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Projectile")
 	TSubclassOf<ABossSlashWave> ProjectileClass;

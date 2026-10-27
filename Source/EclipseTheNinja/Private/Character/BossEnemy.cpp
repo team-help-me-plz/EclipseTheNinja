@@ -84,6 +84,11 @@ float ABossEnemy::GetHealthRatio() const
 	return StatAttributeSet->GetHealth() / StatAttributeSet->GetMaxHealth();
 }
 
+void ABossEnemy::SetDrawDebugAttack(bool bEnable)
+{
+	bDrawDebugAttack = bEnable;
+}
+
 void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
 	// 실드 중이거나 체력이 늘어난 경우는 일반 처리만 한다.
@@ -145,9 +150,11 @@ void ABossEnemy::BreakEnergyLink()
 	}
 
 	ClearEnergyLinkState();
+	++BrokenEnergyLinkCount;
 
-	UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 해제"), *GetName());
+	UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 해제, %d페이즈"), *GetName(), GetPhase());
 	OnEnergyLinkBroken.Broadcast();
+	OnPhaseChanged.Broadcast(GetPhase());
 }
 
 void ABossEnemy::OnEnergyLinkTimeExpired()
@@ -230,6 +237,18 @@ void ABossEnemy::ResetToInitial_Implementation()
 	PatternReadyTimes.Reset();
 
 	Super::ResetToInitial_Implementation();
+
+	if (BrokenEnergyLinkCount != 0)
+	{
+		BrokenEnergyLinkCount = 0;
+		OnPhaseChanged.Broadcast(GetPhase());
+	}
+}
+
+float ABossEnemy::GetMoveSpeedLimit() const
+{
+	// 달리기 전 페이즈에서는 자세를 잡고 천천히 다가간다. 순찰·수색처럼 원래 느린 이동은 그대로다.
+	return IsRunPhase() ? Super::GetMoveSpeedLimit() : StanceWalkSpeed;
 }
 
 bool ABossEnemy::CanStartAIAttack(AActor* Target) const
@@ -349,6 +368,11 @@ bool ABossEnemy::IsPatternUsable(
 		return false;
 	}
 
+	if (GetPhase() < Row.MinPhase)
+	{
+		return false;
+	}
+
 	if (IsPatternOnCooldown(RowName))
 	{
 		return false;
@@ -446,7 +470,8 @@ const FBossPatternRow* ABossEnemy::PickNextPattern(const AActor* Target, FName& 
 void ABossEnemy::LogPatternChoice(FName RowName, const FBossPatternRow& Row, float TotalWeight) const
 {
 	const FString Message = FString::Printf(
-		TEXT("[보스 패턴] %s (%s) - 가중치 %.1f / 합 %.1f (%.1f%%), 쿨타임 %.1f초"),
+		TEXT("[보스 패턴] %d페이즈 %s (%s) - 가중치 %.1f / 합 %.1f (%.1f%%), 쿨타임 %.1f초"),
+		GetPhase(),
 		*Row.DisplayName.ToString(),
 		*RowName.ToString(),
 		Row.Weight,

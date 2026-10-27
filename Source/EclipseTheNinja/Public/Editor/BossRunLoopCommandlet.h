@@ -15,7 +15,8 @@
  *
  * 실행 (에디터를 끈 상태):
  *   UnrealEditor-Cmd.exe <프로젝트>.uproject -run=BossRunLoop [-Source=<애님 경로>] [-Dest=<저장 경로>] [-Shift=N] [-Close=N] [-Analyze]
- *   -Analyze: 저장하지 않고 프레임별 발 높이와 이어 붙이기 후보만 출력한다.
+ *   -Analyze: 저장하지 않고 프레임별 발 높이, 1배속 지면 속도 추정값, 이어 붙이기 후보만 출력한다.
+ *             -Source에 다른 이동 애니메이션을 넣으면 ABP의 *AnimSpeed 값을 정하는 데 쓸 수 있다.
  *   -Shift / -Close: 자동으로 고른 지점 대신 사용할 프레임 값.
  */
 UCLASS()

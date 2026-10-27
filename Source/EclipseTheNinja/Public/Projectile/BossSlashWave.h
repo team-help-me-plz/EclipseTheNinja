@@ -19,7 +19,7 @@ class UStaticMeshComponent;
  *
  * 충돌은 두 개로 나눈다.
  * - Collision(루트, 작은 구): 이동 sweep에 쓰며 벽·지형(WorldStatic)에 막히면 사라진다.
- * - HitBox(검기 크기 상자): Pawn과 겹치기만 하며, 플레이어/분신에게 한 번씩 피해를 준다.
+ * - HitBox(검기 크기 상자): Pawn과 겹치기만 하며, 플레이어에게 한 번씩 피해를 준다. 분신은 피해 없이 검기를 막는다.
  * 루트를 작게 두어 바닥 근처를 날아도 바닥에 걸려 사라지지 않게 한다.
  *
  * 겉모습은 BP에서 Effect(나이아가라) 또는 Mesh(스태틱 메시)에 지정한다. 둘 다 써도 된다.
@@ -41,6 +41,9 @@ public:
 		float Speed
 	);
 
+	// 디버그용으로 HitBox(빨강)와 이동용 Collision(노랑)을 게임 화면에 보이게 하고, 피해를 준 지점을 표시한다.
+	void SetDrawDebug(bool bEnable);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -58,8 +61,11 @@ protected:
 	UFUNCTION()
 	void OnProjectileStopped(const FHitResult& ImpactResult);
 
-	// 플레이어/분신이면 피해를 주고, 관통하지 않는 검기는 사라진다.
+	// 플레이어면 피해를 주고, 분신이면 피해 없이 맞힌 것으로만 처리한다.
 	void TryDamage(AActor* OtherActor, const FHitResult& Hit);
+
+	// 플레이어나 분신을 맞힌 뒤 처리. 관통하지 않는 검기는 사라진다.
+	void OnTargetHit(AActor* OtherActor);
 
 	// 소멸 이펙트를 남기고 액터를 제거한다.
 	void Dissipate(const FVector& Location);
@@ -83,7 +89,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Slash Wave", meta = (ClampMin = "0.1", Units = "s"))
 	float Lifetime = 1.5f;
 
-	/** 플레이어를 맞힌 뒤에도 계속 날아갈지. 끄면 처음 맞힌 대상에서 사라진다. */
+	/** 플레이어나 분신을 맞힌 뒤에도 계속 날아갈지. 끄면 처음 맞힌 대상에서 사라진다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Slash Wave")
 	bool bPierceTargets = false;
 
@@ -99,4 +105,6 @@ private:
 	TSet<TWeakObjectPtr<AActor>> DamagedActors;
 
 	bool bDissipated = false;
+
+	bool bDrawDebug = false;
 };

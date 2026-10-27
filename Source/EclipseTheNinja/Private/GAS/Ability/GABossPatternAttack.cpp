@@ -2,13 +2,16 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
+#include "GAS/Animation/AnimNotify_BossAttackHit.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "GAS/StatAttributeSet.h"
 
-void UGABossPatternAttack::OnPatternHit()
+void UGABossPatternAttack::OnPatternHit(const FBossAttackHitArea& HitArea)
 {
 	AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
 	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
@@ -17,49 +20,25 @@ void UGABossPatternAttack::OnPatternHit()
 		return;
 	}
 
-	if (!FMath::IsFinite(Damage) || Damage <= 0.0f)
+	const float HitDamage = Damage * HitArea.DamageScale;
+	if (!FMath::IsFinite(HitDamage) || HitDamage <= 0.0f)
 	{
 		return;
 	}
 
-	// 보스 앞쪽으로 판정 구를 쓸어낸다.
-	const float Radius = FMath::Max(1.0f, AttackRadius);
-	const FVector Forward = Enemy->GetActorForwardVector();
-	const FVector Start = Enemy->GetActorLocation() + Forward * Radius;
-	const FVector End = Enemy->GetActorLocation() + Forward * FMath::Max(Radius, AttackRange);
-
-	FCollisionObjectQueryParams ObjectParams;
-	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(BossPatternAttack), false, Enemy);
-
 	TArray<FHitResult> Hits;
-	Enemy->GetWorld()->SweepMultiByObjectType(
-		Hits,
-		Start,
-		End,
-		FQuat::Identity,
-		ObjectParams,
-		FCollisionShape::MakeSphere(Radius),
-		QueryParams
-	);
+	QueryHitArea(Enemy, HitArea, Hits);
 
-	if (bDrawDebugHit)
+	AActor* CombatTarget = Enemy->GetCombatTarget();
+	const bool bTargetInArea = CombatTarget && Hits.ContainsByPredicate([CombatTarget](const FHitResult& Hit)
 	{
-		DrawDebugCapsule(
-			Enemy->GetWorld(),
-			(Start + End) * 0.5f,
-			FVector::Dist(Start, End) * 0.5f + Radius,
-			Radius,
-			FRotationMatrix::MakeFromZ(Forward).ToQuat(),
-			FColor::Red,
-			false,
-			1.0f
-		);
-	}
+		return Hit.GetActor() == CombatTarget;
+	});
+
+	DrawDebugHitArea(Enemy, HitArea, Hits, bTargetInArea);
 
 	// 한 번의 판정에서 같은 대상은 한 번만 맞는다. 적끼리는 공격하지 않도록 전투 대상만 맞춘다.
 	TSet<AActor*> HitActors;
-	AActor* CombatTarget = Enemy->GetCombatTarget();
 	for (const FHitResult& Hit : Hits)
 	{
 		AActor* Target = Hit.GetActor();
@@ -90,9 +69,97 @@ void UGABossPatternAttack::OnPatternHit()
 
 		if (Spec.IsValid())
 		{
-			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), Damage);
+			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), HitDamage);
 			HitActors.Add(Target);
 			SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 		}
+	}
+}
+
+void UGABossPatternAttack::QueryHitArea(
+	const AEnemy* Enemy,
+	const FBossAttackHitArea& HitArea,
+	TArray<FHitResult>& OutHits
+) const
+{
+	// 상자는 보스 액터 기준으로 놓고 보스가 바라보는 방향을 따라 돌린다.
+	const FTransform& ActorTransform = Enemy->GetActorTransform();
+	const FVector Center = ActorTransform.TransformPosition(HitArea.Offset);
+	const FQuat Rotation = ActorTransform.GetRotation();
+
+	FCollisionObjectQueryParams ObjectParams;
+	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(BossPatternAttack), false, Enemy);
+
+	TArray<FOverlapResult> Overlaps;
+	Enemy->GetWorld()->OverlapMultiByObjectType(
+		Overlaps,
+		Center,
+		Rotation,
+		ObjectParams,
+		FCollisionShape::MakeBox(HitArea.HalfExtent.ComponentMax(FVector::OneVector)),
+		QueryParams
+	);
+
+	// 피해 Context에 넣을 수 있게 겹침 결과를 FHitResult로 바꾼다. 충돌 지점은 대상 위치로 둔다.
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* Actor = Overlap.GetActor();
+		if (!Actor)
+		{
+			continue;
+		}
+
+		const FVector HitLocation = Actor->GetActorLocation();
+		OutHits.Emplace(
+			Actor,
+			Overlap.GetComponent(),
+			HitLocation,
+			(HitLocation - Center).GetSafeNormal()
+		);
+	}
+}
+
+void UGABossPatternAttack::DrawDebugHitArea(
+	const AEnemy* Enemy,
+	const FBossAttackHitArea& HitArea,
+	const TArray<FHitResult>& Hits,
+	bool bTargetInArea
+) const
+{
+	const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy);
+	if (!bDrawDebugHit && !(Boss && Boss->IsDrawDebugAttackEnabled()))
+	{
+		return;
+	}
+
+	const UWorld* World = Enemy->GetWorld();
+	const float Duration = Boss ? Boss->GetDebugAttackDrawDuration() : 1.0f;
+	const FTransform& ActorTransform = Enemy->GetActorTransform();
+
+	// 노티파이가 지정한 상자 영역
+	DrawDebugBox(
+		World,
+		ActorTransform.TransformPosition(HitArea.Offset),
+		HitArea.HalfExtent.ComponentMax(FVector::OneVector),
+		ActorTransform.GetRotation(),
+		bTargetInArea ? FColor::Green : FColor::Red,
+		false,
+		Duration,
+		0,
+		2.0f
+	);
+
+	// 판정에 걸린 Pawn의 위치. 피해 대상이 아닌 Pawn도 함께 표시된다.
+	for (const FHitResult& Hit : Hits)
+	{
+		DrawDebugPoint(
+			World,
+			Hit.ImpactPoint,
+			12.0f,
+			FColor::Yellow,
+			false,
+			Duration
+		);
 	}
 }

@@ -1,8 +1,10 @@
 #include "GAS/Ability/GABossSlashWave.h"
 
 #include "AbilitySystemComponent.h"
+#include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "Projectile/BossSlashWave.h"
@@ -30,7 +32,7 @@ bool UGABossSlashWave::CanActivateAbility(
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
 }
 
-void UGABossSlashWave::OnPatternHit()
+void UGABossSlashWave::OnPatternHit(const FBossAttackHitArea& HitArea)
 {
 	AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
 	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
@@ -97,6 +99,68 @@ void UGABossSlashWave::OnPatternHit()
 		Direction,
 		ProjectileSpeed
 	);
+
+	// 보스의 공격 디버그 토글이 켜져 있으면 발사 위치·조준 방향을 그리고 검기 판정을 보이게 한다.
+	const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy);
+	if (Boss && Boss->IsDrawDebugAttackEnabled())
+	{
+		Wave->SetDrawDebug(true);
+		DrawDebugLaunch(
+			World,
+			Enemy,
+			SpawnLocation,
+			Direction,
+			Boss->GetDebugAttackDrawDuration()
+		);
+	}
+}
+
+void UGABossSlashWave::DrawDebugLaunch(
+	const UWorld* World,
+	const AEnemy* Enemy,
+	const FVector& SpawnLocation,
+	const FVector& Direction,
+	float Duration
+) const
+{
+	// 발사 위치
+	DrawDebugSphere(
+		World,
+		SpawnLocation,
+		10.0f,
+		8,
+		FColor::Orange,
+		false,
+		Duration
+	);
+
+	// 실제로 날아가는 방향(MaxAimPitch 제한 적용 후). 길이는 1초 동안 날아가는 거리.
+	DrawDebugDirectionalArrow(
+		World,
+		SpawnLocation,
+		SpawnLocation + Direction * ProjectileSpeed,
+		40.0f,
+		FColor::Orange,
+		false,
+		Duration,
+		0,
+		2.0f
+	);
+
+	// 조준 대상의 위치. 화살표와 어긋나 있으면 위아래 각도 제한에 걸린 것이다.
+	if (const AActor* Target = Enemy->GetCombatTarget())
+	{
+		DrawDebugLine(
+			World,
+			SpawnLocation,
+			Target->GetActorLocation(),
+			FColor::Cyan,
+			false,
+			Duration,
+			0,
+			1.0f
+		);
+	}
 }
 
 FVector UGABossSlashWave::GetLaunchDirection(const AActor* Avatar, const FVector& SpawnLocation) const

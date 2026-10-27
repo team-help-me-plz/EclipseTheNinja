@@ -227,6 +227,40 @@ int32 UBossRunLoopCommandlet::Main(const FString& Params)
 
 	UE_LOG(LogBossRunLoop, Display, TEXT("왼발 접지 시작 %d, 왼발 이륙 %d"), FirstContact, DetectedHalf);
 
+	// 1배속 지면 속도 추정: 땅에 닿아 있는 발이 앞뒤 축으로 뒤로 밀리는 속도.
+	// 제자리 애니메이션이면 이 속도로 움직일 때 발이 미끄러지지 않는다. ABP의 *AnimSpeed 값을 정할 때 쓴다.
+	{
+		const int32 ForwardAxisIndex = MirrorAxis == EAxis::X ? 1 : 0;
+		const double FrameRate = Model->GetFrameRate().AsDecimal();
+		float MinR = TNumericLimits<float>::Max();
+		for (int32 Key = 0; Key < NumKeys; ++Key)
+		{
+			MinR = FMath::Min(MinR, static_cast<float>(SourceComponent[Key][FootR].GetTranslation()[UpAxisIndex]));
+		}
+
+		double SpeedSum = 0.0;
+		int32 SpeedCount = 0;
+		for (int32 Key = 0; Key < LastKey; ++Key)
+		{
+			for (const TPair<int32, float>& Foot : { TPair<int32, float>(FootL, MinL), TPair<int32, float>(FootR, MinR) })
+			{
+				const FVector Current = SourceComponent[Key][Foot.Key].GetTranslation();
+				const FVector Next = SourceComponent[Key + 1][Foot.Key].GetTranslation();
+				if (Current[UpAxisIndex] > Foot.Value + 3.0f || Next[UpAxisIndex] > Foot.Value + 3.0f)
+				{
+					continue;
+				}
+
+				SpeedSum += FMath::Abs(Next[ForwardAxisIndex] - Current[ForwardAxisIndex]) * FrameRate;
+				++SpeedCount;
+			}
+		}
+
+		UE_LOG(LogBossRunLoop, Display, TEXT("접지 발의 앞뒤 이동 속도(1배속 지면 속도 추정): %.1f cm/s (표본 %d)"),
+			SpeedCount > 0 ? SpeedSum / SpeedCount : 0.0,
+			SpeedCount);
+	}
+
 	// 하체 포즈 비교: 골반 기준 다리 본 위치. A 포즈와 B 포즈의 좌우 반전이 얼마나 다른지(cm).
 	const TArray<FName> LegBoneNames = { TEXT("calf_l"), TEXT("calf_r"), TEXT("foot_l"), TEXT("foot_r"), TEXT("ball_l"), TEXT("ball_r") };
 	const int32 PelvisBone = RefSkeleton.FindBoneIndex(TEXT("pelvis"));

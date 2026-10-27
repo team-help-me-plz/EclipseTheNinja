@@ -614,7 +614,8 @@ void AEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 		return;
 	}
 
-	GetCharacterMovement()->MaxWalkSpeed = FMath::Min(FMath::Max(1.0f, Speed), FMath::Abs(DistanceX) / DeltaTime);
+	const float LimitedSpeed = FMath::Min(Speed, GetMoveSpeedLimit());
+	GetCharacterMovement()->MaxWalkSpeed = FMath::Min(FMath::Max(1.0f, LimitedSpeed), FMath::Abs(DistanceX) / DeltaTime);
 
 	AddMovementInput(FVector::ForwardVector, FMath::Sign(DistanceX));
 }

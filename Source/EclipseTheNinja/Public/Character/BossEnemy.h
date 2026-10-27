@@ -9,6 +9,7 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossEnergyLinkActivated, int32, LinkIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossEnergyLinkEvent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossPhaseChanged, int32, NewPhase);
 
 /**
  * 비헤이비어 트리로 움직이는 보스 적.
@@ -20,6 +21,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossEnergyLinkEvent);
  * - 에너지 링크: 체력이 EnergyLinkThresholds 비율에 닿으면 그 값에서 체력을 멈추고 무적 실드를 켠다.
  *   실드는 레버(IActivatable) 또는 BreakEnergyLink 호출로 해제되고, 제한시간이 지나면 플레이어가 즉사한다.
  * - 암살: 가장 가까운 아래쪽 에너지 링크 체력까지 즉시 깎는다. 체력이 AssassinationKillRatio 이하면 즉시 처치한다.
+ * - 페이즈: 1페이즈에서 시작해 에너지 링크를 파훼할 때마다 1씩 오른다. 체력 구간이 아니라 파훼 횟수로 정한다.
+ *   RunPhase 전에는 StanceWalkSpeed로 자세를 잡고 걷고, RunPhase부터 ChaseSpeed로 달린다.
+ *   패턴 테이블의 MinPhase보다 낮은 페이즈에서는 그 패턴을 고르지 않는다.
  */
 UCLASS()
 class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
@@ -41,9 +45,32 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Boss|Energy Link")
 	void BreakEnergyLink();
 
+	/** 현재 페이즈(1부터). 에너지 링크를 파훼할 때마다 1씩 오른다. */
+	UFUNCTION(BlueprintPure, Category = "Boss|Phase")
+	int32 GetPhase() const { return 1 + BrokenEnergyLinkCount; }
+
+	/** 지금 페이즈에서 전투 이동을 달리기로 하는지. false면 자세를 잡고 걷는다. */
+	UFUNCTION(BlueprintPure, Category = "Boss|Phase")
+	bool IsRunPhase() const { return GetPhase() >= RunPhase; }
+
+	/** 에너지 링크 파훼로 페이즈가 오르거나, 체크포인트 리셋으로 1페이즈로 돌아갈 때 호출된다. */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Phase")
+	FOnBossPhaseChanged OnPhaseChanged;
+
 	/** 실드가 켜질 때 호출된다. LinkIndex는 EnergyLinkThresholds의 순번(0부터). */
 	UPROPERTY(BlueprintAssignable, Category = "Boss|Energy Link")
 	FOnBossEnergyLinkActivated OnEnergyLinkActivated;
+
+	/** 공격 판정 디버그 그림(근접 판정 범위, 검기 발사 방향·히트박스)을 켜거나 끈다. */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Debug")
+	void SetDrawDebugAttack(bool bEnable);
+
+	/** 공격 판정 디버그 그림이 켜져 있는지. */
+	UFUNCTION(BlueprintPure, Category = "Boss|Debug")
+	bool IsDrawDebugAttackEnabled() const { return bDrawDebugAttack; }
+
+	/** 근접 판정 그림을 화면에 남겨 둘 시간(초). */
+	float GetDebugAttackDrawDuration() const { return DebugAttackDrawDuration; }
 
 	/** 레버 등으로 실드가 해제되면 호출된다. */
 	UPROPERTY(BlueprintAssignable, Category = "Boss|Energy Link")
@@ -71,6 +98,9 @@ public:
 
 	// 원거리 패턴을 쓸 수 있도록 전투 중에는 발각 반경 대신 감지 반경(경계 배율 적용)까지 대상을 계속 본다.
 	virtual float GetCombatSightRadius() const override;
+
+	// RunPhase 전에는 추격·마지막 목격 위치 이동 등 모든 이동이 StanceWalkSpeed를 넘지 않는다.
+	virtual float GetMoveSpeedLimit() const override;
 
 	// 보스는 발도 준비 동작 중 대상이 움직여도 공격을 끝까지 수행한다.
 	virtual bool ShouldLockMovementDuringAttack() const override { return true; }
@@ -102,7 +132,7 @@ protected:
 		float& OutTotalWeight
 	) const;
 
-	// 패턴 행이 쿨타임이 아니고, 대상과의 거리가 패턴의 사용 거리 안인지.
+	// 패턴 행이 지금 페이즈에서 쓸 수 있고(MinPhase), 쿨타임이 아니고, 대상과의 거리가 패턴의 사용 거리 안인지.
 	// bAssumeInAttackDistance면 실제 거리와 함께 AttackDistance에 있는 것으로도 검사한다.
 	bool IsPatternUsable(
 		FName RowName,
@@ -179,6 +209,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Debug")
 	bool bDrawDebugShield = true;
 
+	/**
+	 * 공격 판정을 디버그로 그린다. BP에서는 SetDrawDebugAttack으로 켜고 끈다.
+	 * - 근접 패턴: Boss Attack Hit 노티파이마다 판정 상자(대상이 안에 있으면 초록, 없으면 빨강)와 걸린 대상 위치
+	 * - 검기 패턴: 발사 위치와 조준 방향, 날아가는 검기의 HitBox(빨강)와 이동용 Collision(노랑)
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Debug")
+	bool bDrawDebugAttack = false;
+
+	/** 근접 판정·발사 방향 그림을 화면에 남겨 둘 시간(초). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Debug", meta = (ClampMin = "0.0", Units = "s", EditCondition = "bDrawDebugAttack"))
+	float DebugAttackDrawDuration = 1.0f;
+
 #if WITH_EDITORONLY_DATA
 	/** PIE 테스트용. 0보다 큰 값을 넣으면 다음 Tick에 플레이어가 준 피해처럼 적용하고 0으로 되돌린다. */
 	UPROPERTY(EditInstanceOnly, Transient, Category = "Boss|Debug")
@@ -192,6 +234,21 @@ protected:
 	UPROPERTY(EditInstanceOnly, Transient, Category = "Boss|Debug")
 	bool bDebugBreakEnergyLink = false;
 #endif
+
+	/** 이 페이즈부터 ChaseSpeed로 달린다. 그 전 페이즈는 StanceWalkSpeed로 걷는다. 기획: 기믹 2회 파훼 후(3페이즈). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Phase", meta = (ClampMin = "1"))
+	int32 RunPhase = 3;
+
+	/**
+	 * RunPhase 전 페이즈의 전투 이동 속도(cm/s).
+	 * 자세 걷기 애니메이션은 1배속에 약 93cm/s를 걷고 재생 속도는 2배까지라, 이보다 빠르면 발이 미끄러진다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Phase", meta = (ClampMin = "1.0", Units = "cm/s"))
+	float StanceWalkSpeed = 180.0f;
+
+	/** 파훼한 에너지 링크 수. 페이즈는 이 값 + 1이다. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Boss|Phase")
+	int32 BrokenEnergyLinkCount = 0;
 
 	/** 다음에 발동할 EnergyLinkThresholds 순번. */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Boss|Energy Link")

@@ -9,7 +9,8 @@ class UGameplayAbility;
 /**
  * 보스 공격 패턴 가중치 테이블의 한 행.
  * 보스가 공격을 시작할 때 Weight에 비례한 확률로 한 행을 고르고 AbilityClass를 실행한다.
- * 행이 쿨타임(Cooldown) 중이거나 대상이 어빌리티의 사용 거리(MinUseDistance~MaxUseDistance) 밖이면 그 행은 후보에서 빠진다.
+ * 행이 쿨타임(Cooldown) 중이거나, 보스 페이즈가 MinPhase보다 낮거나, 대상이 어빌리티의 사용 거리(MinUseDistance~MaxUseDistance) 밖이면
+ * 그 행은 후보에서 빠진다.
  */
 USTRUCT(BlueprintType)
 struct ECLIPSETHENINJA_API FBossPatternRow : public FTableRowBase
@@ -35,4 +36,11 @@ struct ECLIPSETHENINJA_API FBossPatternRow : public FTableRowBase
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pattern", meta = (ClampMin = "0.0", Units = "s"))
 	float Cooldown = 0.0f;
+
+	/**
+	 * 이 패턴을 쓰기 시작하는 보스 페이즈. 페이즈는 1부터 시작해 에너지 링크를 파훼할 때마다 1씩 오른다.
+	 * 1이면 처음부터 쓰고, 3이면 기믹을 두 번 파훼한 뒤부터 쓴다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pattern", meta = (ClampMin = "1"))
+	int32 MinPhase = 1;
 };
