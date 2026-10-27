@@ -31,6 +31,33 @@ UEnemyDetectionComponent::UEnemyDetectionComponent()
     static ConstructorHelpers::FClassFinder<UEnemyAwarenessWidget> WidgetBlueprint(TEXT("/Game/Widgets/WBP_EnemyAwareness"));
     AwarenessWidgetClass = WidgetBlueprint.Class;
     if (!AwarenessWidgetClass) AwarenessWidgetClass = UEnemyAwarenessWidget::StaticClass();
+
+}
+
+void UEnemyDetectionComponent::NotifyNoise(const FVector& InLocation, const float InRadius, const float InStrength)
+{
+	if (!Owner.Get() || !Owner.Get()->IsReadyForAI() || AlertLevel == EEnemyAlertLevel::Combat)
+	{
+		return ;
+	}
+	// 소음 감지 구와 같은 기준(경계 시 확대된 반경)을 쓴다.
+	const float DetectionR = GetCurrentDetectionRadius();
+	const float DiscoveryR = GetCurrentDiscoveryRadius();
+	// 소음 원에서 적에게 가장 가까운 지점까지의 거리
+	const float	Dist = FMath::Max(0.0f, FVector::Dist(Owner.Get()->GetActorLocation(), InLocation) - InRadius);
+
+	// 빨간 원 안이면 세기 최대(바로 100), 바깥은 노란 경계(0) ~ 빨간 경계(1) 사이 선형 감쇠
+	const float Strength = Dist <= DiscoveryR ? 1.0f : InStrength;
+	const float Ratio = FMath::Clamp((DetectionR - Dist) / FMath::Max(1.0f, DetectionR - DiscoveryR), 0.f, 1.f);
+	const float Gain = Strength * Ratio;
+
+	if (Gain < 0.001f)
+	{
+		return ;
+	}
+	// 반영된 소리만 수색 후보 위치로 기록한다. 게이지가 가득 차면 UpdateDetection이 이 위치를 수색 지점으로 넘긴다.
+	this->NoiseLocation = InLocation;
+	this->NoiseAlertStart(FMath::Min(1.0f, AlertGauge + Gain));
 }
 
 void UEnemyDetectionComponent::BeginPlay()
@@ -137,6 +164,39 @@ void UEnemyDetectionComponent::StopDetection()
         PresentationWidget->RemoveFromParent();
 
     SetComponentTickEnabled(false);
+	NoiseAlertReset();
+}
+
+void UEnemyDetectionComponent::NoiseAlertStart(float InTargetGauge)
+{
+	this->bIsNoise = true;
+	// 하한만 갱신한다. 게이지와 단계는 UpdateDetection이 이 값을 보고 바꾼다.
+	// 유지 중에 다시 들으면 더 높은 쪽을 하한으로 삼는다.
+	this->NoiseAlertMin = FMath::Max(this->NoiseAlertMin, FMath::Min(1.0f, InTargetGauge));
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return ;
+	}
+	World->GetTimerManager().SetTimer(
+		this->NoiseTimer,
+		this,
+		&UEnemyDetectionComponent::NoiseAlertReset,
+		this->NoiseAlertMaintain,
+		false
+	);
+}
+
+void UEnemyDetectionComponent::NoiseAlertReset()
+{
+	this->NoiseAlertMin = 0.0f;
+	this->bIsNoise = false;
+	this->NoiseLocation = FVector::ZeroVector;
+	// 풀 생성/반환이나 월드 정리 중에도 불리므로 월드가 없을 수 있다.
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(this->NoiseTimer);
+	}
 }
 
 APawn* UEnemyDetectionComponent::FindVisibleTarget(float Radius) const
@@ -219,6 +279,7 @@ void UEnemyDetectionComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
         // 틱 비활성화
         SetComponentTickEnabled(false);
+		NoiseAlertReset();
         return;
     }
 
@@ -302,9 +363,17 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
             {
                 // 감지 게이지를 DeltaTime만큼 증가. 등 뒤에서는 더 느리게 찬다.
                 const float FillRate = bFacingPlayer ? 1.0f : FMath::Clamp(BehindGaugeFillRate, 0.0f, 1.0f);
-                AlertGauge = FMath::Clamp(AlertGauge + DeltaTime * FillRate / FMath::Max(0.01f, GaugeFillTime), 0.0f, 1.0f);
-                // 감지 게이지가 1이 넘으면 경계 단계로 격상
-                if (AlertGauge >= 1.0f) AlertLevel = EEnemyAlertLevel::Alert;
+                if (FillRate > 0.0f)
+                {
+                    AlertGauge = FMath::Clamp(AlertGauge + DeltaTime * FillRate / FMath::Max(0.01f, GaugeFillTime), 0.0f, 1.0f);
+                    // 감지 게이지가 1이 넘으면 경계 단계로 격상
+                    if (AlertGauge >= 1.0f) AlertLevel = EEnemyAlertLevel::Alert;
+                }
+                else
+                {
+                    // 등 뒤에서 알아채지 못하는 설정이면 보이지 않을 때와 같이 줄어든다.
+                    AlertGauge = FMath::Max(0.0f, AlertGauge - DeltaTime / FMath::Max(0.01f, GaugeDecayTime));
+                }
             }
 
             // 경계 상태는 알아차린 지점만 수색하므로 보이더라도 복귀 카운트를 계속 진행한다.
@@ -336,6 +405,18 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
             LastKnownLocation = FVector::ZeroVector;
         }
     }
+	// 소리를 들은 직후에는 그때 도달한 값 아래로 내려가지 않고, 가득 차면 소리 위치를 수색하는 경계 상태가 된다.
+	if (bIsNoise && AlertLevel == EEnemyAlertLevel::Normal && OwnerEnemy->IsReadyForAI())
+	{
+		AlertGauge = FMath::Max(AlertGauge, NoiseAlertMin);
+		if (AlertGauge >= 1.0f)
+		{
+			AlertLevel = EEnemyAlertLevel::Alert;
+			LastKnownLocation = NoiseLocation;
+			bHasLastKnownLocation = true;
+			TimeWithoutSight = 0.0f;
+		}
+	}
 
     UpdateBlackboard();
     // 경계 게이지와, 경계 단계가 변경되면 브로드캐스트
@@ -425,7 +506,14 @@ void UEnemyDetectionComponent::CreatePresentationWidget()
     if (!PresentationWidget) return;
 
     PresentationWidget->InitializeDetection(this);
-    PresentationWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (bShowAwarenessWidget)
+	{
+	    PresentationWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	else
+	{
+	    PresentationWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
     PresentationWidget->ForceVolatile(true);
     PresentationWidget->AddToViewport(5);
 }

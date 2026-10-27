@@ -4,6 +4,7 @@
 #include "Clone/CloneCharacter.h"
 #include "GAS/StatAttributeSet.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Subsystem/NoiseSubsystem.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
@@ -384,6 +385,7 @@ void AKunaiProjectile::AttachToHitTarget(const FKunaiAttachTarget& Target, AActo
 
     // Tick에서 파고들기 수행
     SetActorTickEnabled(true);
+	UNoiseSubsystem::MakeSomeNoise(this, ENoiseType::Kunai, Target.SurfacePoint, GetInstigator());
 }
 
 void AKunaiProjectile::Tick(float DeltaSeconds)
