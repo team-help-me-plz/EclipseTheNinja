@@ -18,6 +18,7 @@ enum class EAbilityInputID : uint8
     WallAttach = 6,
     LedgeHang = 7,
     LedgeClimb = 8,
+    WallSlide = 9,
     CloneTech = 100,
 };
 
