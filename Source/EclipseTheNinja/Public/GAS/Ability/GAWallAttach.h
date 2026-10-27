@@ -35,6 +35,8 @@ public:
 		const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
 		bool bReplicateEndAbility, bool bWasCancelled) override;
 
+	inline bool GetIsClimbable() const { return bIsClimbable; }
+
 protected:
 	UFUNCTION()
 	void OnCompleted();
@@ -43,7 +45,9 @@ protected:
 	void OnInterrupted();
 
 private:
-	bool FindWall(const ACharacter* Player, FHitResult& OutHit) const;
+	bool FindWall(const ACharacter* Player, FHitResult& OutHit, bool* bOutClimbable = nullptr) const;
+
+	inline void SetClimbable(bool Value) { bIsClimbable = Value; }
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach")
@@ -85,6 +89,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0", Units = "s"))
 	float MeshOffsetBlendTime = 0.25f;
 
+	// 벽타기 가능 판정 트레이스를 화면에 그린다
+	UPROPERTY(EditDefaultsOnly, Category = "WallAttach|Debug")
+	bool bDrawDebugClimbable = false;
+
 private:
 	// 메시 상대 위치를 Target까지 MeshOffsetBlendTime 동안 옮긴다. 어빌리티가 끝난 뒤에도 끝까지 이어진다.
 	void BlendMeshTo(ACharacter* Player, const FVector& Target);
@@ -105,4 +113,8 @@ private:
 	// 매달린 동안 올라가기(GALedgeClimb) 디버그를 그린다. 타이머는 EndAbility에서 엔진이 지운다.
 	void TickClimbDebug();
 	FTimerHandle ClimbDebugTimer;
+
+	bool bIsClimbable = false;
+
+
 };
