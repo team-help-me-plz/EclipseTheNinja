@@ -30,8 +30,11 @@
 #include "Ability/GACloneTech.h"
 #include "Component/InteractBoxComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
+
 #include "GAS/Ability/GALedgeHang.h"
 #include "GAS/Ability/GALedgeClimb.h"
+#include "Component/NoiseComponent.h"
+#include "Noise/NoiseTypes.h"
 #include "GAS/Ability/GAWallSlide.h"
 
 APlayerCharacter::APlayerCharacter()
@@ -46,6 +49,8 @@ APlayerCharacter::APlayerCharacter()
 	InteractComponent->SetGenerateOverlapEvents(true);
 
 	AssassinateTargetingComponent = CreateDefaultSubobject<UAssassinationTargetingComponent>(TEXT("AssassinateTargeting"));
+
+	NoiseComponent = CreateDefaultSubobject<UNoiseComponent>(TEXT("NoiseComponent"));
 
 	// 암살도 배열의 기본 항목으로 둔다. 기본 공격 항목은 부모 생성자에서 추가한다.
 	FAbilityInfo& AssassinateInfo = AbilityClassArray.AddDefaulted_GetRef();
@@ -85,6 +90,13 @@ APlayerCharacter::APlayerCharacter()
 
 	// 일반 점프는 1회만 허용하고, 벽 점프는 LaunchCharacter로 처리한다.
 	JumpMaxCount = 1;
+}
+
+void APlayerCharacter::OnJumped_Implementation()
+{
+	Super::OnJumped_Implementation();
+
+	this->NoiseComponent->EmitNoise(ENoiseType::Jump);
 }
 
 void APlayerCharacter::BeginPlay()
@@ -852,6 +864,8 @@ void APlayerCharacter::MultiJump()
 			WallJumpImpulse.Z = GetCharacterMovement()->JumpZVelocity * WallJumpVerticalMultiplier;
 
 			LaunchCharacter(WallJumpImpulse, true, true);
+			// 벽 점프 시 소리 발생
+			this->NoiseComponent->EmitNoise(ENoiseType::WallJump);
 			// 벽점프 직후 이동 입력과 재부착을 잠시 제한한다.
 			bHasWallJumped = true;
 
