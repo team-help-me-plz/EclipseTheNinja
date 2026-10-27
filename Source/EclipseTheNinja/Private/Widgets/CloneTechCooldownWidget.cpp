@@ -2,7 +2,7 @@
 
 
 #include "Widgets/CloneTechCooldownWidget.h"
-#include "Ability/GACloneTech.h"
+#include "GAS/Ability/GACloneTech.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 

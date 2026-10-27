@@ -2,7 +2,7 @@
 
 
 #include "Widgets/AbilityCooldownWidget.h"
-#include "Ability/GACooldownBase.h"
+#include "GAS/Ability/GACooldownBase.h"
 #include "AbilitySystemInterface.h"
 #include "AbilitySystemComponent.h"
 

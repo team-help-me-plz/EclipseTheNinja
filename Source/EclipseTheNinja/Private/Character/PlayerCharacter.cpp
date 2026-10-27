@@ -27,7 +27,7 @@
 #include "Component/AssassinationTargetingComponent.h"
 #include "Component/AssassinateTargetComponent.h"
 #include "GAS/Ability/GAAssassinate.h"
-#include "Ability/GACloneTech.h"
+#include "GAS/Ability/GACloneTech.h"
 #include "Component/InteractBoxComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
 

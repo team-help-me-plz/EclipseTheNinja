@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
 #include "Abilities/GameplayAbility.h"
-#include "Ability/AbilityInfo.h"
+#include "GAS/AbilityInfo.h"
 #include "Interface/Interactor.h"
 #include "PlayerCharacter.generated.h"
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Ability/GACooldownBase.h"
+#include "GAS/Ability/GACooldownBase.h"
 #include "GAThrowKunai.generated.h"
 
 class ACharacter;

@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
-#include "Ability/AbilityInfo.h"
+#include "GAS/AbilityInfo.h"
 #include "BaseCharacter.generated.h"
 
 class UAbilitySystemComponent;

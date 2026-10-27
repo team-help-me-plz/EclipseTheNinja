@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Ability/AbilityInfo.h"
+#include "GAS/AbilityInfo.h"
 
 #include "Abilities/GameplayAbility.h"
 #include "Blueprint/UserWidget.h"
