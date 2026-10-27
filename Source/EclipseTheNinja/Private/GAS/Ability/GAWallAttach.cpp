@@ -19,6 +19,7 @@
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttach, "Ability.Movement.WallAttach");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttached, "State.Movement.WallAttached");
 static const ECollisionChannel ECC_WallAttach = ECC_GameTraceChannel2;
+static const ECollisionChannel ECC_WallClimbing = ECC_GameTraceChannel3;
 static constexpr float ClimbDebugInterval = 0.05f;
 
 UGAWallAttach::UGAWallAttach()
@@ -75,11 +76,13 @@ void UGAWallAttach::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 
 	APlayerCharacter* Player = Cast<APlayerCharacter>(ActorInfo->AvatarActor.Get());
 	FHitResult WallHit;
-	if (!IsValid(Player) || !FindWall(Player, WallHit))
+	bool bClimbable = false;
+	if (!IsValid(Player) || !FindWall(Player, WallHit, &bClimbable))
 	{
 		OnInterrupted();
 		return;
 	}
+	SetClimbable(bClimbable);
 
 	UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
 	Movement->StopMovementImmediately();
@@ -192,7 +195,7 @@ void UGAWallAttach::TickClimbDebug()
 	}
 }
 
-void UGAWallAttach::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo * ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+void UGAWallAttach::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	APlayerCharacter* Player = Cast<APlayerCharacter>(ActorInfo->AvatarActor.Get());
 	const bool bReturnMesh = bMeshOffsetApplied;
@@ -212,6 +215,7 @@ void UGAWallAttach::EndAbility(const FGameplayAbilitySpecHandle Handle, const FG
 	}
 	bMeshOffsetApplied = false;
 	bHoldingLedgePose = false;
+	SetClimbable(false);
 
 	// 엔진의 EndAbility는 이 어빌리티의 타이머를 모두 지우므로, 메시 되돌리기는 그 뒤에 시작한다
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -235,7 +239,7 @@ void UGAWallAttach::OnInterrupted()
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, false, true);
 }
 
-bool UGAWallAttach::FindWall(const ACharacter* Player, FHitResult& OutHit) const
+bool UGAWallAttach::FindWall(const ACharacter* Player, FHitResult& OutHit, bool* bOutClimbable) const
 {
 	// 액터의 위치에서 액터의 전방으로 WallSearchDist 만큼 트레이스
 
@@ -292,5 +296,37 @@ bool UGAWallAttach::FindWall(const ACharacter* Player, FHitResult& OutHit) const
 	if (GetWorld()->LineTraceSingleByChannel(GroundHit, Feet, Feet - FVector(0.f, 0.f, MinHeightAboveGround), ECC_Visibility, Params)) return false;
 
 	OutHit = BodyHit;
+
+	// 해당 값을 요청한 경우에만 값 반환
+	if (bOutClimbable)
+	{
+		FHitResult ClimbHit;
+		*bOutClimbable = GetWorld()->LineTraceSingleByChannel(ClimbHit, HeadStart, HeadEnd, ECC_WallClimbing, Params);
+
+#if ENABLE_DRAW_DEBUG
+		if (bDrawDebugClimbable)
+		{
+			constexpr float Duration = 3.f;
+			const FColor Color = *bOutClimbable ? FColor::Green : FColor::Red;
+
+			// 트레이스 선 (맞았으면 맞은 지점까지만 초록)
+			DrawDebugLine(GetWorld(), HeadStart, *bOutClimbable ? ClimbHit.ImpactPoint : HeadEnd, Color, false, Duration, 0, 1.5f);
+			if (*bOutClimbable)
+			{
+				DrawDebugPoint(GetWorld(), ClimbHit.ImpactPoint, 12.f, FColor::Green, false, Duration);
+				DrawDebugString(GetWorld(), ClimbHit.ImpactPoint + FVector(0.f, 0.f, 20.f),
+					FString::Printf(TEXT("Climbable: %s"), *GetNameSafe(ClimbHit.GetComponent())), nullptr, FColor::Green, Duration);
+			}
+			else
+			{
+				DrawDebugString(GetWorld(), HeadEnd + FVector(0.f, 0.f, 20.f), TEXT("Not Climbable"), nullptr, FColor::Red, Duration);
+			}
+
+			// 비교용: 붙은 벽(WallAttach 채널) 지점
+			DrawDebugPoint(GetWorld(), OutHit.ImpactPoint, 10.f, FColor::Yellow, false, Duration);
+		}
+	}
+#endif
+
 	return true;
 }

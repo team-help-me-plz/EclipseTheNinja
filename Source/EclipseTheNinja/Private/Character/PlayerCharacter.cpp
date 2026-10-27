@@ -459,7 +459,7 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 		DoMove(MoveVector.Y);
 	}
 
-	
+
 }
 
 void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
@@ -733,15 +733,17 @@ void APlayerCharacter::DoInteract()
 
 void APlayerCharacter::DoWAllMove(float Up)
 {
-	//const UGAWallAttach* WallAttach = GetWallAttachInstance();
-	const bool bClimbableWall = true;
+	FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::WallAttach);
+	if (!Spec) return;
+	const UGAWallAttach* WallAttach = Cast<UGAWallAttach>(Spec->GetPrimaryInstance());
+
+	const bool bClimbableWall = WallAttach->GetIsClimbable();
 
 	// 위 입력으로 모서리 위로 올라간다. 벽타기 벽에서는 모서리 매달림 높이에 온 뒤에만 올라간다.
-	if (Up > 0.5f /*&& (!bClimbableWall  || WallAttach->CanClimbOverLedge())*/)
+	if (Up > 0.5f)
 	{
 		TryActivateAbilityByInputID(EAbilityInputID::LedgeClimb);
 	}
-
 
 	// 벽타기 벽에서는 위아래 입력으로 벽을 타고 움직인다. 올라가기가 시작됐으면 매달림이 끝나 있으므로 넣지 않는다.
 	if (bClimbableWall && IsWallAttached())
