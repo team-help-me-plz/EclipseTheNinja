@@ -109,6 +109,7 @@ void APlayerCharacter::BeginPlay()
     WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
     WarnIfAbilityMissing(EAbilityInputID::CloneTech);
     WarnIfAbilityMissing(EAbilityInputID::ThrowKunai);
+    WarnIfAbilityMissing(EAbilityInputID::ElementalFire);
     JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
     FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
@@ -348,6 +349,10 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
         if (MoveScrollAction)
         {
             EnhancedInputComponent->BindAction(MoveScrollAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoMouseScroll);
+        }
+        if (ElementalFireAction)
+        {
+            EnhancedInputComponent->BindAction(ElementalFireAction, ETriggerEvent::Started, this, &APlayerCharacter::DoElementalFire);
         }
 
         // 카메라 이동 중 좌클릭은 모드를 유지한 채 표창을 던진다.
@@ -998,6 +1003,15 @@ void APlayerCharacter::DoCloneTech()
 	if (bIsDead || !ASC) return;
 	//DoCameraMoveEnd();
 	ASC->AbilityLocalInputPressed(ToAbilityInputID(EAbilityInputID::CloneTech));
+}
+
+void APlayerCharacter::DoElementalFire()
+{
+	if (IsAssassinating()) return;
+	if (bIsDead || !ASC) return;
+
+	//ASC->AbilityLocalInputPressed(ToAbilityInputID(EAbilityInputID::ElementalFire));
+	this->TryActivateAbilityByInputID(EAbilityInputID::ElementalFire);
 }
 
 void APlayerCharacter::DoCloneTechEnd()

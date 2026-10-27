@@ -31,6 +31,7 @@
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Components/SphereComponent.h"
 #include "Noise/NoiseTypes.h"
+#include "GAS/Tags/EclipseGameplayTags.h"
 
 // Sets default values
 AEnemy::AEnemy()
@@ -91,6 +92,7 @@ void AEnemy::BeginPlay()
 
 	// 대미지 수신 델리게이트 바인딩
 	StatAttributeSet->OnDamageReceived.AddUObject(this, &AEnemy::OnDamageReceived);
+	StatAttributeSet->OnDotDamageReceived.AddUObject(this, &AEnemy::OnDotDamageReceived);
 
 	InitializeOverHeadWidget();
 	if (StatAttributeSet->GetHealth() <= 0.0f)
@@ -130,6 +132,7 @@ void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (StatAttributeSet)
 	{
 		StatAttributeSet->OnDamageReceived.RemoveAll(this);
+		StatAttributeSet->OnDotDamageReceived.RemoveAll(this);
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -137,6 +140,10 @@ void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
+	// 도트데미지인지 아닌지 바로 확인하고 초기화
+	const bool bIsDoT = bIsDotDamage;
+	bIsDotDamage = false;
+
 	// 체력이 0이면 사망하고, 살아 있는 상태의 체력 감소는 피격으로 처리한다.
 	if (bIsDead)
 	{
@@ -149,8 +156,11 @@ void AEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 	}
 	if (Data.NewValue < Data.OldValue)
 	{
-		PlayHitReaction();
-
+		// 화상 데미지가 아닐 때만 피격 애니메이션을 실행한다.
+		if (!bIsDoT)
+		{
+			PlayHitReaction();
+		}
 		// Health를 직접 수정하는 경우에도 감지 상태를 갱신한다.
 		if (Data.GEModData)
 		{
@@ -166,6 +176,22 @@ void AEnemy::OnDamageReceived(const FGameplayEffectContextHandle& Context)
 	{
 		return;
 	}
+
+	AActor* DamageInstigator = IsValid(Context.GetInstigator()) ? Context.GetInstigator() : Context.GetEffectCauser();
+
+	EnemyDetectComponent->NotifyDamaged(DamageInstigator);
+}
+
+void AEnemy::OnDotDamageReceived(const FGameplayEffectContextHandle& Context)
+{
+	bIsDotDamage = true;
+
+	// 치명타는 OnHealthChanged에서 이미 사망 처리했으므로 감지/AI를 다시 켜지 않는다.
+	if (!IsReadyForAI() || !EnemyDetectComponent)
+	{
+		return;
+	}
+
 
 	AActor* DamageInstigator = IsValid(Context.GetInstigator()) ? Context.GetInstigator() : Context.GetEffectCauser();
 
@@ -235,6 +261,15 @@ void AEnemy::Die()
 	OverHeadWidgetComponent->SetVisibility(false, true);
 	SetActorTickEnabled(false);
 
+	if (ASC->HasMatchingGameplayTag(EclipseGameplayTags::State_Debuff_Burning))
+	{
+		ASC->RemoveActiveEffectsWithGrantedTags(FGameplayTagContainer(EclipseGameplayTags::State_Debuff_Burning));
+		if (!ASC->IsGameplayCueActive(EclipseGameplayTags::GameplayCue_Enemy_Burn))
+		{
+			ASC->AddGameplayCue(EclipseGameplayTags::GameplayCue_Enemy_Burn);
+		}
+	}
+
 	// 사망 몽타주 재생
 	UAnimMontage* MontageToPlay = DeathMontage;
 	if (IsValid(PendingAssassinationMontage))
@@ -295,6 +330,10 @@ void AEnemy::DeactivateAfterDeath()
 		}
 	}
 
+	// 화상 상태 및 화상 틱 제거
+	ASC->RemoveActiveEffectsWithGrantedTags(FGameplayTagContainer(EclipseGameplayTags::State_Debuff_Burning));
+	ASC->RemoveGameplayCue(EclipseGameplayTags::GameplayCue_Enemy_Burn);
+	
 	// 충돌, 이동, 틱, AI는 Die()에서 이미 정지했으므로 외형만 숨긴다.
 	SetActorHiddenInGame(true);
 	GetMesh()->bPauseAnims = true;
@@ -318,6 +357,10 @@ void AEnemy::ResetToInitial_Implementation()
 
 	// 체력 회복. 증가 변화이므로 OnHealthChanged에서 피격/사망으로 처리되지 않고, 오버헤드 위젯은 델리게이트로 갱신된다.
 	ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), StatAttributeSet->GetMaxHealth());
+
+	// 화상 상태 및 화상 큐 제거
+	ASC->RemoveActiveEffectsWithGrantedTags(FGameplayTagContainer(EclipseGameplayTags::State_Debuff_Burning));
+	ASC->RemoveGameplayCue(EclipseGameplayTags::GameplayCue_Enemy_Burn);
 
 	// 사망 몽타주와 정지된 포즈 해제
 	GetMesh()->bPauseAnims = false;
@@ -366,6 +409,10 @@ void AEnemy::OnReturnToPool_Implementation()
 
 	// 진행 중인 공격 어빌리티 정리
 	ASC->CancelAllAbilities();
+
+	// 화상 상태 및 화상 큐 제거
+	ASC->RemoveActiveEffectsWithGrantedTags(FGameplayTagContainer(EclipseGameplayTags::State_Debuff_Burning));
+	ASC->RemoveGameplayCue(EclipseGameplayTags::GameplayCue_Enemy_Burn);
 
 	// 풀 대기 중에는 AI 판정(IsReadyForAI)과 피격 처리에서 제외되도록 사망 상태로 둔다. (스폰 시 ResetToInitial에서 해제)
 	bIsDead = true;

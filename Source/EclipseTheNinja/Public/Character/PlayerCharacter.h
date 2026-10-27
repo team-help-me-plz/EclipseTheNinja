@@ -90,6 +90,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> CrouchAction;
 
+	/** ElementalFire Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> ElementalFireAction;
+
 	/** Impulse to manually push physics objects while we're in midair */
 	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Jump")
 	float JumpPushImpulse = 600.0f;
@@ -179,6 +183,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void DoMouseScroll(const FInputActionValue& InValue);
+
+	// 칼에 불속성을 부여하는 어빌리티를 실행하는 함수
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void DoElementalFire();
 
 	bool HasCursorTarget() const { return bHasCursorTarget; }
 	bool IsFacingCursor() const { return bCursorFacingActive; }
