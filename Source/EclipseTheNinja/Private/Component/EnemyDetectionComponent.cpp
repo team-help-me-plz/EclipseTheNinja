@@ -506,7 +506,14 @@ void UEnemyDetectionComponent::CreatePresentationWidget()
     if (!PresentationWidget) return;
 
     PresentationWidget->InitializeDetection(this);
-    PresentationWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (bShowAwarenessWidget)
+	{
+	    PresentationWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	else
+	{
+	    PresentationWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
     PresentationWidget->ForceVolatile(true);
     PresentationWidget->AddToViewport(5);
 }

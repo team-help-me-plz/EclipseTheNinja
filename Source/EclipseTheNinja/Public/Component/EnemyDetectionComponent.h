@@ -49,6 +49,10 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Detection|UI")
     TSubclassOf<UEnemyAwarenessWidget> AwarenessWidgetClass;
 
+    /** 감지범위 위젯을 보이게 할지 결정하는 값. True를 기본 상태로 두고 숨어있어야만하는 적일 경우 false로 만든다. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|UI")
+    bool bShowAwarenessWidget = true;
+
     /** 디버그에서만 큰 감지 원을 추가로 표시한다. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|Debug")
     bool bDrawDebugSight = false;
