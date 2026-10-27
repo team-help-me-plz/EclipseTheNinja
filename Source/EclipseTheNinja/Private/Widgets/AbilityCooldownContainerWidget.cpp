@@ -3,6 +3,7 @@
 
 #include "Widgets/AbilityCooldownContainerWidget.h"
 #include "Widgets/AbilityCooldownWidget.h"
+#include "Widgets/ElementalFireCooldownWidget.h"
 
 void	UAbilityCooldownContainerWidget::InitWidget(APawn* InPawn)
 {
@@ -17,5 +18,9 @@ void	UAbilityCooldownContainerWidget::InitWidget(APawn* InPawn)
 	if (this->KunaiCooldown)
 	{
 		this->KunaiCooldown->InitWidget(InPawn);
+	}
+	if (this->ElementalFireCooldown)
+	{
+		this->ElementalFireCooldown->InitWidget(InPawn);
 	}
 }
