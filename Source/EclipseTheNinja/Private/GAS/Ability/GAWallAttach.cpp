@@ -19,7 +19,7 @@
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttach, "Ability.Movement.WallAttach");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttached, "State.Movement.WallAttached");
 static const ECollisionChannel ECC_WallAttach = ECC_GameTraceChannel2;
-static const ECollisionChannel ECC_WallClimbing = ECC_GameTraceChannel3;
+static const ECollisionChannel ECC_WallClimbing = ECC_GameTraceChannel4;
 static constexpr float ClimbDebugInterval = 0.05f;
 
 UGAWallAttach::UGAWallAttach()
