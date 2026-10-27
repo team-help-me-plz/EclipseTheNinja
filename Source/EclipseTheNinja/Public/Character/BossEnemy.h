@@ -1,0 +1,204 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Character/Enemy.h"
+#include "Interface/Activatable.h"
+#include "GameplayAbilitySpecHandle.h"
+#include "Character/BossPatternRow.h"
+#include "BossEnemy.generated.h"
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossEnergyLinkActivated, int32, LinkIndex);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossEnergyLinkEvent);
+
+/**
+ * 비헤이비어 트리로 움직이는 보스 적.
+ *
+ * 감지·경계·추격·피격·체크포인트 리셋은 AEnemy의 일반 적 흐름을 그대로 사용한다.
+ * 이 클래스는 보스 전용 규칙만 추가한다.
+ * - 공격: BT의 Attack 태스크가 호출하면 PatternTable에서 쿨타임과 사용 거리를 통과한 패턴을 가중치 랜덤으로 골라 실행한다.
+ *   패턴은 각각 UGABossPatternBase 계열 어빌리티이며, 테이블이 없으면 BossQuickDraw 입력 ID의 어빌리티(발도)를 실행한다.
+ * - 에너지 링크: 체력이 EnergyLinkThresholds 비율에 닿으면 그 값에서 체력을 멈추고 무적 실드를 켠다.
+ *   실드는 레버(IActivatable) 또는 BreakEnergyLink 호출로 해제되고, 제한시간이 지나면 플레이어가 즉사한다.
+ * - 암살: 가장 가까운 아래쪽 에너지 링크 체력까지 즉시 깎는다. 체력이 AssassinationKillRatio 이하면 즉시 처치한다.
+ */
+UCLASS()
+class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
+{
+	GENERATED_BODY()
+
+public:
+	ABossEnemy();
+
+	/** 에너지 링크 실드가 켜져 있는지. */
+	UFUNCTION(BlueprintPure, Category = "Boss|Energy Link")
+	bool IsEnergyLinkActive() const { return bEnergyLinkActive; }
+
+	/** 현재 체력 비율(0~1). */
+	UFUNCTION(BlueprintPure, Category = "Boss")
+	float GetHealthRatio() const;
+
+	/** 실드를 해제한다. 레버가 ToggleActivate로 호출하며, 레벨 BP에서 직접 호출해도 된다. */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Energy Link")
+	void BreakEnergyLink();
+
+	/** 실드가 켜질 때 호출된다. LinkIndex는 EnergyLinkThresholds의 순번(0부터). */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Energy Link")
+	FOnBossEnergyLinkActivated OnEnergyLinkActivated;
+
+	/** 레버 등으로 실드가 해제되면 호출된다. */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Energy Link")
+	FOnBossEnergyLinkEvent OnEnergyLinkBroken;
+
+	/** 제한시간 안에 실드를 해제하지 못해 플레이어를 처치할 때 호출된다. */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Energy Link")
+	FOnBossEnergyLinkEvent OnEnergyLinkFailed;
+
+	// 실드가 켜져 있으면 암살할 수 없다.
+	virtual bool CanBeAssassinated() const override;
+
+	// 체력이 낮으면 즉시 처치하고, 아니면 가장 가까운 아래쪽 에너지 링크 체력까지 깎는다.
+	virtual void ReceiveAssassination(UAnimMontage* Montage) override;
+
+	// 레버가 작동하면 실드를 해제한다.
+	virtual void ToggleActivate_Implementation() override;
+
+	// 체크포인트 리스폰 시 에너지 링크 진행도와 실드도 처음 상태로 되돌린다.
+	virtual void ResetToInitial_Implementation() override;
+
+	// 패턴 테이블이 있으면 지금 쓸 수 있는 패턴이 하나라도 있어야 공격 분기로 넘어간다.
+	// 원거리 패턴은 근접 거리보다 먼 곳에서도 공격을 시작하고, 모두 쿨타임이면 추격을 계속한다.
+	virtual bool CanStartAIAttack(AActor* Target) const override;
+
+	// 원거리 패턴을 쓸 수 있도록 전투 중에는 발각 반경 대신 감지 반경(경계 배율 적용)까지 대상을 계속 본다.
+	virtual float GetCombatSightRadius() const override;
+
+	// 보스는 발도 준비 동작 중 대상이 움직여도 공격을 끝까지 수행한다.
+	virtual bool ShouldLockMovementDuringAttack() const override { return true; }
+
+	// 패턴 테이블로 고른 어빌리티가 실행 중인지. 테이블이 없으면 기본 입력 ID 어빌리티를 본다.
+	virtual bool IsAttackActive() const override;
+
+	// 실행 중인 패턴 어빌리티를 취소한다.
+	virtual void CancelAIBaseAttack() override;
+
+protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void Tick(float DeltaTime) override;
+
+	// 에너지 링크 체력에 닿았는지 검사한 뒤 일반 적의 피격/사망 처리로 넘긴다.
+	virtual void OnHealthChanged(const FOnAttributeChangeData& Data) override;
+
+	virtual EAbilityInputID GetAIAttackInputID() const override { return EAbilityInputID::BossQuickDraw; }
+
+	// 패턴 테이블에서 쿨타임·거리 조건을 통과한 패턴 중 가중치 랜덤으로 하나를 골라 그 어빌리티를 활성화한다.
+	// 테이블이 없으면 BossQuickDraw 입력 ID의 어빌리티를 실행한다. 고를 패턴이 없으면 공격하지 않는다.
+	virtual bool ActivateAIAttack() override;
+
+	// 지금 대상에게 쓸 수 있는(쿨타임이 끝났고 사용 거리 안인) 패턴 행과 그 가중치 합을 모은다.
+	void GatherUsablePatterns(
+		const AActor* Target,
+		TArray<TPair<FName, const FBossPatternRow*>>& OutCandidates,
+		float& OutTotalWeight
+	) const;
+
+	// 패턴 행이 쿨타임이 아니고, 대상과의 거리가 패턴의 사용 거리 안인지.
+	// bAssumeInAttackDistance면 실제 거리와 함께 AttackDistance에 있는 것으로도 검사한다.
+	bool IsPatternUsable(
+		FName RowName,
+		const FBossPatternRow& Row,
+		float DistanceToTarget,
+		bool bAssumeInAttackDistance
+	) const;
+
+	// 패턴 행의 쿨타임이 남아 있는지. 쿨타임은 DT_BossPatterns 행의 Cooldown 값으로 패턴을 시작할 때부터 센다.
+	bool IsPatternOnCooldown(FName RowName) const;
+
+	/**
+	 * 같은 방향으로 달아나는 대상을 쫓는 중인지.
+	 * 대상이 보스 앞쪽 안쪽 감지 범위(발각 반경) 안에 있고, 보스 정면 방향으로 ChaseAssumeMinTargetSpeed 이상 달리고 있으면 true.
+	 * 이때는 대상이 공격 거리 안에 들어온 것으로 보고 패턴을 고른다. 속도가 같아 거리를 좁히지 못하는 상황을 위한 처리다.
+	 */
+	bool IsChasingFleeingTarget(const AActor* Target) const;
+
+	// 쓸 수 있는 패턴 중 가중치 랜덤으로 하나를 고른다. 고를 행이 없으면 nullptr. OutTotalWeight에 후보 가중치 합을 돌려준다.
+	const FBossPatternRow* PickNextPattern(const AActor* Target, FName& OutRowName, float& OutTotalWeight) const;
+
+	// 고른 패턴을 화면과 출력 로그에 남긴다.
+	void LogPatternChoice(FName RowName, const FBossPatternRow& Row, float TotalWeight) const;
+
+	/** 공격 패턴 가중치 테이블 (행 구조체: FBossPatternRow). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern", meta = (RequiredAssetDataTags = "RowStructure=/Script/EclipseTheNinja.BossPatternRow"))
+	TObjectPtr<UDataTable> PatternTable;
+
+	/** 고른 패턴을 화면에 표시할지. 출력 로그에는 항상 남긴다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern")
+	bool bPrintPatternOnScreen = true;
+
+	/** 같은 방향으로 달아나는 대상이 안쪽 감지 범위 안에 있으면 공격 거리에 들어온 것으로 보고 패턴을 쓴다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern")
+	bool bAssumeAttackRangeWhileChasing = true;
+
+	/** 대상이 이 속도(cm/s) 이상으로 보스 정면 방향으로 달아나야 추격 중으로 본다. 제자리에서 돌아선 대상은 제외된다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern", meta = (ClampMin = "0.0", Units = "cm/s", EditCondition = "bAssumeAttackRangeWhileChasing"))
+	float ChaseAssumeMinTargetSpeed = 150.0f;
+
+	// 마지막으로 실행한 패턴 어빌리티. 실행 중 판정과 취소에 사용한다.
+	FGameplayAbilitySpecHandle CurrentPatternHandle;
+
+	// 패턴 행 이름별로 다시 쓸 수 있게 되는 월드 시간(초).
+	TMap<FName, double> PatternReadyTimes;
+
+	// 실드를 켜고 제한시간 타이머를 시작한다.
+	void ActivateEnergyLink(int32 LinkIndex);
+
+	// 제한시간 안에 실드를 해제하지 못하면 플레이어를 즉사시킨다.
+	void OnEnergyLinkTimeExpired();
+
+	// 실드 상태와 타이머만 정리한다. 알림은 보내지 않는다.
+	void ClearEnergyLinkState();
+
+#if WITH_EDITOR
+	// 디테일 패널의 디버그 값으로 피해·암살·레버를 흉내 낸다.
+	void ProcessDebugRequests();
+#endif
+
+	/** 실드가 켜지는 체력 비율. 높은 값부터 순서대로 한 번씩 발동한다. 기획: 70% / 30%. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Energy Link")
+	TArray<float> EnergyLinkThresholds = { 0.7f, 0.3f };
+
+	/** 실드 해제 제한시간(초). 0 이하면 시간 제한 없이 레버를 기다린다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Energy Link", meta = (ClampMin = "0.0", Units = "s"))
+	float EnergyLinkTimeLimit = 60.0f;
+
+	/** 이 체력 비율 이하에서 암살에 성공하면 보스를 즉시 처치한다. 기획: 20%. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AssassinationKillRatio = 0.2f;
+
+	/** 실드가 켜져 있는 동안 보스 주위에 디버그 구를 그린다. 실드 이펙트가 생기기 전 테스트용. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Debug")
+	bool bDrawDebugShield = true;
+
+#if WITH_EDITORONLY_DATA
+	/** PIE 테스트용. 0보다 큰 값을 넣으면 다음 Tick에 플레이어가 준 피해처럼 적용하고 0으로 되돌린다. */
+	UPROPERTY(EditInstanceOnly, Transient, Category = "Boss|Debug")
+	float DebugDamage = 0.0f;
+
+	/** PIE 테스트용. 체크하면 다음 Tick에 암살 성공을 받은 것처럼 처리하고 해제된다. */
+	UPROPERTY(EditInstanceOnly, Transient, Category = "Boss|Debug")
+	bool bDebugAssassinate = false;
+
+	/** PIE 테스트용. 체크하면 다음 Tick에 레버를 당긴 것처럼 실드를 해제하고 해제된다. */
+	UPROPERTY(EditInstanceOnly, Transient, Category = "Boss|Debug")
+	bool bDebugBreakEnergyLink = false;
+#endif
+
+	/** 다음에 발동할 EnergyLinkThresholds 순번. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Boss|Energy Link")
+	int32 NextEnergyLinkIndex = 0;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Boss|Energy Link")
+	bool bEnergyLinkActive = false;
+
+	FTimerHandle EnergyLinkTimer;
+};

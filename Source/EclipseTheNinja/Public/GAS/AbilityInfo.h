@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "AbilityInfo.generated.h"
@@ -21,7 +21,7 @@ enum class EAbilityInputID : uint8
     WallSlide = 9,
     SwiftStrike,
     CloneTech = 100,
-	ElementalFire = 200,
+    ElementalFire = 200,
 };
 
 /** GAS 입력 ID로 변환한다. None은 어떤 입력과도 연결하지 않는다. */

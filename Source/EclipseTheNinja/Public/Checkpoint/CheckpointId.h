@@ -53,4 +53,7 @@ enum class ECheckpointId : uint8
     // Lvl_Week_2_Prototype_4 (STAGE 5 고밀도판 - 천수각), Lvl_Week_2_Prototype_6 (같은 구조의 밤 판)
     W2P4_Armory,                // 가시 속 버튼으로 움직이는 플랫폼 + 하단 암살 + 벽 점프 수직 통로
     W2P4_UpperKeep,             // 가시 너머 플랫폼에 분신 -> 발판 -> 도착 직전 교환 + 레버 낙하물 + 최종 관문
+
+    // Lvl_BossEnemyTest
+    BossTest_Arena,             // 보스 몬스터 테스트 구간
 };
