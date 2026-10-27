@@ -86,6 +86,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> MoveScrollAction;
 
+	/** Crouch Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> CrouchAction;
+
 	/** Impulse to manually push physics objects while we're in midair */
 	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Jump")
 	float JumpPushImpulse = 600.0f;
@@ -320,6 +324,10 @@ public:
 	// 카메라 이동 처리
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoCameraMoveEnd();
+
+	// 앉기 처리
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	virtual void DoCrouch();
 
 	/** 분신술 타게팅 상태 설정. 타게팅 중에는 카메라 시점을 유지하고, 종료되면 중앙으로 복귀한다. */
 	void SetCloneTargeting(bool bTargeting);

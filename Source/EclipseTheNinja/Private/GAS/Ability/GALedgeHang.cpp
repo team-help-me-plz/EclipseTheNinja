@@ -510,22 +510,22 @@ bool UGALedgeHang::PlayHoldPose(ACharacter* Player) const
 	return true;
 }
 
-float UGALedgeHang::GetHangMeshZOffset(const ACharacter* Player) const
+FVector UGALedgeHang::GetHangMeshOffset(const ACharacter* Player) const
 {
 	// 정지 자세를 쓰면 매달리기가 메시 오프셋을 주지 않는다
-	if (!HoldMontage.IsNull()) return 0.f;
+	if (!HoldMontage.IsNull()) return FVector::ZeroVector;
 
 	const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Player);
-	if (!IsValid(ASC)) return 0.f;
+	if (!IsValid(ASC)) return FVector::ZeroVector;
 
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
 		if (const UGAWallAttach* WallAttach = Cast<UGAWallAttach>(Spec.Ability))
 		{
-			return WallAttach->GetHangMeshOffset().Z;
+			return WallAttach->GetHangMeshOffset();
 		}
 	}
-	return 0.f;
+	return FVector::ZeroVector;
 }
 
 float UGALedgeHang::ResolveHangDepth(float CapsuleHalfHeight) const
@@ -610,8 +610,13 @@ bool UGALedgeHang::FindLedgeInDirection(const ACharacter* Player, float OutDir, 
 	{
 		HandTarget = FVector(EdgeX - OutDir * HandLedgeAdjust.X, Location.Y, LedgeTopZ + HandLedgeAdjust.Y);
 		MeshShiftWorld.X = HandTarget.X - (StepOut.X + HandOffset.X);
-		// 매달리기 Idle은 메시를 높이 오프셋만큼 올려 둔다
-		IdleMeshShiftWorld = FVector(MeshShiftWorld.X, 0.f, GetHangMeshZOffset(Player));
+		// 정지 몽타주는 손 맞춤을 유지하고, Idle로 전환할 때는 매달리기의 X/Z 설정을 적용한다.
+		IdleMeshShiftWorld = FVector(MeshShiftWorld.X, 0.f, 0.f);
+		if (HoldMontage.IsNull())
+		{
+			const FRotator HangFacing(0.f, OutDir > 0.f ? 180.f : 0.f, 0.f);
+			IdleMeshShiftWorld = HangFacing.RotateVector(GetHangMeshOffset(Player));
+		}
 
 		if (HangIdleHandHeight > 0.f && HoldMontage.IsNull())
 		{
@@ -650,7 +655,7 @@ bool UGALedgeHang::FindLedgeInDirection(const ACharacter* Player, float OutDir, 
 	OutPlan.EdgeStandLocation = Location;
 	OutPlan.HangLocation = Hang;
 	// 매달리기 Idle은 메시를 높이 오프셋만큼 올리므로 내려가기는 그만큼 위에서 끝낸다 (손 맞추기는 내려가는 동안 메시를 올려 둔다)
-	OutPlan.MeshZOffset = bHandAligned ? 0.f : GetHangMeshZOffset(Player);
+	OutPlan.MeshZOffset = bHandAligned ? 0.f : GetHangMeshOffset(Player).Z;
 	OutPlan.DropEndLocation = Hang + FVector(0.f, 0.f, OutPlan.MeshZOffset);
 	OutPlan.OutDir = OutDir;
 	OutPlan.bHandAligned = bHandAligned;
