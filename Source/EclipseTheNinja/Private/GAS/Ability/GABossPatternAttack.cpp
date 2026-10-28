@@ -47,33 +47,54 @@ void UGABossPatternAttack::OnPatternHit(const FBossAttackHitArea& HitArea)
 			continue;
 		}
 
-		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
-		if (!TargetASC || !TargetASC->GetSet<UStatAttributeSet>())
+		if (ApplyHitDamage(SourceASC, Target, Hit, HitDamage))
 		{
-			continue;
-		}
-
-		if (TargetASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) <= 0.0f)
-		{
-			continue;
-		}
-
-		FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
-		Context.AddHitResult(Hit);
-
-		FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(
-			UGEBasicAttackDamage::StaticClass(),
-			GetAbilityLevel(),
-			Context
-		);
-
-		if (Spec.IsValid())
-		{
-			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), HitDamage);
 			HitActors.Add(Target);
-			SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 		}
 	}
+}
+
+bool UGABossPatternAttack::ApplyHitDamage(
+	UAbilitySystemComponent* SourceASC,
+	AActor* Target,
+	const FHitResult& Hit,
+	float HitDamage
+) const
+{
+	UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
+	if (!SourceASC || !TargetASC || !TargetASC->GetSet<UStatAttributeSet>())
+	{
+		return false;
+	}
+
+	// 이미 쓰러진 대상은 다시 때리지 않는다.
+	if (TargetASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) <= 0.0f)
+	{
+		return false;
+	}
+
+	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+	Context.AddHitResult(Hit);
+
+	FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(
+		UGEBasicAttackDamage::StaticClass(),
+		GetAbilityLevel(),
+		Context
+	);
+
+	if (!Spec.IsValid())
+	{
+		return false;
+	}
+
+	Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), HitDamage);
+	SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+	return true;
+}
+
+FVector UGABossPatternAttack::GetScaledHitExtent(const FTransform& ActorTransform, const FBossAttackHitArea& HitArea)
+{
+	return (HitArea.HalfExtent * ActorTransform.GetScale3D().GetAbs()).ComponentMax(FVector::OneVector);
 }
 
 void UGABossPatternAttack::QueryHitArea(
@@ -82,10 +103,11 @@ void UGABossPatternAttack::QueryHitArea(
 	TArray<FHitResult>& OutHits
 ) const
 {
-	// 상자는 보스 액터 기준으로 놓고 보스가 바라보는 방향을 따라 돌린다.
+	// 상자는 보스 액터 기준으로 놓고 보스가 바라보는 방향을 따라 돌린다. 위치와 크기 모두 액터 스케일을 따른다.
 	const FTransform& ActorTransform = Enemy->GetActorTransform();
 	const FVector Center = ActorTransform.TransformPosition(HitArea.Offset);
 	const FQuat Rotation = ActorTransform.GetRotation();
+	const FVector Extent = GetScaledHitExtent(ActorTransform, HitArea);
 
 	FCollisionObjectQueryParams ObjectParams;
 	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
@@ -97,7 +119,7 @@ void UGABossPatternAttack::QueryHitArea(
 		Center,
 		Rotation,
 		ObjectParams,
-		FCollisionShape::MakeBox(HitArea.HalfExtent.ComponentMax(FVector::OneVector)),
+		FCollisionShape::MakeBox(Extent),
 		QueryParams
 	);
 
@@ -128,20 +150,20 @@ void UGABossPatternAttack::DrawDebugHitArea(
 ) const
 {
 	const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy);
-	if (!bDrawDebugHit && !(Boss && Boss->IsDrawDebugAttackEnabled()))
+	if (!Boss || !Boss->IsDrawDebugAttackEnabled())
 	{
 		return;
 	}
 
 	const UWorld* World = Enemy->GetWorld();
-	const float Duration = Boss ? Boss->GetDebugAttackDrawDuration() : 1.0f;
+	const float Duration = Boss->GetDebugAttackDrawDuration();
 	const FTransform& ActorTransform = Enemy->GetActorTransform();
 
 	// 노티파이가 지정한 상자 영역
 	DrawDebugBox(
 		World,
 		ActorTransform.TransformPosition(HitArea.Offset),
-		HitArea.HalfExtent.ComponentMax(FVector::OneVector),
+		GetScaledHitExtent(ActorTransform, HitArea),
 		ActorTransform.GetRotation(),
 		bTargetInArea ? FColor::Green : FColor::Red,
 		false,

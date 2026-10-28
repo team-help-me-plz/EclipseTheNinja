@@ -5,6 +5,7 @@
 #include "GABossPatternAttack.generated.h"
 
 class AEnemy;
+class UAbilitySystemComponent;
 
 /**
  * 보스 근접 패턴 하나(몽타주 1개 + 타격마다 판정)를 실행하는 어빌리티.
@@ -23,6 +24,17 @@ protected:
 	// 판정 영역 안의 전투 대상에게 피해를 준다.
 	virtual void OnPatternHit(const FBossAttackHitArea& HitArea) override;
 
+	// 대상에게 HitDamage만큼 피해를 준다. 대상이 이미 쓰러졌거나 피해를 받을 수 없으면 false.
+	bool ApplyHitDamage(
+		UAbilitySystemComponent* SourceASC,
+		AActor* Target,
+		const FHitResult& Hit,
+		float HitDamage
+	) const;
+
+	// 액터 스케일을 곱한 판정 상자의 절반 크기. Offset이 액터 스케일을 따르므로 크기도 같이 맞춘다.
+	static FVector GetScaledHitExtent(const FTransform& ActorTransform, const FBossAttackHitArea& HitArea);
+
 	// 노티파이가 지정한 상자 영역에 겹친 Pawn을 모은다.
 	void QueryHitArea(
 		const AEnemy* Enemy,
@@ -30,7 +42,7 @@ protected:
 		TArray<FHitResult>& OutHits
 	) const;
 
-	// 보스 공격 디버그 토글이나 bDrawDebugHit이 켜져 있으면 판정 영역과 걸린 지점을 그린다.
+	// 보스 BP의 bDrawDebugAttack(SetDrawDebugAttack)이 켜져 있으면 판정 영역과 걸린 지점을 그린다.
 	// 전투 대상이 영역 안에 있으면 초록, 없으면 빨강으로 그린다.
 	void DrawDebugHitArea(
 		const AEnemy* Enemy,
@@ -42,8 +54,4 @@ protected:
 	/** 판정 1회당 피해량. Boss Attack Hit 노티파이의 DamageScale이 곱해진다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Damage", meta = (ClampMin = "0.0"))
 	float Damage = 30.0f;
-
-	/** 이 패턴만 판정 범위를 그린다. 보스 BP의 bDrawDebugAttack(SetDrawDebugAttack)이 켜져 있으면 이 값과 상관없이 그린다. */
-	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Debug")
-	bool bDrawDebugHit = false;
 };
