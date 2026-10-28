@@ -85,6 +85,9 @@ APlayerCharacter::APlayerCharacter()
 	GetCharacterMovement()->JumpZVelocity = 750.0f;
 	GetCharacterMovement()->AirControl = 1.0f;
 
+	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
+	GetCharacterMovement()->MaxWalkSpeedCrouched = 250.0f;
+
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 750.0f, 0.0f);
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 
@@ -382,6 +385,7 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
 
 		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCrouch);
+		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoUnCrouch);
 	}
 }
 
@@ -413,6 +417,12 @@ void APlayerCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	bCanCoyoteJump = false;
+
+	// 공중에서 앉기 키를 누르고 있었다면 착지하면서 앉는다.
+	if (bCrouchInputHeld && !IsWallAttached())
+	{
+		Crouch();
+	}
 }
 
 void APlayerCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode /*= 0*/)
@@ -806,8 +816,20 @@ void APlayerCharacter::DoCrouch()
 	}
 	else
 	{
-		// TODO 웅크리기
+		// 키를 누르고 있는 동안 웅크린다.
+		// 공중에서 앉으면 캡슐 중심 기준으로 줄어 카메라가 튀므로 착지할 때 앉는다.
+		bCrouchInputHeld = true;
+		if (GetCharacterMovement()->IsMovingOnGround())
+		{
+			Crouch();
+		}
 	}
+}
+
+void APlayerCharacter::DoUnCrouch()
+{
+	bCrouchInputHeld = false;
+	UnCrouch();
 }
 
 void APlayerCharacter::OnCameraMoveEndInput()
@@ -883,6 +905,13 @@ void APlayerCharacter::MultiJump()
 
 			return;
 		}
+	}
+
+	// 앉은 상태에서는 점프가 막히므로 즉시 일어선다. 위가 막혀 있으면 앉은 채로 남아 점프하지 않는다.
+	if (bIsCrouched)
+	{
+		UnCrouch();
+		GetCharacterMovement()->UnCrouch(false);
 	}
 
 	// 지상에서는 일반 점프를 실행한다.

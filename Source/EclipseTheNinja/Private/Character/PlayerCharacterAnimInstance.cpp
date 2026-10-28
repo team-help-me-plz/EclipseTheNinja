@@ -26,6 +26,7 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	// 소유자가 없어지거나 ASC가 없으면 이전 상태를 남기지 않는다.
 	bWallAttached = false;
 	ClimbingSpeed = 0.f;
+	bIsCrouching = false;
 
 	Super::NativeUpdateAnimation(DeltaSeconds);
 
@@ -38,6 +39,8 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		HeadLookRotation = FRotator::ZeroRotator;
 		return;
 	}
+
+	bIsCrouching = Character->bIsCrouched;
 
 	const UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
 	if (IsValid(ASC))

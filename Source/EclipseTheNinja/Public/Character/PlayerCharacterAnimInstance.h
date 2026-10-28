@@ -87,6 +87,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Wall Attach")
 	float MaxClimbingSpeed = 200.f;
 
+	// AnimGraph에서 서기/앉기 Blend Space를 고르는 데 쓴다.
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Crouch")
+	bool bIsCrouching = false;
+
 private:
 	// 캐릭터 머리 상하 각도 계산
 	float CalculateHeadPitch(const APlayerCharacter& Character) const;
