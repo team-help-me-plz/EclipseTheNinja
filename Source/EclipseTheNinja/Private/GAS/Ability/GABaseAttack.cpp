@@ -18,6 +18,9 @@
 #include "GameFramework/Character.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
 #include "GAS/Ability/GAElementalFire.h"
+#include "GAS/Damage/FireDamageType.h"
+#include "Util/EclipseCollisionChannels.h"
+#include "Kismet/GameplayStatics.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_BasicAttack, "Ability.Attack.Basic");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Attacking, "State.Attacking");
@@ -273,6 +276,10 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 	// 폰이랑 쿼리 확인
 	FCollisionObjectQueryParams ObjectParams;
 	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+	if (bIsFire)
+	{
+		ObjectParams.AddObjectTypesToQuery(ECC_Vine);   // 불속성일 때만 덩굴도 맞는다
+	}
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(BasicAttack), false, Character);
 
 	// Sweep
@@ -302,8 +309,19 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 		}
 
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
-		// 타겟이 어트리뷰트 없거나, 체력이 0이하면 생략
-		if (!TargetASC || !TargetASC->GetSet<UStatAttributeSet>()
+		// 타겟이 어트리뷰트 없을 때 불속성 공격이면 불 데미지 타입으로 공격
+		if (!TargetASC)
+		{
+			if (bIsFire)
+			{
+				HitActors.Add(Target);
+				UGameplayStatics::ApplyPointDamage(Target, Damage, Character->GetActorForwardVector(), Hit,
+					Character->GetController(), Character, UFireDamageType::StaticClass());
+			}
+			continue;
+		}
+		// 체력이 0이하면 생략
+		if (!TargetASC->GetSet<UStatAttributeSet>()
 			|| TargetASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) <= 0.0f)
 		{
 			continue;
