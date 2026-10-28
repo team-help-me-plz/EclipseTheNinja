@@ -5,6 +5,7 @@
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "Component/InteractHighlightComponent.h"
 #include "Component/ActivateHighlightComponent.h"
+#include "Subsystem/UIMessageSubsystem.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -90,6 +91,15 @@ void ABaseDoor::Interact_Implementation(AActor* InActor)
 	{
 		return ;
 	}
+	if (this->LockedVineCount != 0)
+	{
+		APlayerController* PC = Cast<APlayerController>(InActor->GetInstigatorController());
+		if (PC)
+		{
+			UUIMessageSubsystem::ShowMessage(PC, FText::FromString(TEXT("덩굴에 감겨있습니다.")));
+		}
+		return;
+	}
 	this->bIsInteractCooldown = true;
 	GetWorldTimerManager().SetTimer(
 		InteractionCooldownTimer,
@@ -161,6 +171,21 @@ void ABaseDoor::DoorMovement(float DeltaTime)
 		this->OpenAlpha + Direction * DeltaTime / SafeMoveTime,
 		0.0,
 		1.0);
+}
+
+void ABaseDoor::AddInteractLock_Implementation()
+{
+	this->LockedVineCount++;
+}
+
+void ABaseDoor::RemoveInteractLock_Implementation()
+{
+	this->LockedVineCount--;
+}
+
+bool ABaseDoor::IsInteractLocked_Implementation()
+{
+	return (this->LockedVineCount > 0);
 }
 
 void	ABaseDoor::ResetInteractionCooldown()

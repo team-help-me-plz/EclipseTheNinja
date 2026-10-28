@@ -6,6 +6,7 @@
 #include "Interface/Activatable.h"
 #include "Interface/Interactable.h"
 #include "Interface/CheckpointResettable.h"
+#include "Interface/VineLockable.h"
 
 #include "GameFramework/Actor.h"
 #include "BaseDoor.generated.h"
@@ -16,7 +17,7 @@ class UInteractHighlightComponent;
 class UActivateHighlightComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API ABaseDoor : public AActor, public IActivatable, public IInteractable, public ICheckpointResettable
+class ECLIPSETHENINJA_API ABaseDoor : public AActor, public IActivatable, public IInteractable, public ICheckpointResettable, public IVineLockable
 {
 	GENERATED_BODY()
 
@@ -41,6 +42,10 @@ public:
 	virtual void	OnAfterReset_Implementation() override;
 
 	virtual void	DoorMovement(float DeltaTime);
+
+	virtual void	AddInteractLock_Implementation() override;
+	virtual void	RemoveInteractLock_Implementation() override;
+	virtual bool	IsInteractLocked_Implementation() override;
 
 protected:
 	virtual void	BeginPlay() override;
@@ -92,4 +97,7 @@ private:
 
 	// 체크포인트 리셋용 초기 상태
 	bool			bInitialIsOpen = false;
+
+	int32	LockedVineCount = 0;
+
 };

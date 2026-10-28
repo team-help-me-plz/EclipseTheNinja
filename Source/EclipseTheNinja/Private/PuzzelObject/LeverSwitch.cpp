@@ -4,6 +4,7 @@
 #include "PuzzelObject/LeverSwitch.h"
 #include "Interface/Interactor.h"
 #include "Interface/Activatable.h"
+#include "Subsystem/UIMessageSubsystem.h"
 
 #include "Components/BoxComponent.h"
 
@@ -37,6 +38,15 @@ void ALeverSwitch::Interact_Implementation(AActor* InActor)
 	{
 		return;
 	}
+	if (this->LockedVineCount != 0)
+	{
+		APlayerController*	PC = Cast<APlayerController>(InActor->GetInstigatorController());
+		if (PC)
+		{
+			UUIMessageSubsystem::ShowMessage(PC, FText::FromString(TEXT("덩굴에 감겨있습니다.")));
+		}
+		return ;
+	}
 	// 레버가 넘어가는 중이거나, 한 번만 당길 수 있는 레버를 이미 당겼을 때
 	if (this->bIsInteractCooldown || (!this->bIsReinteractable && this->bIsInteracted))
 	{
@@ -67,6 +77,21 @@ void ALeverSwitch::ResetToInitial_Implementation()
 		this->LeverMesh->SetPosition(0.f, false);
 		this->LeverMesh->Stop();
 	}
+}
+
+void ALeverSwitch::AddInteractLock_Implementation()
+{
+	this->LockedVineCount++;
+}
+
+void ALeverSwitch::RemoveInteractLock_Implementation()
+{
+	this->LockedVineCount--;
+}
+
+bool ALeverSwitch::IsInteractLocked_Implementation()
+{
+	return (this->LockedVineCount > 0);
 }
 
 void ALeverSwitch::BeginPlay()
