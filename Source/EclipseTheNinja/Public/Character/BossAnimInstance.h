@@ -77,7 +77,7 @@ protected:
 
 	/**
 	 * 자세 걷기 애니메이션을 1배속으로 재생했을 때 맞는 이동 속도(cm/s). 발이 미끄러져 보이면 이 값을 조정한다.
-	 * Anim_Stance_WalkFwd의 접지 발 속도 74.7cm/s(BossRunLoop 커맨드릿 -Analyze로 측정)에 보스 스케일 1.25를 곱한 값.
+	 * Anim_Stance_WalkFwd의 접지 발 속도 74.7cm/s에 보스 스케일 1.25를 곱한 값.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = "1.0", Units = "cm/s"))
 	float StanceWalkAnimSpeed = 93.0f;
