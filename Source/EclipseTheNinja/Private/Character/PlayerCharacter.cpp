@@ -176,9 +176,8 @@ void APlayerCharacter::UpdateCursorFacing(float DeltaSeconds)
 
 	if (IsValid(ASC))
 	{
-		// 매달려 있거나 모서리에서 내려가는 중에는 벽을 바라본 채로 둔다.
-		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag())
-			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangingTag())
+		// 매달려 있거나 모서리에서 오르내리는 중에는 벽을 바라본 채로 둔다.
+		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag())
 			|| ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag()))
 		{
 			return;
@@ -382,6 +381,10 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCameraMoveStart);
 
 		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCrouch);
+
+		EnhancedInputComponent->BindAction(SwiftStrikeAction, ETriggerEvent::Started, this, &APlayerCharacter::DoSwiftStrike);
+
+
 	}
 }
 
@@ -643,11 +646,10 @@ void APlayerCharacter::DoMove(float Forward)
 {
 	if (IsAssassinating()) return;
 
-	// 매달린 동안(모서리에서 내려가는 중 포함) 일반 이동 입력이 목표 방향을 바꾸지 않게 한다.
+	// 매달린 동안(모서리에서 오르내리는 중 포함) 일반 이동 입력이 목표 방향을 바꾸지 않게 한다.
 	if (IsValid(ASC))
 	{
-		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag())
-			|| ASC->HasMatchingGameplayTag(UGALedgeHang::GetLedgeHangingTag())
+		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag())
 			|| ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag()))
 		{
 			return;
@@ -808,6 +810,11 @@ void APlayerCharacter::DoCrouch()
 	{
 		// TODO 웅크리기
 	}
+}
+
+void APlayerCharacter::DoSwiftStrike()
+{
+	TryActivateAbilityByInputID(EAbilityInputID::SwiftStrike);
 }
 
 void APlayerCharacter::OnCameraMoveEndInput()

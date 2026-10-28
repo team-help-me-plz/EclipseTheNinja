@@ -27,7 +27,7 @@
 #include "TimerManager.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHang, "Ability.Movement.LedgeHang");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHanging, "State.Movement.LedgeHanging");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHanging, "State.Movement.Wall.LedgeHanging");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHold, "State.Movement.LedgeHold");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeMeshAligned, "State.Movement.LedgeMeshAligned");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHangPose, "State.Movement.LedgeHangPose");

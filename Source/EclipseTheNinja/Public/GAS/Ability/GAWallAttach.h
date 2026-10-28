@@ -20,6 +20,8 @@ public:
 
 	static FGameplayTag GetWallAttachAbilityTag();
 	static FGameplayTag GetWallAttachingTag();
+	// 벽에 붙음·모서리 매달림·모서리 오르기 중 하나라도 해당하면 매칭되는 부모 태그
+	static FGameplayTag GetWallStateTag();
 
 	// 매달린 동안 메시에 더하는 오프셋 (X: 벽 쪽, Z: 위). 모서리에서 내려오는 동안 미리 맞춰 두는 데 쓴다.
 	FVector GetHangMeshOffset() const { return FVector(AnimXOffset, 0.f, AnimZOffset); }

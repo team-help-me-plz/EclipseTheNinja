@@ -23,6 +23,7 @@
 #include "NativeGameplayTags.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeClimb, "Ability.Movement.LedgeClimb");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeClimbing, "State.Movement.Wall.Climbing");
 
 UGALedgeClimb::UGALedgeClimb()
 {
@@ -38,7 +39,7 @@ UGALedgeClimb::UGALedgeClimb()
 	CancelAbilitiesWithTag.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
 
 	// 올라가는 동안 공격·암살과 이동·커서 회전을 막는다
-	ActivationOwnedTags.AddTag(UGALedgeHang::GetLedgeHangingTag());
+	ActivationOwnedTags.AddTag(TAG_LedgeClimbing);
 	ActivationOwnedTags.AddTag(UGABaseAttack::GetAttackingTag());
 	ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
 }
