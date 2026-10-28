@@ -3,17 +3,17 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Abilities/GameplayAbility.h"
+#include "GAS/Ability/GACooldownBase.h"
 #include "GASwiftStrike.generated.h"
 
 /**
- * 
+ *
  */
 UCLASS()
-class ECLIPSETHENINJA_API UGASwiftStrike : public UGameplayAbility
+class ECLIPSETHENINJA_API UGASwiftStrike : public UGACooldownBase
 {
 	GENERATED_BODY()
-	
+
 public:
 	UGASwiftStrike();
 

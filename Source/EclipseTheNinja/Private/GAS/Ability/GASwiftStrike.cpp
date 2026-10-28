@@ -1,6 +1,7 @@
 
 
 
+
 #include "GAS/Ability/GASwiftStrike.h"
 #include "NativeGameplayTags.h"
 #include "GAS/Ability/GABaseAttack.h"
@@ -11,6 +12,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStrike, "Ability.Attack.SwiftStrike");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStriking, "State.SwiftStriking");
@@ -58,6 +60,12 @@ bool UGASwiftStrike::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
 void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
+
+	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, false, true);
+		return;
+	}
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
 
@@ -110,6 +118,15 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	MoveTask->OnTimedOutAndDestinationReached.AddDynamic(this, &UGASwiftStrike::OnSwiftStrikeFinished);
 	MoveTask->OnTimedOut.AddDynamic(this, &UGASwiftStrike::OnSwiftStrikeFinished);
 	MoveTask->ReadyForActivation();
+
+
+	LoadedSwiftStrikeMontage = SwiftStrikeMontage.LoadSynchronous();
+	if (IsValid(LoadedSwiftStrikeMontage))
+	{
+		UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+			this, NAME_None, LoadedSwiftStrikeMontage, 2.0f, NAME_None, true);
+		MontageTask->ReadyForActivation();
+	}
 }
 
 void UGASwiftStrike::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)

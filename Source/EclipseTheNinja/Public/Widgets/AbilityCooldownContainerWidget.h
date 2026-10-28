@@ -28,6 +28,10 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UAbilityCooldownWidget>	KunaiCooldown = nullptr;
 
+	// 질풍참이 없는 테스트 위젯도 사용할 수 있도록 선택적으로 바인딩한다.
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UAbilityCooldownWidget>	SwiftStrikeCooldown = nullptr;
+
 	// 불속성 위젯. 표창과 같은 이유로 Optional로 바인딩한다.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UElementalFireCooldownWidget>	ElementalFireCooldown = nullptr;
