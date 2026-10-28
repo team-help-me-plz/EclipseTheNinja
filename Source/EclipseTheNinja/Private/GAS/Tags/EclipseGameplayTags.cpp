@@ -16,4 +16,8 @@ namespace EclipseGameplayTags
 	// ---------- SetByCaller ----------
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Duration, "SetByCaller.Duration", "GE 지속시간 SetByCaller");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Damage, "SetByCaller.Damage", "GE 데미지 SetByCaller");
+
+
+	//------------ Stat      ----------
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Invincible, "State.Invincible", "무적상태 표시 태그");
 }

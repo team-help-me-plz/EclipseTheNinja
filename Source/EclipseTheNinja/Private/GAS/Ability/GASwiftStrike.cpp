@@ -9,12 +9,12 @@
 #include "GAS/Ability/GAWallAttach.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Character.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Character/Enemy.h"
 #include "GAS/StatAttributeSet.h"
+#include "GAS/Tags/EclipseGameplayTags.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStrike, "Ability.Attack.SwiftStrike");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStriking, "State.SwiftStriking");
@@ -33,6 +33,7 @@ UGASwiftStrike::UGASwiftStrike()
 	// 돌진하는 동안 기본공격·쿠나이·암살·불속성이 끼어들지 못하게 공격 중 태그를 가진다
 	ActivationOwnedTags.AddTag(TAG_SwiftStriking);
 	ActivationOwnedTags.AddTag(UGABaseAttack::GetAttackingTag());
+	ActivationOwnedTags.AddTag(EclipseGameplayTags::State_Invincible);
 	ActivationBlockedTags.AddTag(TAG_SwiftStriking);
 
 	// 땅에서는 우선순위가 가장 높다. 공격 중 태그로 막지 않고, 진행 중인 공격을 끊는다 (ActivateAbility 전에 취소된다).

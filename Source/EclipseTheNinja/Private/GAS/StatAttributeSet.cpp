@@ -1,6 +1,7 @@
 
 
 #include "GAS/StatAttributeSet.h"
+#include "GAS/Tags/EclipseGameplayTags.h"
 
 UStatAttributeSet::UStatAttributeSet()
 {
@@ -49,6 +50,9 @@ void UStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
         const float LocalDamage = GetDamage();
         SetDamage(0.0f);	// [가장 중요] : 메타어트리뷰트는 사용했으면 비워야 한다.
 
+        // 무적 중에 들어온 피해는 소비하고 체력 감소와 피격 알림을 건너뛴다.
+        if (Data.Target.HasMatchingGameplayTag(EclipseGameplayTags::State_Invincible)) return;
+
         if (LocalDamage > 0)
         {
             //방어력 등 고려 사항이 있으면 여기서 계산
@@ -72,6 +76,9 @@ void UStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
         // 이팩트로 인해 변경된 어트리뷰트가 DotDamage다
         const float LocalDotDamage = GetDotDamage();
         SetDotDamage(0.0f);	// [가장 중요] : 메타어트리뷰트는 사용했으면 비워야 한다.
+
+        // 이미 걸린 도트도 각 피해 틱이 실행되는 시점의 무적 상태를 따른다.
+        if (Data.Target.HasMatchingGameplayTag(EclipseGameplayTags::State_Invincible)) return;
 
         if (LocalDotDamage > 0)
         {
