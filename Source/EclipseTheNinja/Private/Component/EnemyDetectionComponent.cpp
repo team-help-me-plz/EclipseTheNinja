@@ -466,10 +466,12 @@ void UEnemyDetectionComponent::UpdateBlackboard()
     // 실제 감지 상태와 UI는 계속 갱신한다. 몽타주가 끝나면 다음 감지 갱신에서 그대로 반영된다.
     // 공격 태스크만 거리 검사를 생략해도 Decorator가 먼저 Abort할 수 있어, 관련 Blackboard 값도 함께 유지해야 한다.
     // 공격을 시작한 CombatTarget을 사용하므로 투척 준비 중 다른 대상이 보이더라도 이번 공격 대상은 바뀌지 않는다.
-    // 공격 도중 대상이 죽거나 사라져도 몽타주는 끝까지 재생한다. 잠긴 Attack 태스크는 대상을 다시 검사하지 않으므로,
-    // 대상이 이미 사라졌으면 공격 분기 조건(IsTargetSet)만 유지하도록 자기 자신을 넣는다.
+    // ShouldFinishAttackWithoutTarget인 적은 공격 도중 대상이 죽거나 사라져도 몽타주를 끝까지 재생한다.
+    // 잠긴 Attack 태스크는 대상을 다시 검사하지 않으므로, 대상이 이미 사라졌으면 공격 분기 조건(IsTargetSet)만 유지하도록 자기 자신을 넣는다.
+    const bool bKeepAttackTarget = OwnerEnemy->IsValidAITarget(OwnerEnemy->GetCombatTarget())
+        || OwnerEnemy->ShouldFinishAttackWithoutTarget();
     const bool bCommittedAttack = OwnerEnemy->ShouldLockMovementDuringAttack() && OwnerEnemy->IsAttackActive()
-        && !OwnerEnemy->IsPlayingHitReaction();
+        && !OwnerEnemy->IsPlayingHitReaction() && bKeepAttackTarget;
     if (bCommittedAttack)
     {
         APawn* AttackTarget = OwnerEnemy->GetAttackStartedTarget();

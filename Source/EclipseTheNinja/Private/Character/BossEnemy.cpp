@@ -11,7 +11,7 @@
 #include "Engine/World.h"
 #include "GAS/Ability/GABossPatternBase.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
-#include "GAS/Effects/GEDefaultStats.h"
+#include "GAS/Effects/GEBossEnemyDefaultStats.h"
 #include "GAS/StatAttributeSet.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
@@ -22,9 +22,6 @@ ABossEnemy::ABossEnemy()
 
 	// 보스는 덩치가 커서 일반 적보다 먼 거리에서 발도를 시작한다.
 	AttackDistance = 250.0f;
-
-	// 덩치 큰 보스가 순간적으로 뒤돌지 않도록 반 바퀴를 0.5초에 돈다.
-	TurnRate = 360.0f;
 
 	// 보스는 암살로 처치되어도 회복 아이템을 떨어뜨리지 않는다.
 	AssassinationDropComp->SetDropActorClass(nullptr);
@@ -51,6 +48,8 @@ void ABossEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ABossEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	UpdateTurning(DeltaTime);
 
 #if WITH_EDITOR
 	ProcessDebugRequests();
@@ -236,6 +235,8 @@ void ABossEnemy::ResetToInitial_Implementation()
 	// 리스폰한 보스는 모든 패턴을 바로 쓸 수 있게 패턴 쿨타임을 지운다.
 	PatternReadyTimes.Reset();
 
+	bTurning = false;
+
 	Super::ResetToInitial_Implementation();
 
 	if (BrokenEnergyLinkCount != 0)
@@ -245,10 +246,57 @@ void ABossEnemy::ResetToInitial_Implementation()
 	}
 }
 
-float ABossEnemy::GetMoveSpeedLimit() const
+void ABossEnemy::FaceDirection(float DirectionX)
+{
+	if (TurnRate <= 0.0f)
+	{
+		Super::FaceDirection(DirectionX);
+		return;
+	}
+
+	if (FMath::IsNearlyZero(DirectionX))
+	{
+		return;
+	}
+
+	// 실제 회전은 Tick에서 TurnRate로 진행한다.
+	TargetFacingYaw = DirectionX > 0.0f ? 0.0f : 180.0f;
+	bTurning = !FMath::IsNearlyZero(FRotator::NormalizeAxis(TargetFacingYaw - GetActorRotation().Yaw), 1.0f);
+}
+
+void ABossEnemy::UpdateTurning(float DeltaTime)
+{
+	if (!bTurning)
+	{
+		return;
+	}
+
+	const float CurrentYaw = GetActorRotation().Yaw;
+	const float NewYaw = FMath::FixedTurn(CurrentYaw, TargetFacingYaw, TurnRate * DeltaTime);
+	SetActorRotation(FRotator(0.0f, NewYaw, 0.0f));
+
+	if (FMath::IsNearlyZero(FRotator::NormalizeAxis(TargetFacingYaw - NewYaw), 1.0f))
+	{
+		SetActorRotation(FRotator(0.0f, TargetFacingYaw, 0.0f));
+		bTurning = false;
+	}
+}
+
+void ABossEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 {
 	// 달리기 전 페이즈에서는 자세를 잡고 천천히 다가간다. 순찰·수색처럼 원래 느린 이동은 그대로다.
-	return IsRunPhase() ? Super::GetMoveSpeedLimit() : StanceWalkSpeed;
+	const float LimitedSpeed = IsRunPhase()
+		? Speed
+		: FMath::Min(Speed, StanceWalkSpeed);
+
+	// 이동 방향으로 도는 것은 FaceDirection 재정의가 맡는다.
+	Super::MoveAlongX(DestinationX, LimitedSpeed, DeltaTime);
+
+	// 크게 도는 중에는 뒷걸음질치지 않도록 방금 넣은 이동 입력을 버리고 제자리에서 다 돈 뒤 이동한다.
+	if (bTurning && FMath::Abs(FRotator::NormalizeAxis(TargetFacingYaw - GetActorRotation().Yaw)) > 45.0f)
+	{
+		StopHorizontalMovement();
+	}
 }
 
 bool ABossEnemy::CanStartAIAttack(AActor* Target) const
@@ -281,6 +329,12 @@ float ABossEnemy::GetCombatSightRadius() const
 
 bool ABossEnemy::ActivateAIAttack()
 {
+	// 대상 쪽으로 다 돌기 전에는 공격하지 않는다. Attack 태스크가 AttackActivationRetryDelay 뒤에 다시 시도한다.
+	if (bTurning)
+	{
+		return false;
+	}
+
 	if (!PatternTable)
 	{
 		// 테이블이 없으면 기존처럼 입력 ID로 지정한 기본 패턴을 실행한다.

@@ -44,8 +44,3 @@ UGERangedEnemyDefaultStats::UGERangedEnemyDefaultStats()
 {
 	SetDefaultStats(30.0f, 30.0f, 10.0f);
 }
-
-UGEBossEnemyDefaultStats::UGEBossEnemyDefaultStats()
-{
-	SetDefaultStats(200.0f, 200.0f, 30.0f);
-}

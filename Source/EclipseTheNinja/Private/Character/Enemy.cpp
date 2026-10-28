@@ -354,7 +354,6 @@ void AEnemy::ResetToInitial_Implementation()
 	bPatrolTowardsMax = true;
 	NextAttackTime = 0.0;
 	MonategeDuration = 0.0f;
-	bTurning = false;
 
 	// 체력 회복. 증가 변화이므로 OnHealthChanged에서 피격/사망으로 처리되지 않고, 오버헤드 위젯은 델리게이트로 갱신된다.
 	ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), StatAttributeSet->GetMaxHealth());
@@ -479,8 +478,6 @@ void AEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	UpdateTurning(DeltaTime);
-
 	// 위젯 빌보드
 	if (bFaceCamera)
 	{
@@ -561,38 +558,9 @@ void AEnemy::StopHorizontalMovement()
 
 void AEnemy::FaceDirection(float DirectionX)
 {
-	if (FMath::IsNearlyZero(DirectionX))
+	if (!FMath::IsNearlyZero(DirectionX))
 	{
-		return;
-	}
-
-	const float DesiredYaw = DirectionX > 0.0f ? 0.0f : 180.0f;
-	if (TurnRate <= 0.0f)
-	{
-		SetActorRotation(FRotator(0.0f, DesiredYaw, 0.0f));
-		return;
-	}
-
-	// 실제 회전은 Tick에서 TurnRate로 진행한다.
-	TargetFacingYaw = DesiredYaw;
-	bTurning = !FMath::IsNearlyZero(FRotator::NormalizeAxis(DesiredYaw - GetActorRotation().Yaw), 1.0f);
-}
-
-void AEnemy::UpdateTurning(float DeltaTime)
-{
-	if (!bTurning)
-	{
-		return;
-	}
-
-	const float CurrentYaw = GetActorRotation().Yaw;
-	const float NewYaw = FMath::FixedTurn(CurrentYaw, TargetFacingYaw, TurnRate * DeltaTime);
-	SetActorRotation(FRotator(0.0f, NewYaw, 0.0f));
-
-	if (FMath::IsNearlyZero(FRotator::NormalizeAxis(TargetFacingYaw - NewYaw), 1.0f))
-	{
-		SetActorRotation(FRotator(0.0f, TargetFacingYaw, 0.0f));
-		bTurning = false;
+		SetActorRotation(FRotator(0.0f, DirectionX > 0.0f ? 0.0f : 180.0f, 0.0f));
 	}
 }
 
@@ -606,16 +574,7 @@ void AEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 	}
 
 	FaceDirection(DistanceX);
-
-	// 크게 도는 중에는 뒷걸음질치지 않도록 제자리에서 다 돈 뒤 이동한다.
-	if (bTurning && FMath::Abs(FRotator::NormalizeAxis(TargetFacingYaw - GetActorRotation().Yaw)) > 45.0f)
-	{
-		StopHorizontalMovement();
-		return;
-	}
-
-	const float LimitedSpeed = FMath::Min(Speed, GetMoveSpeedLimit());
-	GetCharacterMovement()->MaxWalkSpeed = FMath::Min(FMath::Max(1.0f, LimitedSpeed), FMath::Abs(DistanceX) / DeltaTime);
+	GetCharacterMovement()->MaxWalkSpeed = FMath::Min(FMath::Max(1.0f, Speed), FMath::Abs(DistanceX) / DeltaTime);
 
 	AddMovementInput(FVector::ForwardVector, FMath::Sign(DistanceX));
 }
@@ -715,13 +674,6 @@ bool AEnemy::TryStartAIBaseAttack(AActor* Target)
 	SetBehaviorState(EEnemyBehaviorState::Attack);
 	StopHorizontalMovement();
 	FaceLocation(Target->GetActorLocation());
-
-	// 대상 쪽으로 다 돌기 전에는 공격하지 않는다. Attack 태스크가 다음 Tick에 다시 시도한다.
-	if (bTurning)
-	{
-		return false;
-	}
-
 	const bool bActivated = ActivateAIAttack();
 	if (bActivated)
 	{

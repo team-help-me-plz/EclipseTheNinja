@@ -99,11 +99,22 @@ public:
 	// 원거리 패턴을 쓸 수 있도록 전투 중에는 발각 반경 대신 감지 반경(경계 배율 적용)까지 대상을 계속 본다.
 	virtual float GetCombatSightRadius() const override;
 
+	// TurnRate로 정한 속도로 서서히 돈다. 실제 회전은 Tick에서 진행한다.
+	virtual void FaceDirection(float DirectionX) override;
+
 	// RunPhase 전에는 추격·마지막 목격 위치 이동 등 모든 이동이 StanceWalkSpeed를 넘지 않는다.
-	virtual float GetMoveSpeedLimit() const override;
+	// 크게 도는 동안에는 뒷걸음질치지 않도록 제자리에서 다 돈 뒤 이동한다.
+	virtual void MoveAlongX(float DestinationX, float Speed, float DeltaTime) override;
+
+	// 방향 전환이 아직 진행 중인지
+	UFUNCTION(BlueprintPure, Category = "Boss|Movement")
+	bool IsTurning() const { return bTurning; }
 
 	// 보스는 발도 준비 동작 중 대상이 움직여도 공격을 끝까지 수행한다.
 	virtual bool ShouldLockMovementDuringAttack() const override { return true; }
+
+	// 공격 도중 대상이 죽거나 사라져도 패턴 몽타주를 끝까지 재생한다.
+	virtual bool ShouldFinishAttackWithoutTarget() const override { return true; }
 
 	// 패턴 테이블로 고른 어빌리티가 실행 중인지. 테이블이 없으면 기본 입력 ID 어빌리티를 본다.
 	virtual bool IsAttackActive() const override;
@@ -156,6 +167,17 @@ protected:
 
 	// 고른 패턴을 화면과 출력 로그에 남긴다.
 	void LogPatternChoice(FName RowName, const FBossPatternRow& Row, float TotalWeight) const;
+
+	// FaceDirection으로 정한 방향까지 TurnRate만큼 회전한다.
+	void UpdateTurning(float DeltaTime);
+
+	/** 좌우 방향 전환 속도(도/초). 0이면 즉시 돈다. 덩치 큰 보스가 순간적으로 뒤돌지 않도록 반 바퀴를 0.5초에 돈다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Movement", meta = (ClampMin = "0.0", Units = "deg/s"))
+	float TurnRate = 360.0f;
+
+	// 방향 전환 목표 Yaw와 진행 여부
+	float TargetFacingYaw = 0.0f;
+	bool bTurning = false;
 
 	/** 공격 패턴 가중치 테이블 (행 구조체: FBossPatternRow). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern", meta = (RequiredAssetDataTags = "RowStructure=/Script/EclipseTheNinja.BossPatternRow"))

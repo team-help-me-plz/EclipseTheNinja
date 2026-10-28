@@ -253,26 +253,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void StopHorizontalMovement();
 
-	// 좌우 방향을 바라보게 만드는 함수. TurnRate가 0보다 크면 Tick에서 서서히 돈다.
+	// 좌우 방향을 바라보게 만드는 함수. 서서히 도는 적은 재정의한다.
 	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void FaceDirection(float DirectionX);
-
-	// 방향 전환이 아직 진행 중인지
-	UFUNCTION(BlueprintPure, Category = "Movement")
-	bool IsTurning() const { return bTurning; }
+	virtual void FaceDirection(float DirectionX);
 
 	// 공격을 시작한 대상. GetCombatTarget과 달리 대상이 죽었는지는 검사하지 않는다.
 	APawn* GetAttackStartedTarget() const { return CombatTarget.Get(); }
 
-	// FaceDirection으로 정한 방향까지 TurnRate만큼 회전한다.
-	void UpdateTurning(float DeltaTime);
-
-	// 프레임마다 DeltaTime을 전달해 DestinationX 방향으로 이동 입력을 넣는다. Speed는 GetMoveSpeedLimit을 넘지 않는다.
+	// 프레임마다 DeltaTime을 전달해 DestinationX 방향으로 이동 입력을 넣는다. 이동 속도나 조건이 다른 적은 재정의한다.
 	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void MoveAlongX(float DestinationX, float Speed, float DeltaTime);
+	virtual void MoveAlongX(float DestinationX, float Speed, float DeltaTime);
 
-	// MoveAlongX가 넘지 않을 이동 속도(cm/s). 기본은 제한이 없고, 상태에 따라 이동을 늦추는 적이 재정의한다.
-	virtual float GetMoveSpeedLimit() const { return TNumericLimits<float>::Max(); }
+	// 공격 도중 대상이 죽거나 사라져도 공격 분기를 유지할지. 기본은 대상이 유효할 때만 유지한다.
+	virtual bool ShouldFinishAttackWithoutTarget() const { return false; }
 
 protected:
 	/** 시야 감지와 Blackboard 갱신을 담당한다. */
@@ -295,14 +288,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Combat", meta = (ClampMin = "1.0"))
 	float ChaseSpeed = 250.0f;
-
-	/** 좌우 방향 전환 속도(도/초). 0이면 즉시 돈다. 크게 도는 동안에는 제자리에서 돌고 나서 이동한다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Movement", meta = (ClampMin = "0.0", Units = "deg/s"))
-	float TurnRate = 0.0f;
-
-	// 방향 전환 목표 Yaw와 진행 여부
-	float TargetFacingYaw = 0.0f;
-	bool bTurning = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Combat", meta = (ClampMin = "1.0"))
 	float AttackDistance = 140.0f;
