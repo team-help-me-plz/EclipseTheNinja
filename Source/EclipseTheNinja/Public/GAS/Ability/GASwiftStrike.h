@@ -3,8 +3,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/EngineTypes.h"
 #include "GAS/Ability/GACooldownBase.h"
 #include "GASwiftStrike.generated.h"
+
+class ACharacter;
+struct FCollisionShape;
 
 /**
  *
@@ -40,9 +44,14 @@ protected:
 	UFUNCTION()
 	void OnSwiftStrikeInterrupted();
 
+	UFUNCTION()
+	void OnSwiftStrikeMontageCompleted();
+
 private:
+	void RestoreDashState();
 	void CollectTargets(const ACharacter* Player, const FVector& Start, const FVector& End, const FCollisionShape& Shape);
 	void ApplyHitToTargets();
+	void DrawDebugHitbox(const FVector& Start, const FVector& End, const FCollisionShape& Shape) const;
 
 protected:
 	// 질풍참의 돌진 거리
@@ -60,9 +69,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike")
 	TSoftObjectPtr<UAnimMontage> SwiftStrikeMontage;
 
+	// 공중에서 시전하면 지상 베기 대신 전용 전신 돌진 포즈를 사용한다.
+	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike")
+	TSoftObjectPtr<UAnimMontage> AirSwiftStrikeMontage;
+
 	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike|Effect")
 	TSubclassOf<UGameplayEffect> DamageEffect;
 
+	// 돌진 판정 캡슐의 시작·끝과 쓸고 지나간 경로, 맞은 적을 그린다
+	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike|Debug")
+	bool bDrawDebugHitbox = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike|Debug", meta = (EditCondition = "bDrawDebugHitbox", ClampMin = "0.0", Units = "s"))
+	float DebugDrawTime = 2.f;
 
 
 private:
@@ -70,6 +89,13 @@ private:
 	TObjectPtr<UAnimMontage> LoadedSwiftStrikeMontage;
 
 	TArray<FHitResult> AttackTargets;
+
+	bool bDashFinished = false;
+	bool bMontageFinished = true;
+	bool bUsingAirMontage = false;
+	bool bDashInvincibilityAdded = false;
+	bool bDashCollisionChanged = false;
+	ECollisionResponse SavedPawnCollisionResponse = ECR_Block;
 
 
 };
