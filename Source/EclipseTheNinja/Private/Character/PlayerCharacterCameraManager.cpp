@@ -224,6 +224,9 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 			OutVT.POV.Location = TargetCameraLocation + ExploreReturnOffset;
 		}
 		bWasCameraExploreMode = bIsCameraExploreMode;
+
+		// Super를 부르지 않으므로 카메라 모디파이어(카메라 셰이크, 임팩트 프레임 흔들림 등)를 직접 적용한다.
+		ApplyCameraModifiers(DeltaTime, OutVT.POV);
 	}
 }
 
