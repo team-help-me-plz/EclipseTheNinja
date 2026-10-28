@@ -79,6 +79,14 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Wall Attach")
 	bool bWallAttached = false;
+
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Wall Attach")
+	float ClimbingSpeed = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Wall Attach")
+	float MaxClimbingSpeed = 200.f;
+
 private:
 	// 캐릭터 머리 상하 각도 계산
 	float CalculateHeadPitch(const APlayerCharacter& Character) const;
