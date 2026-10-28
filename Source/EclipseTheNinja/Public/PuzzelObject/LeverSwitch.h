@@ -3,6 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Interface/VineLockable.h"
+
 #include "PuzzelObject/InteractSwitch.h"
 #include "LeverSwitch.generated.h"
 
@@ -12,7 +14,7 @@ class UBoxComponent;
  *
  */
 UCLASS()
-class ECLIPSETHENINJA_API ALeverSwitch : public AInteractSwitch
+class ECLIPSETHENINJA_API ALeverSwitch : public AInteractSwitch, public IVineLockable
 {
 	GENERATED_BODY()
 
@@ -21,6 +23,10 @@ public:
 
 	virtual void	Interact_Implementation(AActor* InActor) override;
 	virtual void	ResetToInitial_Implementation() override;
+
+	virtual void	AddInteractLock_Implementation() override;
+	virtual void	RemoveInteractLock_Implementation() override;
+	virtual bool	IsInteractLocked_Implementation() override;
 
 protected:
 	virtual void	BeginPlay() override;
@@ -44,5 +50,7 @@ private:
 	bool	bIsToggled = false;
 	float	SequenceLength = 0.f;
 	float	PlayRate = 1.f;
+
+	int32	LockedVineCount = 0;
 
 };
