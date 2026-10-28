@@ -13,6 +13,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Character/Enemy.h"
+#include "GAS/StatAttributeSet.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStrike, "Ability.Attack.SwiftStrike");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStriking, "State.SwiftStriking");
@@ -113,6 +115,9 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		0.0f
 	);
 
+	AttackTargets.Reset();
+	CollectTargets(Player, Start, End, Shape);
+
 	Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 
 	MoveTask->OnTimedOutAndDestinationReached.AddDynamic(this, &UGASwiftStrike::OnSwiftStrikeFinished);
@@ -145,6 +150,7 @@ void UGASwiftStrike::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
 void UGASwiftStrike::OnSwiftStrikeFinished()
 {
 	if (!IsActive()) return;
+	ApplyHitToTargets();
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, false, false);
 }
 
@@ -152,6 +158,52 @@ void UGASwiftStrike::OnSwiftStrikeInterrupted()
 {
 	if (!IsActive()) return;
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, false, true);
+}
+
+void UGASwiftStrike::CollectTargets(const ACharacter* Player, const FVector& Start, const FVector& End, const FCollisionShape& Shape)
+{
+	if (!Player) return;
+
+	TArray<FHitResult> Hits;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SwiftStrike), false, Player);
+	FCollisionObjectQueryParams ObjectParam(ECC_Pawn);
+
+	GetWorld()->SweepMultiByObjectType(Hits, Start, End, FQuat::Identity, ObjectParam, Shape, Params);
+
+	TSet<const AActor*> Seen;
+	for (const FHitResult& Hit : Hits)
+	{
+		const AEnemy* Enemy = Cast<AEnemy>(Hit.GetActor());
+		if (!IsValid(Enemy) || Enemy->IsDead() || Seen.Contains(Enemy)) continue;
+
+		AttackTargets.Add(Hit);
+		Seen.Add(Enemy);
+	}
+}
+
+void UGASwiftStrike::ApplyHitToTargets()
+{
+	for (const FHitResult Hit : AttackTargets)
+	{
+		UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
+		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Hit.GetActor());
+		if (!SourceASC || !TargetASC || !TargetASC->GetSet<UStatAttributeSet>()
+			|| TargetASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) <= 0.0f)
+		{
+			return;
+		}
+
+		FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+		Context.AddHitResult(Hit);
+
+		FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(DamageEffect, GetAbilityLevel(), Context);
+		if (Spec.IsValid())
+		{
+			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), Damage);
+			SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+		}
+	}
+
 }
 
 FGameplayTag UGASwiftStrike::GetSwiftStrikeAbilityTag()

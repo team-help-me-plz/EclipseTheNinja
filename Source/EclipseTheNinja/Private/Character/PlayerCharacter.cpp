@@ -814,6 +814,13 @@ void APlayerCharacter::DoCrouch()
 
 void APlayerCharacter::DoSwiftStrike()
 {
+	if (bIsDead) return;
+	if (!ASC) return;
+	if (!FindAbilitySpecByInputID(EAbilityInputID::SwiftStrike)) return;
+
+	// 회전 중간 각도가 아니라 이동 입력·커서가 정한 최종 방향으로 돌진한다.
+	SnapToFacingTarget();
+
 	TryActivateAbilityByInputID(EAbilityInputID::SwiftStrike);
 }
 

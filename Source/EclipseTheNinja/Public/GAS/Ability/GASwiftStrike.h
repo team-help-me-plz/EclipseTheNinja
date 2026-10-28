@@ -40,6 +40,10 @@ protected:
 	UFUNCTION()
 	void OnSwiftStrikeInterrupted();
 
+private:
+	void CollectTargets(const ACharacter* Player, const FVector& Start, const FVector& End, const FCollisionShape& Shape);
+	void ApplyHitToTargets();
+
 protected:
 	// 질풍참의 돌진 거리
 	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike", meta = (ClampMin = "0.0", Units = "cm"))
@@ -49,14 +53,23 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike", meta = (ClampMin = "0.0", Units = "s"))
 	float Duration = 0.12f;
 
+	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike", meta = (ClampMin = "0.0"))
+	float Damage = 30.f;
+
 	// 질풍참 몽타주
 	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike")
 	TSoftObjectPtr<UAnimMontage> SwiftStrikeMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SwiftStrike|Effect")
+	TSubclassOf<UGameplayEffect> DamageEffect;
+
 
 
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> LoadedSwiftStrikeMontage;
+
+	TArray<FHitResult> AttackTargets;
 
 
 };
