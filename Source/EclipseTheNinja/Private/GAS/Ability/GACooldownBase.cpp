@@ -1,7 +1,7 @@
 
 
 
-#include "Ability/GACooldownBase.h"
+#include "GAS/Ability/GACooldownBase.h"
 
 void UGACooldownBase::GetCooldown(float& OutRemaining, float& OutDuration) const
 {

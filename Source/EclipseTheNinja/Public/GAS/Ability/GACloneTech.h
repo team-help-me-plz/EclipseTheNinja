@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Clone/CloneCommandType.h"
 
-#include "Ability/GACooldownBase.h"
+#include "GAS/Ability/GACooldownBase.h"
 #include "GACloneTech.generated.h"
 
 class ACloneCharacter;

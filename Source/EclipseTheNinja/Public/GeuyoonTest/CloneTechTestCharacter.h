@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Interface/Interactor.h"
 #include "Interface/CheckpointResettable.h"
-#include "Ability/AbilityInfo.h"
+#include "GAS/AbilityInfo.h"
 
 #include "GameplayAbilitySpecHandle.h"
 #include "GameplayEffectTypes.h"

@@ -8,6 +8,7 @@
 #include "AbilityCooldownContainerWidget.generated.h"
 
 class UAbilityCooldownWidget;
+class UElementalFireCooldownWidget;
 /**
  * 
  */
@@ -26,4 +27,8 @@ protected:
 	// 표창 쿨타임 위젯. 테스트용 컨테이너 WBP에는 없을 수 있어 Optional로 바인딩한다.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UAbilityCooldownWidget>	KunaiCooldown = nullptr;
+
+	// 불속성 위젯. 표창과 같은 이유로 Optional로 바인딩한다.
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UElementalFireCooldownWidget>	ElementalFireCooldown = nullptr;
 };

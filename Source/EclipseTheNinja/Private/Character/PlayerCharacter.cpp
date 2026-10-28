@@ -27,7 +27,7 @@
 #include "Component/AssassinationTargetingComponent.h"
 #include "Component/AssassinateTargetComponent.h"
 #include "GAS/Ability/GAAssassinate.h"
-#include "Ability/GACloneTech.h"
+#include "GAS/Ability/GACloneTech.h"
 #include "Component/InteractBoxComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
 
@@ -101,16 +101,17 @@ void APlayerCharacter::OnJumped_Implementation()
 
 void APlayerCharacter::BeginPlay()
 {
-	Super::BeginPlay();
-	InteractComponent->SetBoxExtent(InteractBoxSize);
-	InteractComponent->SetAbsolute(false, true, true);
-	WarnIfAbilityMissing(EAbilityInputID::Assassinate);
-	WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
-	WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
-	WarnIfAbilityMissing(EAbilityInputID::CloneTech);
-	WarnIfAbilityMissing(EAbilityInputID::ThrowKunai);
-	JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
-	FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
+  Super::BeginPlay();
+  InteractComponent->SetBoxExtent(InteractBoxSize);
+  InteractComponent->SetAbsolute(false, true, true);
+  WarnIfAbilityMissing(EAbilityInputID::Assassinate);
+  WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
+  WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
+  WarnIfAbilityMissing(EAbilityInputID::CloneTech);
+  WarnIfAbilityMissing(EAbilityInputID::ThrowKunai);
+  WarnIfAbilityMissing(EAbilityInputID::ElementalFire);
+  JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
+  FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
 	// 체력 변화 델리게이트 바인딩
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
@@ -355,6 +356,10 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 		{
 			EnhancedInputComponent->BindAction(MoveScrollAction, ETriggerEvent::Triggered, this, &APlayerCharacter::DoMouseScroll);
 		}
+    if (ElementalFireAction)
+    {
+        EnhancedInputComponent->BindAction(ElementalFireAction, ETriggerEvent::Started, this, &APlayerCharacter::DoElementalFire);
+    }
 
 		// 카메라 이동 중 좌클릭은 모드를 유지한 채 표창을 던진다.
 		EnhancedInputComponent->BindAction(BasicAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::DoBasicAttack);
@@ -972,6 +977,15 @@ void APlayerCharacter::DoCloneTech()
 	if (bIsDead || !ASC) return;
 	//DoCameraMoveEnd();
 	ASC->AbilityLocalInputPressed(ToAbilityInputID(EAbilityInputID::CloneTech));
+}
+
+void APlayerCharacter::DoElementalFire()
+{
+	if (IsAssassinating()) return;
+	if (bIsDead || !ASC) return;
+
+	//ASC->AbilityLocalInputPressed(ToAbilityInputID(EAbilityInputID::ElementalFire));
+	this->TryActivateAbilityByInputID(EAbilityInputID::ElementalFire);
 }
 
 void APlayerCharacter::DoCloneTechEnd()

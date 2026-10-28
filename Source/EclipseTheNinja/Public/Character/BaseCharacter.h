@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
-#include "Ability/AbilityInfo.h"
+#include "GAS/AbilityInfo.h"
 #include "BaseCharacter.generated.h"
 
 class UAbilitySystemComponent;
@@ -105,7 +105,7 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Death")
     TObjectPtr<UAnimMontage> DeathMontage;
 
-    FDelegateHandle HealthChangedDelegateHandle;
+	FDelegateHandle HealthChangedDelegateHandle;
 
     // 시작 스탯 GE를 이미 적용했는지 여부.
     bool bDefaultStatsApplied = false;

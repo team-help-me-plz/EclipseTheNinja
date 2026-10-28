@@ -16,6 +16,8 @@
 #include "Character/BaseCharacter.h"
 #include "Character/Enemy.h"
 #include "GameFramework/Character.h"
+#include "GAS/Tags/EclipseGameplayTags.h"
+#include "GAS/Ability/GAElementalFire.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_BasicAttack, "Ability.Attack.Basic");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Attacking, "State.Attacking");
@@ -244,6 +246,22 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 		return;
 	}
 
+	// 칼에 불이 붙었는지 확인
+	bool						bIsFire = false;
+	FElementalFireDamageInfo	FireInfo;
+	UGAElementalFire*			FireAbility = nullptr;
+	if (SourceASC->HasMatchingGameplayTag(EclipseGameplayTags::State_Weapon_Element_Fire))
+	{
+		FGameplayAbilitySpec*	FireSpec = SourceASC->FindAbilitySpecFromInputID(ToAbilityInputID(EAbilityInputID::ElementalFire));
+		
+		FireAbility = FireSpec ? Cast<UGAElementalFire>(FireSpec->Ability) : nullptr;
+		if (FireAbility)
+		{
+			FireInfo = FireAbility->CalcFireDamage(Damage, FireSpec->Level);
+			bIsFire = true;
+		}
+	}
+
 	// 판정 구의 반지름
 	const float Radius = FMath::Max(1.0f, AttackRadius);
 
@@ -301,9 +319,62 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 		// SetbyCaller를 통한 모디파이어 조정 후 이펙트 적용
 		if (Spec.IsValid())
 		{
-			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), Damage);
+			// 칼에 불이 없으면 일반 데미지, 불이 있으면 불 데미지
+			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), bIsFire ? FireInfo.HitDamage : Damage);
 			HitActors.Add(Target);
 			SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+
+			// [ElementalFire] 칼에 불이 있다면
+			if (bIsFire)
+			{
+				const TSubclassOf<UGameplayEffect> BurnEffectClass = FireAbility->GetFireBurnEffectClass();
+				if (BurnEffectClass && FireInfo.TickCount > 0)
+				{
+					// 적이 살아있다면 화상 붙이기 혹은 화상 연장
+					if (TargetASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) > 0.f)
+					{
+						FGameplayEffectQuery Query;
+						Query.EffectDefinition = BurnEffectClass;
+						TArray<FActiveGameplayEffectHandle> Burns = TargetASC->GetActiveEffects(Query);
+						// 화상이 없다면 새로 붙이기
+						if (Burns.Num() <= 0)
+						{
+							// 화상 스펙 생성
+							FGameplayEffectSpecHandle BurnSpec = SourceASC->MakeOutgoingSpec(Query.EffectDefinition, GetAbilityLevel(), Context);
+							if (BurnSpec.IsValid())
+							{
+								// 틱 데미지만 넘긴다. 화상 시간과 주기는 GE에 들어 있다.
+								BurnSpec.Data->SetSetByCallerMagnitude(EclipseGameplayTags::SetByCaller_Damage, FireInfo.TickDamage);
+								SourceASC->ApplyGameplayEffectSpecToTarget(*BurnSpec.Data.Get(), TargetASC);
+							}
+						}
+						// 화상이 있다면 화상 연장
+						else
+						{
+							for (FActiveGameplayEffectHandle Burn : Burns)
+							{
+								TargetASC->ModifyActiveEffectStartTime(Burn, FireInfo.BurnDuration);
+							}
+						}
+					}
+					// 적이 죽었다면 화상 없이 불타는 Cue만 실행
+					else
+					{
+						if (!TargetASC->IsGameplayCueActive(EclipseGameplayTags::GameplayCue_Enemy_Burn))
+						{
+							TargetASC->AddGameplayCue(EclipseGameplayTags::GameplayCue_Enemy_Burn, Context);
+						}
+					}
+				}
+				else
+				{
+					UE_LOG(
+						LogTemp,
+						Warning,
+						TEXT("[UGABaseAttack::OnHitEvent] FireBurnEffectClass가 nullptr이거나 tick이 0입니다")
+					)
+				}
+			}
 		}
 	}
 }

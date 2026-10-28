@@ -22,6 +22,7 @@ public:
 	UStatAttributeSet();
 
 	FOnStatDamageReceived OnDamageReceived;
+	FOnStatDamageReceived OnDotDamageReceived;
 
 	// CurrentValue 변경 전에 실행되는 함수
 	// 값의 Clamping용도로 사용
@@ -52,4 +53,8 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Meta Attribute")
 	FGameplayAttributeData Damage;
 	ATTRIBUTE_ACCESSORS_BASIC(UStatAttributeSet, Damage);
+
+	UPROPERTY(BlueprintReadOnly, Category = "Meta Attribute")
+	FGameplayAttributeData DotDamage;
+	ATTRIBUTE_ACCESSORS_BASIC(UStatAttributeSet, DotDamage);
 };
