@@ -534,18 +534,31 @@ void APlayerCharacter::Die()
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();
 
-	// 사망 몽타주 재생
+	// 사망 몽타주 재생. 암살당한 경우 암살 피격 몽타주로 대신한다.
+	UAnimMontage* MontageToPlay = DeathMontage;
+	if (IsValid(PendingAssassinationMontage))
+	{
+		MontageToPlay = PendingAssassinationMontage;
+	}
+
 	float MontageDuration = 0.0f;
 	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
 	{
-		if (DeathMontage)
+		if (MontageToPlay)
 		{
-			MontageDuration = AnimInstance->Montage_Play(DeathMontage, 1.0f, EMontagePlayReturnType::Duration);
+			MontageDuration = AnimInstance->Montage_Play(MontageToPlay, 1.0f, EMontagePlayReturnType::Duration);
 			if (MontageDuration > 0.0f)
 			{
+				// 쓰러진 자세를 유지한다.
 				FOnMontageBlendingOutStarted BlendOutDelegate;
-				BlendOutDelegate.BindUObject(this, &APlayerCharacter::OnDeathMontageBlendingOut);
-				AnimInstance->Montage_SetBlendingOutDelegate(BlendOutDelegate, DeathMontage);
+				BlendOutDelegate.BindWeakLambda(this, [this, MontageToPlay](UAnimMontage* Montage, bool bInterrupted)
+				{
+					if (bIsDead && Montage == MontageToPlay)
+					{
+						GetMesh()->bPauseAnims = true;
+					}
+				});
+				AnimInstance->Montage_SetBlendingOutDelegate(BlendOutDelegate, MontageToPlay);
 			}
 		}
 	}
@@ -558,6 +571,25 @@ void APlayerCharacter::Die()
 	}
 	// SetLifeSpan(0) cancels destruction, so keep a small positive minimum.
 	SetLifeSpan(FMath::Max(0.01f, MontageDuration));
+}
+
+void APlayerCharacter::ReceiveAssassination(UAnimMontage* Montage)
+{
+	if (bIsDead || !IsValid(ASC))
+	{
+		return;
+	}
+
+	// 기존 체력/사망 경로를 사용하고 이번 사망 연출만 암살 피격 몽타주로 바꾼다.
+	PendingAssassinationMontage = Montage;
+	ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 0.0f);
+
+	if (!bIsDead)
+	{
+		Die();
+	}
+
+	PendingAssassinationMontage = nullptr;
 }
 
 void APlayerCharacter::DoBasicAttack()

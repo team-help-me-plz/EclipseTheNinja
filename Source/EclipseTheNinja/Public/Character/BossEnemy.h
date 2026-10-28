@@ -7,6 +7,8 @@
 #include "Character/BossPatternRow.h"
 #include "BossEnemy.generated.h"
 
+class UGameplayAbility;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossEnergyLinkActivated, int32, LinkIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossEnergyLinkEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossPhaseChanged, int32, NewPhase);
@@ -19,7 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossPhaseChanged, int32, NewPhase
  * - 공격: BT의 Attack 태스크가 호출하면 PatternTable에서 쿨타임과 사용 거리를 통과한 패턴을 가중치 랜덤으로 골라 실행한다.
  *   패턴은 각각 UGABossPatternBase 계열 어빌리티이며, 테이블이 없으면 BossQuickDraw 입력 ID의 어빌리티(발도)를 실행한다.
  * - 에너지 링크: 체력이 EnergyLinkThresholds 비율에 닿으면 그 값에서 체력을 멈추고 무적 실드를 켠다.
- *   실드는 레버(IActivatable) 또는 BreakEnergyLink 호출로 해제되고, 제한시간이 지나면 플레이어가 즉사한다.
+ *   실드는 레버(IActivatable) 또는 BreakEnergyLink 호출로 해제되고, 제한시간이 지나면 보스가 플레이어를 처형(암살)한다.
  * - 암살: 가장 가까운 아래쪽 에너지 링크 체력까지 즉시 깎는다. 체력이 AssassinationKillRatio 이하면 즉시 처치한다.
  * - 페이즈: 1페이즈에서 시작해 에너지 링크를 파훼할 때마다 1씩 오른다. 체력 구간이 아니라 파훼 횟수로 정한다.
  *   RunPhase 전에는 StanceWalkSpeed로 자세를 잡고 걷고, RunPhase부터 ChaseSpeed로 달린다.
@@ -79,6 +81,11 @@ public:
 	/** 제한시간 안에 실드를 해제하지 못해 플레이어를 처치할 때 호출된다. */
 	UPROPERTY(BlueprintAssignable, Category = "Boss|Energy Link")
 	FOnBossEnergyLinkEvent OnEnergyLinkFailed;
+
+	// 처형 어빌리티가 읽는 설정
+	const TSoftObjectPtr<UAnimMontage>& GetExecutionAttackMontage() const { return ExecutionAttackMontage; }
+	const TSoftObjectPtr<UAnimMontage>& GetExecutionVictimMontage() const { return ExecutionVictimMontage; }
+	float GetExecutionBehindDistance() const { return ExecutionBehindDistance; }
 
 	// 실드가 켜져 있으면 암살할 수 없다.
 	virtual bool CanBeAssassinated() const override;
@@ -204,8 +211,14 @@ protected:
 	// 실드를 켜고 제한시간 타이머를 시작한다.
 	void ActivateEnergyLink(int32 LinkIndex);
 
-	// 제한시간 안에 실드를 해제하지 못하면 플레이어를 즉사시킨다.
+	// 제한시간 안에 실드를 해제하지 못하면 플레이어 입력을 막고 처형을 시작한다.
 	void OnEnergyLinkTimeExpired();
+
+	// 플레이어가 땅에 서면(또는 ExecutionGroundWaitTime이 지나면) 처형 어빌리티를 실행한다. 아니면 잠시 뒤 다시 시도한다.
+	void TryStartExecution();
+
+	// 처형 어빌리티를 부여하고 실행한다. 실패하면 false.
+	bool ActivateExecutionAbility();
 
 	// 실드 상태와 타이머만 정리한다. 알림은 보내지 않는다.
 	void ClearEnergyLinkState();
@@ -219,9 +232,39 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Energy Link")
 	TArray<float> EnergyLinkThresholds = { 0.7f, 0.3f };
 
-	/** 실드 해제 제한시간(초). 0 이하면 시간 제한 없이 레버를 기다린다. */
+	/** 실드 해제(기믹) 제한시간(초). 지나면 보스가 플레이어를 처형한다. 0 이하면 시간 제한 없이 레버를 기다린다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Energy Link", meta = (ClampMin = "0.0", Units = "s"))
 	float EnergyLinkTimeLimit = 60.0f;
+
+	/**
+	 * 실드를 제한시간 안에 해제하지 못했을 때 실행할 처형 어빌리티. 기본은 UGABossExecution.
+	 * 비우거나 실행에 실패하면 연출 없이 플레이어를 즉사시킨다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
+	TSubclassOf<UGameplayAbility> ExecutionAbilityClass;
+
+	/**
+	 * 처형할 때 보스가 재생하는 암살자 몽타주. 보스 스켈레톤용이어야 한다.
+	 * 일반 암살의 AM_Assassination_Attack은 닌자 스켈레톤이라 리타깃한 몽타주를 넣는다. 비우면 플레이어만 쓰러진다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
+	TSoftObjectPtr<UAnimMontage> ExecutionAttackMontage;
+
+	/** 처형당하는 플레이어가 재생하는 몽타주. 기본은 일반 암살의 피격자 몽타주(AM_Assassination_Victim). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
+	TSoftObjectPtr<UAnimMontage> ExecutionVictimMontage;
+
+	/** 보스가 플레이어 등 뒤 몇 cm에 서서 처형할지. 두 캡슐이 겹치는 거리보다 가까워지지는 않는다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution", meta = (ClampMin = "0.0", Units = "cm"))
+	float ExecutionBehindDistance = 150.0f;
+
+	/** 제한시간이 끝났을 때 플레이어가 공중이나 벽에 있으면 착지를 기다리는 최대 시간. 지나면 그 자리에서 처형한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution", meta = (ClampMin = "0.0", Units = "s"))
+	float ExecutionGroundWaitTime = 1.5f;
+
+	// 착지 대기를 시작한 월드 시간(초)과 재시도 타이머
+	double ExecutionWaitStartTime = 0.0;
+	FTimerHandle ExecutionWaitTimer;
 
 	/** 이 체력 비율 이하에서 암살에 성공하면 보스를 즉시 처치한다. 기획: 20%. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -255,6 +298,10 @@ protected:
 	/** PIE 테스트용. 체크하면 다음 Tick에 레버를 당긴 것처럼 실드를 해제하고 해제된다. */
 	UPROPERTY(EditInstanceOnly, Transient, Category = "Boss|Debug")
 	bool bDebugBreakEnergyLink = false;
+
+	/** PIE 테스트용. 실드가 켜져 있을 때 체크하면 다음 Tick에 제한시간이 끝난 것처럼 처형을 시작하고 해제된다. */
+	UPROPERTY(EditInstanceOnly, Transient, Category = "Boss|Debug")
+	bool bDebugExpireEnergyLink = false;
 #endif
 
 	/** 이 페이즈부터 ChaseSpeed로 달린다. 그 전 페이즈는 StanceWalkSpeed로 걷는다. 기획: 기믹 2회 파훼 후(3페이즈). */

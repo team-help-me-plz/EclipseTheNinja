@@ -2,6 +2,7 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "Character/PlayerCharacter.h"
 #include "Component/AssassinationDropComponent.h"
 #include "Component/EnemyDetectionComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -9,10 +10,13 @@
 #include "Engine/DataTable.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "GAS/Ability/GABossExecution.h"
 #include "GAS/Ability/GABossPatternBase.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "GAS/Effects/GEBossEnemyDefaultStats.h"
 #include "GAS/StatAttributeSet.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 
@@ -25,6 +29,12 @@ ABossEnemy::ABossEnemy()
 
 	// 보스는 암살로 처치되어도 회복 아이템을 떨어뜨리지 않는다.
 	AssassinationDropComp->SetDropActorClass(nullptr);
+
+	// 기믹 실패 시 처형 연출. 플레이어 피격 모션은 일반 암살의 피격자 몽타주를 그대로 쓴다.
+	ExecutionAbilityClass = UGABossExecution::StaticClass();
+	ExecutionVictimMontage = TSoftObjectPtr<UAnimMontage>(
+		FSoftObjectPath(TEXT("/Game/Anims/Montage/AM_Assassination_Victim.AM_Assassination_Victim"))
+	);
 }
 
 void ABossEnemy::BeginPlay()
@@ -41,6 +51,7 @@ void ABossEnemy::BeginPlay()
 void ABossEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
+	GetWorldTimerManager().ClearTimer(ExecutionWaitTimer);
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -163,22 +174,107 @@ void ABossEnemy::OnEnergyLinkTimeExpired()
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 해제 실패, 플레이어 처치"), *GetName());
+	UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 해제 실패, 플레이어 처형"), *GetName());
 	OnEnergyLinkFailed.Broadcast();
 
-	// 플레이어의 체력을 0으로 만들어 플레이어 쪽 사망 처리를 그대로 사용한다.
-	APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
-	UAbilitySystemComponent* PlayerASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Player);
-	if (PlayerASC && PlayerASC->GetSet<UStatAttributeSet>())
+	// 진행 중인 패턴을 멈추고 처형으로 넘어간다.
+	CancelAIBaseAttack();
+
+	// 처형 전까지 플레이어가 움직이지 못하게 한다. 벽 매달리기 등은 취소해 땅으로 내려오게 한다.
+	APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	if (IsValid(Player))
 	{
-		PlayerASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 0.0f);
+		if (UAbilitySystemComponent* PlayerASC = Player->GetAbilitySystemComponent())
+		{
+			PlayerASC->CancelAllAbilities();
+		}
+
+		if (APlayerController* PlayerController = Cast<APlayerController>(Player->GetController()))
+		{
+			Player->DisableInput(PlayerController);
+		}
 	}
+
+	ExecutionWaitStartTime = GetWorld()->GetTimeSeconds();
+	TryStartExecution();
+}
+
+void ABossEnemy::TryStartExecution()
+{
+	if (bIsDead)
+	{
+		return;
+	}
+
+	APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	UAbilitySystemComponent* PlayerASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Player);
+	if (!IsValid(Player) || !PlayerASC || PlayerASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) <= 0.0f)
+	{
+		return;
+	}
+
+	// 공중에서 피격자 몽타주를 재생하면 허공에 멈춘 채 쓰러지므로, 착지할 때까지 잠시 기다린다.
+	const bool bWaitTimedOut = GetWorld()->GetTimeSeconds() - ExecutionWaitStartTime >= ExecutionGroundWaitTime;
+	if (!Player->GetCharacterMovement()->IsMovingOnGround() && !bWaitTimedOut)
+	{
+		GetWorldTimerManager().SetTimer(
+			ExecutionWaitTimer,
+			this,
+			&ABossEnemy::TryStartExecution,
+			0.1f,
+			false
+		);
+		return;
+	}
+
+	if (ActivateExecutionAbility())
+	{
+		return;
+	}
+
+	// 처형을 시작하지 못하면 플레이어의 체력을 0으로 만들어 플레이어 쪽 사망 처리를 그대로 사용한다.
+	PlayerASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 0.0f);
+}
+
+bool ABossEnemy::ActivateExecutionAbility()
+{
+	if (!ExecutionAbilityClass || !ASC)
+	{
+		return false;
+	}
+
+	// 처음 실행할 때 부여한다.
+	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(ExecutionAbilityClass);
+	if (!Spec && HasAuthority())
+	{
+		const FGameplayAbilitySpecHandle NewHandle = ASC->GiveAbility(FGameplayAbilitySpec(ExecutionAbilityClass, 1));
+		Spec = ASC->FindAbilitySpecFromHandle(NewHandle);
+	}
+
+	if (!Spec)
+	{
+		return false;
+	}
+
+	return ASC->TryActivateAbility(Spec->Handle);
 }
 
 void ABossEnemy::ClearEnergyLinkState()
 {
 	bEnergyLinkActive = false;
 	GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
+
+	// 착지를 기다리던 중에 실드가 해제되면 처형을 취소하고 플레이어 입력을 되돌린다.
+	if (GetWorldTimerManager().IsTimerActive(ExecutionWaitTimer))
+	{
+		GetWorldTimerManager().ClearTimer(ExecutionWaitTimer);
+
+		APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+		if (APlayerController* PlayerController = Player ? Cast<APlayerController>(Player->GetController()) : nullptr)
+		{
+			Player->EnableInput(PlayerController);
+		}
+	}
 
 	if (ASC)
 	{
@@ -594,6 +690,13 @@ void ABossEnemy::ProcessDebugRequests()
 	{
 		bDebugBreakEnergyLink = false;
 		BreakEnergyLink();
+	}
+
+	if (bDebugExpireEnergyLink)
+	{
+		bDebugExpireEnergyLink = false;
+		GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
+		OnEnergyLinkTimeExpired();
 	}
 }
 #endif

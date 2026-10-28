@@ -214,6 +214,9 @@ public:
 	bool IsHiding() const;
 	void SetAssassinationFacing(float Yaw);
 
+	// 보스 처형처럼 적에게 암살당할 때 호출한다. 사망 몽타주 대신 Montage를 재생하며 사망한다.
+	void ReceiveAssassination(UAnimMontage* Montage);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cursor Look")
 	bool bFaceCursor = true;
 
@@ -337,6 +340,10 @@ protected:
 	// 사망 처리용 함수
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
 	void Die();
+
+	// ReceiveAssassination 안에서만 유효하다. Die가 사망 몽타주 대신 재생한다.
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> PendingAssassinationMontage;
 
 public:
 
