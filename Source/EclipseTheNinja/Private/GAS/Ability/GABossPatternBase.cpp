@@ -1,7 +1,9 @@
 #include "GAS/Ability/GABossPatternBase.h"
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Character/Enemy.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -75,17 +77,107 @@ void UGABossPatternBase::ActivateAbility(
 	HitTask->EventReceived.AddDynamic(this, &UGABossPatternBase::OnHitEvent);
 	HitTask->ReadyForActivation();
 
+	// 준비 구간(몽타주 시작~준비 끝 위치)은 끝에서 멈추거나 느리게 재생해 늘이고, 그 뒤부터 원래 속도로 시전한다.
+	const float BasePlayRate = FMath::Max(0.01f, PlayRate);
+	const float WindupEnd = GetWindupEndPosition();
+	const float NormalWindupDuration = WindupEnd / BasePlayRate;
+	const float SlowRate = FMath::Clamp(WindupSlowRate, 0.05f, 1.0f);
+	const bool bHoldWindup = bHoldWindupPose && WindupExtraTime > 0.0f;
+	const bool bStretchWindup = !bHoldWindupPose && WindupEnd > 0.0f && SlowRate < 1.0f;
+	const float StartPlayRate = bStretchWindup ? BasePlayRate * SlowRate : BasePlayRate;
+	const float StretchedWindupDuration = NormalWindupDuration / SlowRate;
+
 	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this,
 		NAME_None,
 		PatternMontage,
-		FMath::Max(0.01f, PlayRate)
+		StartPlayRate
 	);
 	MontageTask->OnCompleted.AddDynamic(this, &UGABossPatternBase::OnMontageCompleted);
 	MontageTask->OnBlendOut.AddDynamic(this, &UGABossPatternBase::OnMontageCompleted);
 	MontageTask->OnInterrupted.AddDynamic(this, &UGABossPatternBase::OnMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &UGABossPatternBase::OnMontageInterrupted);
 	MontageTask->ReadyForActivation();
+
+	if (bHoldWindup)
+	{
+		UAbilityTask_WaitDelay* HoldTask = UAbilityTask_WaitDelay::WaitDelay(
+			this,
+			NormalWindupDuration
+		);
+		HoldTask->OnFinish.AddDynamic(this, &UGABossPatternBase::OnWindupHoldReached);
+		HoldTask->ReadyForActivation();
+	}
+	else if (bStretchWindup)
+	{
+		UAbilityTask_WaitDelay* WindupTask = UAbilityTask_WaitDelay::WaitDelay(
+			this,
+			StretchedWindupDuration
+		);
+		WindupTask->OnFinish.AddDynamic(this, &UGABossPatternBase::OnWindupFinished);
+		WindupTask->ReadyForActivation();
+	}
+}
+
+void UGABossPatternBase::OnWindupHoldReached()
+{
+	const AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
+	UAnimInstance* AnimInstance = Enemy ? Enemy->GetMesh()->GetAnimInstance() : nullptr;
+	if (!IsActive() || !AnimInstance || !AnimInstance->Montage_IsPlaying(PatternMontage))
+	{
+		return;
+	}
+
+	// 대기 타이머와 실제 재생 위치가 프레임 단위로 어긋날 수 있어 준비 끝 위치로 맞춘 뒤 멈춘다.
+	AnimInstance->Montage_SetPosition(PatternMontage, GetWindupEndPosition());
+	AnimInstance->Montage_Pause(PatternMontage);
+
+	UAbilityTask_WaitDelay* WindupTask = UAbilityTask_WaitDelay::WaitDelay(
+		this,
+		WindupExtraTime
+	);
+	WindupTask->OnFinish.AddDynamic(this, &UGABossPatternBase::OnWindupFinished);
+	WindupTask->ReadyForActivation();
+}
+
+float UGABossPatternBase::GetWindupEndPosition() const
+{
+	if (!PatternMontage)
+	{
+		return 0.0f;
+	}
+
+	const float MontageLength = PatternMontage->GetPlayLength();
+	if (WindupEndPosition > 0.0f)
+	{
+		return FMath::Min(WindupEndPosition, MontageLength);
+	}
+
+	// 따로 정하지 않으면 첫 타격 노티파이 앞부분의 AutoWindupEndRatio만큼을 준비 구간으로 본다.
+	float FirstHitTime = MontageLength;
+	for (const FAnimNotifyEvent& NotifyEvent : PatternMontage->Notifies)
+	{
+		if (Cast<UAnimNotify_BossAttackHit>(NotifyEvent.Notify))
+		{
+			FirstHitTime = FMath::Min(FirstHitTime, NotifyEvent.GetTriggerTime());
+		}
+	}
+
+	return FirstHitTime * AutoWindupEndRatio;
+}
+
+void UGABossPatternBase::OnWindupFinished()
+{
+	const AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
+	UAnimInstance* AnimInstance = Enemy ? Enemy->GetMesh()->GetAnimInstance() : nullptr;
+	if (!IsActive() || !AnimInstance)
+	{
+		return;
+	}
+
+	// 멈춤 방식이면 다시 재생하고, 늘이기 방식이면 원래 속도로 되돌린다.
+	AnimInstance->Montage_Resume(PatternMontage);
+	AnimInstance->Montage_SetPlayRate(PatternMontage, FMath::Max(0.01f, PlayRate));
 }
 
 void UGABossPatternBase::OnPatternHit(const FBossAttackHitArea& HitArea)
