@@ -30,12 +30,14 @@
 #include "GAS/Ability/GACloneTech.h"
 #include "Component/InteractBoxComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
+#include "Subsystem/UIMessageSubsystem.h"
 
 #include "GAS/Ability/GALedgeHang.h"
 #include "GAS/Ability/GALedgeClimb.h"
 #include "Component/NoiseComponent.h"
 #include "Noise/NoiseTypes.h"
 #include "GAS/Ability/GAWallSlide.h"
+#include "Character/Enemy.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -997,7 +999,14 @@ void APlayerCharacter::DoCloneRecall()
 {
 	if (bIsDead) return;
 	if (!IsValid(ASC)) return;
-
+	if (this->PlayerCondition == EPlayerCondition::Combat)
+	{
+		UUIMessageSubsystem::ShowMessage(Cast<APlayerController>(
+			GetController()), 
+			FText::FromString(TEXT("적에게 발각시엔 사용할 수 없습니다."))
+		);
+		return;
+	}
 	/* TODO: Player 상태가 발각됐거나 전투중이면 바로 리턴하는 코드가 필요해용
 	*/
 	// 기본 어빌리티와 같은 입력 ID 규칙으로 분신 회수 대상을 찾는다.
@@ -1051,4 +1060,33 @@ void APlayerCharacter::ReturnToSafePoint_Implementation()
 	GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
 	SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
 	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
+}
+
+void APlayerCharacter::AddEngagedEnemy(AEnemy* InEnemy)
+{
+	if (!IsValid(InEnemy)) return;
+	EngagedEnemies.Add(InEnemy);
+	// 숨어 있다가 발각되면 은신이 풀린다. 나오는 연출은 OnPlayerConditionChanged(Combat)를 받은 쪽이 처리한다.
+	SetPlayerCondition(EPlayerCondition::Combat);
+}
+
+void APlayerCharacter::RemoveEngagedEnemy(AEnemy* InEnemy)
+{
+	EngagedEnemies.Remove(InEnemy);
+	// 알리지 못하고 사라진 적이 플레이어를 Combat에 묶어 두지 않도록 함께 정리한다.
+	for (auto It = EngagedEnemies.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid()) It.RemoveCurrent();
+	}
+
+	// 전투가 끝나도 숨은 자리로 돌아가지 않는다. 발각될 때 이미 은신이 풀렸다.
+	if (EngagedEnemies.Num() == 0 && PlayerCondition == EPlayerCondition::Combat)
+		SetPlayerCondition(EPlayerCondition::Normal);
+}
+
+void APlayerCharacter::SetPlayerCondition(EPlayerCondition InPlayerCondition)
+{
+	if (InPlayerCondition == PlayerCondition) return;
+	PlayerCondition = InPlayerCondition;
+	OnPlayerConditionChanged.Broadcast(PlayerCondition);
 }

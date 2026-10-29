@@ -4,6 +4,7 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "CollisionQueryParams.h"
 #include "Widgets/EnemyAwarenessWidget.h"
+#include "Character/PlayerCharacter.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -118,6 +119,9 @@ void UEnemyDetectionComponent::NotifyDamaged(AActor* DamageInstigator)
     UE_LOG(LogTemp, Log, TEXT("[EnemyDetection] %s damaged by %s: %s -> Combat"), *OwnerEnemy->GetName(),
         *Attacker->GetName(), *UEnum::GetValueAsString(PreviousLevel));
 
+    // 시야 밖에서 맞아도 공격자와 전투 중이 된다. 보이는 대상이 있으면 바로 아래 갱신에서 그 대상으로 바뀐다.
+    CurrentTarget = Attacker;
+
     // 다음 판정 주기를 기다리지 않고 시야와 Blackboard를 바로 갱신한다.
     DetectionElapsed = 0.0f;
     UpdateDetection(0.0f);
@@ -129,11 +133,12 @@ void UEnemyDetectionComponent::ResetDetection()
     AlertGauge = 0.0f;
     DisplayedGauge = 0.0f;
     bHasLineOfSight = false;
-    VisibleTarget.Reset();
+    CurrentTarget.Reset();
     LastKnownLocation = FVector::ZeroVector;
     bHasLastKnownLocation = false;
     TimeWithoutSight = 0.0f;
     DetectionElapsed = 0.0f;
+    SyncPlayerEngagement();
 
     if (!Owner.IsValid()) return;
 
@@ -165,6 +170,10 @@ void UEnemyDetectionComponent::StopDetection()
 
     SetComponentTickEnabled(false);
 	NoiseAlertReset();
+
+    // 단계는 그대로 두므로 대상을 먼저 비워야 플레이어에게 해제가 전달된다.
+    CurrentTarget.Reset();
+    SyncPlayerEngagement();
 }
 
 void UEnemyDetectionComponent::NoiseAlertStart(float InTargetGauge)
@@ -234,6 +243,10 @@ bool UEnemyDetectionComponent::CanSeeTarget(const AActor* Target, float Radius) 
 {
     const AEnemy* OwnerEnemy = Owner.Get();
     if (!OwnerEnemy || !IsValid(Target) || !GetWorld()) return false;
+
+    // 은신 중인 플레이어는 보이지 않는다.
+    const APlayerCharacter* PlayerTarget = Cast<APlayerCharacter>(Target);
+    if (PlayerTarget && PlayerTarget->GetPlayerCondition() == EPlayerCondition::Hidden) return false;
 
     // 표시 원과 같은 캐릭터 중심/반경을 사용한다. 바라보는 방향은 검사하지 않는다.
     if (FVector::DistSquared(Target->GetActorLocation(), OwnerEnemy->GetActorLocation()) > FMath::Square(Radius)) return false;
@@ -312,7 +325,7 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
 
     const float PreviousGauge = AlertGauge;
     const EEnemyAlertLevel PreviousLevel = AlertLevel;
-    VisibleTarget.Reset();
+    // 대상은 초기화하지 않는다. 전투 중 시야를 놓쳐도 마지막 대상을 유지하고, 끝에서 정리한다.
     bHasLineOfSight = false;
 
     // 소유한 액터가 죽은 상태일 때 
@@ -335,8 +348,8 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
         // 플레이어가 유효하고, 플레이어가 시야 거리 안에서 보이면
         if (Player)
         {
-            // 현재 감지한 타겟을 플레이어로 지정
-            VisibleTarget = Player;
+            // 현재 감지한 타겟을 플레이어로 지정. 분신이 더 우선이면 분신으로 바뀐다.
+            CurrentTarget = Player;
             // BB용 변수 세팅
             bHasLineOfSight = true;
             bHasLastKnownLocation = true;
@@ -418,6 +431,13 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
 		}
 	}
 
+    // 전투가 아니면 보이는 동안만 대상을 유지한다. 전투 중이라도 대상이 사라지거나 죽으면 비운다.
+    const bool bDropTarget = AlertLevel == EEnemyAlertLevel::Combat
+        ? !OwnerEnemy->IsValidAITarget(CurrentTarget.Get()) : !bHasLineOfSight;
+    if (bDropTarget)
+        CurrentTarget.Reset();
+    SyncPlayerEngagement();
+
     UpdateBlackboard();
     // 경계 게이지와, 경계 단계가 변경되면 브로드캐스트
     if (PreviousLevel != AlertLevel || !FMath::IsNearlyEqual(PreviousGauge, AlertGauge))
@@ -435,7 +455,7 @@ void UEnemyDetectionComponent::UpdateBlackboard()
     UBlackboardComponent* BB = AI->GetBlackboardComponent();
     if (!BB) return; // 컨트롤러/BT가 나중에 준비되어도 다음 Tick에서 다시 연결한다.
 
-    APawn* Target = VisibleTarget.Get();
+    APawn* Target = CurrentTarget.Get();
 
     bool bCanFight = false;
     if (AlertLevel == EEnemyAlertLevel::Combat && bHasLineOfSight && IsValid(Target))
@@ -475,6 +495,24 @@ void UEnemyDetectionComponent::UpdateBlackboard()
     
     // 값 갱신 노티파이 재시작
     BB->ResumeObserverNotifications(true);
+}
+
+void UEnemyDetectionComponent::SyncPlayerEngagement()
+{
+    AEnemy* OwnerEnemy = Owner.Get();
+
+    // 전투 중이고 대상이 플레이어일 때만 알린다. 분신은 캐스팅이 실패해 무시된다.
+    APlayerCharacter* EngagedPlayer = nullptr;
+    if (OwnerEnemy && AlertLevel == EEnemyAlertLevel::Combat && OwnerEnemy->IsValidAITarget(CurrentTarget.Get()))
+        EngagedPlayer = Cast<APlayerCharacter>(CurrentTarget.Get());
+
+    if (NotifiedPlayer.Get() == EngagedPlayer) return;
+
+    if (APlayerCharacter* PreviousPlayer = NotifiedPlayer.Get())
+        PreviousPlayer->RemoveEngagedEnemy(OwnerEnemy);
+    NotifiedPlayer = EngagedPlayer;
+    if (EngagedPlayer)
+        EngagedPlayer->AddEngagedEnemy(OwnerEnemy);
 }
 
 void UEnemyDetectionComponent::CreatePresentationWidget()
@@ -530,5 +568,8 @@ void UEnemyDetectionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
         PresentationWidget->RemoveFromParent();
         PresentationWidget = nullptr;
     }
+
+    CurrentTarget.Reset();
+    SyncPlayerEngagement();
     Super::EndPlay(EndPlayReason);
 }

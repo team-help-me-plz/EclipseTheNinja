@@ -7,6 +7,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "GAS/AbilityInfo.h"
 #include "Interface/Interactor.h"
+#include "Character/PlayerCondition.h"
 #include "PlayerCharacter.generated.h"
 
 class UStatAttributeSet;
@@ -20,7 +21,10 @@ class UInteractBoxComponent;
 class UAssassinationTargetingComponent;
 class UNoiseComponent;
 class UGAAssassinate;
+class AEnemy;
 struct FInputActionValue;
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FPlayerConditionChanged, EPlayerCondition);
 
 /**
  *  공통 전투 기능을 상속받아 카메라, 플레이어 입력, 점프를 처리한다.
@@ -150,6 +154,10 @@ protected:
 	/** If true, this character is moving along the side scrolling axis */
 	bool bMovingHorizontally = false;
 
+	/** 외부에서 직접 바꾸지 않는다. AddEngagedEnemy, TryEnterHiding 같은 의도별 함수로만 바뀐다. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Condition")
+	EPlayerCondition	PlayerCondition = EPlayerCondition::Normal;
+
 public:
 
 	/** Constructor */
@@ -217,6 +225,16 @@ public:
 	// 점프 시 소리를 발생시키기 위해 Character에 존재하는 함수 오버라이드
 	virtual void OnJumped_Implementation() override;
 
+	/** PlayerCondition이 바뀔 때만 알린다. 전투로 은신이 강제 해제될 때도 여기서 Combat을 받는다. */
+	FPlayerConditionChanged OnPlayerConditionChanged;
+
+	UFUNCTION(BlueprintPure, Category = "Condition")
+	EPlayerCondition	GetPlayerCondition() const	{ return (this->PlayerCondition); }
+
+	// 적이 플레이어를 전투 대상으로 삼거나 놓았을 때 호출한다. 같은 적을 여러 번 넣어도 한 번만 센다.
+	void	AddEngagedEnemy(AEnemy* InEnemy);
+	void	RemoveEngagedEnemy(AEnemy* InEnemy);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -254,6 +272,11 @@ private:
 	bool bSavedOrientRotationToMovement = false;
 	bool bSavedUseControllerDesiredRotation = false;
 	bool bSavedUseControllerRotationYaw = false;
+
+	// 플레이어를 전투 대상으로 삼은 적. 하나라도 있으면 Combat이다.
+	TSet<TWeakObjectPtr<AEnemy>> EngagedEnemies;
+	// PlayerCondition을 바꾸는 유일한 함수. 값이 바뀔 때만 알린다.
+	void SetPlayerCondition(EPlayerCondition InPlayerCondition);
 
 protected:
 
