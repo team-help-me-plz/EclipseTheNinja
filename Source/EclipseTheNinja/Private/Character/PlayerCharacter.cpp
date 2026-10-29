@@ -829,6 +829,19 @@ void APlayerCharacter::SetCloneTargeting(bool bTargeting)
 		return;
 	}
 	bIsCloneTargeting = bTargeting;
+	// 타게팅 중에는 기본 IMC를 빼서 타게팅 IMC(확정, 취소)만 받는다.
+	if (APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController()))
+	{
+		static const FName CloneTargetingLock(TEXT("CloneTargeting"));
+		if (bTargeting)
+		{
+			APC->PushInputLock(CloneTargetingLock);
+		}
+		else
+		{
+			APC->PopInputLock(CloneTargetingLock);
+		}
+	}
 	// 분신 소환 또는 취소 시 카메라를 중앙으로 되돌린다.
 	if (!bTargeting && bIsExploring)
 	{

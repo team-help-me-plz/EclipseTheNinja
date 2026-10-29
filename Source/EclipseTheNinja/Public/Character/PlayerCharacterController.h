@@ -48,6 +48,12 @@ public:
 	void StartCameraMove();
 	void StopCameraMove();
 
+	// 정해진 입력만 받아야 할 때(분신 조준, 은신 등) 이유별로 잠근다. 잠금이 하나라도 있으면 기본 IMC를 빼고,
+	// 각 잠금이 넘긴 허용 IMC만 넣는다. 모든 잠금이 풀리면 기본 IMC를 다시 넣는다.
+	void PushInputLock(FName InReason, UInputMappingContext* InAllowedContext = nullptr);
+	void PopInputLock(FName InReason);
+	bool IsInputLocked() const { return !InputLocks.IsEmpty(); }
+
 protected:
 
 	/** Gameplay initialization */
@@ -66,4 +72,14 @@ protected:
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
+
+private:
+	// DefaultMappingContexts와 (터치가 아니면) MobileExcludedMappingContexts를 넣거나 뺀다
+	void ApplyDefaultMappingContexts(bool bAdd);
+	// 잠긴 채로 캐릭터가 바뀌면 모든 잠금을 풀어 기본 입력으로 되돌린다
+	void ClearInputLocks();
+
+	// 잠금 이유와 그 잠금 동안 넣는 허용 IMC(없으면 nullptr)
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UInputMappingContext>> InputLocks;
 };
