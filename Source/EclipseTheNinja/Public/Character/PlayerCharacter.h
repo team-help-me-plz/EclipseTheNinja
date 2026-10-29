@@ -340,6 +340,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoCrouch();
 
+	// 앉기 해제 처리
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	virtual void DoUnCrouch();
+
 	/** 분신술 타게팅 상태 설정. 타게팅 중에는 카메라 시점을 유지하고, 종료되면 중앙으로 복귀한다. */
 	void SetCloneTargeting(bool bTargeting);
 
@@ -350,6 +354,9 @@ protected:
 
 	/** 분신술 타게팅 중인지 여부 */
 	bool bIsCloneTargeting = false;
+
+	/** 앉기 키를 누르고 있는지 여부. 공중에서 누르면 착지할 때 앉는다. */
+	bool bCrouchInputHeld = false;
 
 	/** 발판 내려가기, 지상 점프, 벽 점프, 코요테 점프를 처리한다. */
 	void MultiJump();

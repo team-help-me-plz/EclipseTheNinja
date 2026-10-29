@@ -66,6 +66,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turn In Place", meta = (ClampMin = "0.1"))
 	float TurnInPlacePlayRate = 1.5f;
 
+	// 앉은 상태의 제자리 턴. 비어 있으면 서서 하는 턴 클립을 쓴다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turn In Place")
+	TObjectPtr<UAnimSequence> CrouchTurnInPlaceAnimation;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turn In Place", meta = (ClampMin = "0.1"))
+	float CrouchTurnInPlacePlayRate = 1.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turn In Place", meta = (ClampMin = "0"))
 	float TurnInPlaceBlendInTime = 0.25f;
 
@@ -87,6 +94,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Wall Attach")
 	float MaxClimbingSpeed = 200.f;
 
+	// AnimGraph에서 서기/앉기 Blend Space를 고르는 데 쓴다.
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Crouch")
+	bool bIsCrouching = false;
+
 private:
 	// 캐릭터 머리 상하 각도 계산
 	float CalculateHeadPitch(const APlayerCharacter& Character) const;
@@ -96,8 +107,12 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ActiveTurnMontage;
 
+	// 앉기 여부에 맞는 턴 클립과 재생 속도
+	UAnimSequence* GetTurnInPlaceAnimation() const;
+	float GetTurnInPlacePlayRate() const;
+
 	// 턴 클립의 시간별 누적 루트 회전(Yaw). 남은 회전에 맞는 시작 시점을 찾는 데 쓴다.
-	void CacheTurnYawCurve();
+	void CacheTurnYawCurve(UAnimSequence* TurnAnimation);
 	TArray<float> TurnYawCurve;
 	float TurnYawCurveStep = 0.0f;
 	TWeakObjectPtr<UAnimSequence> CachedTurnAnimation;

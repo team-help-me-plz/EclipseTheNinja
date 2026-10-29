@@ -3,6 +3,8 @@
 
 #include "Character/PlayerCharacterCameraManager.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/Character.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/HitResult.h"
 #include "CollisionQueryParams.h"
 #include "Engine/World.h"
@@ -79,6 +81,14 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 
 		// cache the current location
 		FVector CurrentActorLocation = OutVT.Target->GetActorLocation();
+
+		// 앉으면 캡슐이 줄어 액터 위치가 내려가므로, 선 자세 기준 높이로 보정해 카메라를 고정한다.
+		if (const ACharacter* TargetCharacter = Cast<ACharacter>(TargetPawn))
+		{
+			CurrentActorLocation.Z += TargetCharacter->GetDefaultHalfHeight()
+				- TargetCharacter->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+		}
+
 		FVector2D MoveOffset = FVector2D::ZeroVector;
 
 		// calculate the "zoom distance" - in reality the distance we want to keep to the target
