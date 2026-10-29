@@ -23,4 +23,9 @@ void	UAbilityCooldownContainerWidget::InitWidget(APawn* InPawn)
 	{
 		this->ElementalFireCooldown->InitWidget(InPawn);
 	}
+
+	if (this->SwiftStrikeCooldown)
+	{
+		this->SwiftStrikeCooldown->InitWidget(InPawn);
+	}
 }

@@ -94,6 +94,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> ElementalFireAction;
 
+	/** SwiftStrike Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> SwiftStrikeAction;
+
 	/** Impulse to manually push physics objects while we're in midair */
 	UPROPERTY(EditAnywhere, Category = "Side Scrolling|Jump")
 	float JumpPushImpulse = 600.0f;
@@ -343,6 +347,10 @@ public:
 	// 앉기 해제 처리
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoUnCrouch();
+
+	// 질풍참 처리
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	virtual void DoSwiftStrike();
 
 	/** 분신술 타게팅 상태 설정. 타게팅 중에는 카메라 시점을 유지하고, 종료되면 중앙으로 복귀한다. */
 	void SetCloneTargeting(bool bTargeting);

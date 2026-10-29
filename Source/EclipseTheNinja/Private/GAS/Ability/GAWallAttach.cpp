@@ -17,7 +17,9 @@
 #include "GAS/Ability/GALedgeClimb.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttach, "Ability.Movement.WallAttach");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttached, "State.Movement.WallAttached");
+// 벽 매달리기·모서리 매달리기·오르기 상태의 공통 부모. 막을 때는 이 태그 하나로 막는다.
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallState, "State.Movement.Wall");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttached, "State.Movement.Wall.Attached");
 static const ECollisionChannel ECC_WallAttach = ECC_GameTraceChannel2;
 static const ECollisionChannel ECC_WallClimbing = ECC_GameTraceChannel4;
 static constexpr float ClimbDebugInterval = 0.05f;
@@ -47,6 +49,11 @@ FGameplayTag UGAWallAttach::GetWallAttachAbilityTag()
 FGameplayTag UGAWallAttach::GetWallAttachingTag()
 {
 	return TAG_WallAttached;
+}
+
+FGameplayTag UGAWallAttach::GetWallStateTag()
+{
+	return TAG_WallState;
 }
 
 

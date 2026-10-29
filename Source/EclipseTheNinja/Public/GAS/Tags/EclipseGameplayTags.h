@@ -28,4 +28,7 @@ namespace EclipseGameplayTags
 	// 에디터 GE의 SetByCaller는 Data Tag로만 지정할 수 있으므로 값을 넘길 태그를 둔다.
 	ECLIPSETHENINJA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Duration);
 	ECLIPSETHENINJA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Damage);
+
+	//------------ Stat      ----------
+	ECLIPSETHENINJA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Invincible);
 }
