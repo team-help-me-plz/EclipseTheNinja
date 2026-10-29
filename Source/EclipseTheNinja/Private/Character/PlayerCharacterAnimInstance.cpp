@@ -78,9 +78,21 @@ void UPlayerCharacterAnimInstance::NativeUninitializeAnimation()
 	Super::NativeUninitializeAnimation();
 }
 
+UAnimSequence* UPlayerCharacterAnimInstance::GetTurnInPlaceAnimation() const
+{
+	return bIsCrouching && CrouchTurnInPlaceAnimation ? CrouchTurnInPlaceAnimation.Get() : TurnInPlaceAnimation.Get();
+}
+
+float UPlayerCharacterAnimInstance::GetTurnInPlacePlayRate() const
+{
+	const float PlayRate = bIsCrouching && CrouchTurnInPlaceAnimation ? CrouchTurnInPlacePlayRate : TurnInPlacePlayRate;
+	return FMath::Max(0.1f, PlayRate);
+}
+
 bool UPlayerCharacterAnimInstance::TryStartTurnInPlace(float TargetYaw)
 {
-	if (!bEnableTurnInPlace || !TurnInPlaceAnimation || !TurnInPlaceAnimation->HasRootMotion()
+	UAnimSequence* TurnAnimation = GetTurnInPlaceAnimation();
+	if (!bEnableTurnInPlace || !TurnAnimation || !TurnAnimation->HasRootMotion()
 		|| IsAnyMontagePlaying())
 	{
 		return false;
@@ -92,35 +104,35 @@ bool UPlayerCharacterAnimInstance::TryStartTurnInPlace(float TargetYaw)
 	BlendIn.BlendMode = EMontageBlendMode::Inertialization;
 	BlendOut.BlendMode = EMontageBlendMode::Inertialization;
 	ActiveTurnMontage = PlaySlotAnimationAsDynamicMontage_WithBlendSettings(
-		TurnInPlaceAnimation, TurnInPlaceSlotName, BlendIn, BlendOut,
-		FMath::Max(0.1f, TurnInPlacePlayRate), 1, 0.0f);
+		TurnAnimation, TurnInPlaceSlotName, BlendIn, BlendOut,
+		GetTurnInPlacePlayRate(), 1, 0.0f);
 	TurnTargetYaw = TargetYaw;
 	return ActiveTurnMontage != nullptr;
 }
 
-void UPlayerCharacterAnimInstance::CacheTurnYawCurve()
+void UPlayerCharacterAnimInstance::CacheTurnYawCurve(UAnimSequence* TurnAnimation)
 {
-	if (CachedTurnAnimation.Get() == TurnInPlaceAnimation && TurnYawCurve.Num() > 0)
+	if (CachedTurnAnimation.Get() == TurnAnimation && TurnYawCurve.Num() > 0)
 	{
 		return;
 	}
 
 	TurnYawCurve.Reset();
-	CachedTurnAnimation = TurnInPlaceAnimation;
-	if (!TurnInPlaceAnimation)
+	CachedTurnAnimation = TurnAnimation;
+	if (!TurnAnimation)
 	{
 		return;
 	}
 
 	// 구간별 회전을 더해 누적 곡선을 만든다. 180도 회전은 한 번에 뽑으면 부호가 모호하기 때문이다.
 	constexpr int32 SampleCount = 64;
-	const float Length = TurnInPlaceAnimation->GetPlayLength();
+	const float Length = TurnAnimation->GetPlayLength();
 	TurnYawCurveStep = Length / SampleCount;
 	const FAnimExtractContext Context;
 	TurnYawCurve.Add(0.0f);
 	for (int32 Index = 1; Index <= SampleCount; ++Index)
 	{
-		const FTransform Delta = TurnInPlaceAnimation->ExtractRootMotionFromRange(
+		const FTransform Delta = TurnAnimation->ExtractRootMotionFromRange(
 			(Index - 1) * TurnYawCurveStep, Index * TurnYawCurveStep, Context);
 		TurnYawCurve.Add(TurnYawCurve.Last() + Delta.GetRotation().Rotator().Yaw);
 	}
@@ -128,13 +140,14 @@ void UPlayerCharacterAnimInstance::CacheTurnYawCurve()
 
 bool UPlayerCharacterAnimInstance::TryStartTurnInPlaceRemaining(float TargetYaw, float RemainingDeltaYaw)
 {
-	if (!bEnableTurnInPlace || !TurnInPlaceAnimation || !TurnInPlaceAnimation->HasRootMotion()
+	UAnimSequence* TurnAnimation = GetTurnInPlaceAnimation();
+	if (!bEnableTurnInPlace || !TurnAnimation || !TurnAnimation->HasRootMotion()
 		|| IsAnyMontagePlaying())
 	{
 		return false;
 	}
 
-	CacheTurnYawCurve();
+	CacheTurnYawCurve(TurnAnimation);
 	if (TurnYawCurve.Num() < 2)
 	{
 		return false;
@@ -167,12 +180,12 @@ bool UPlayerCharacterAnimInstance::TryStartTurnInPlaceRemaining(float TargetYaw,
 	BlendIn.BlendMode = EMontageBlendMode::Inertialization;
 	BlendOut.BlendMode = EMontageBlendMode::Inertialization;
 	ActiveTurnMontage = PlaySlotAnimationAsDynamicMontage_WithBlendSettings(
-		TurnInPlaceAnimation, TurnInPlaceSlotName, BlendIn, BlendOut,
-		FMath::Max(0.1f, TurnInPlacePlayRate), 1, 0.0f, StartTime);
+		TurnAnimation, TurnInPlaceSlotName, BlendIn, BlendOut,
+		GetTurnInPlacePlayRate(), 1, 0.0f, StartTime);
 	if (ActiveTurnMontage && bReverse)
 	{
 		// 우클릭 턴의 방향 전환과 같은 방식으로 역재생한다.
-		Montage_SetPlayRate(ActiveTurnMontage, -FMath::Max(0.1f, TurnInPlacePlayRate));
+		Montage_SetPlayRate(ActiveTurnMontage, -GetTurnInPlacePlayRate());
 	}
 	TurnTargetYaw = TargetYaw;
 	return ActiveTurnMontage != nullptr;
