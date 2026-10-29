@@ -8,6 +8,7 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEnemyAwarenessChanged, float, Gauge, EEnemyAlertLevel, Level);
 class UEnemyAwarenessWidget;
+class APlayerCharacter;
 
 /** 방향과 무관한 두 감지 원과 장애물 검사를 통해 경계 상태를 판단한다. */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -137,6 +138,8 @@ private:
     void UpdateDetection(float DeltaTime);
     // BB용 변수 업데이트 함수
     void UpdateBlackboard();
+    // 전투 중인 대상이 플레이어인지 확인해 바뀌었을 때만 플레이어에게 알린다. 플레이어에게 알리는 유일한 함수.
+    void SyncPlayerEngagement();
     // 발각 범위 위젯 생성. 플레이어가 준비되지 않았을 때만 재시도한다.
     void CreatePresentationWidget();
 
@@ -148,8 +151,13 @@ private:
     UPROPERTY(Transient)
     TWeakObjectPtr<AEnemy> Owner;
 
+    /** 지금 노리는 대상. 보이는 동안 갱신하고, 전투 중 시야를 놓쳐도 유지한다. 보이는지는 bHasLineOfSight로 판단한다. */
+    UPROPERTY(VisibleInstanceOnly, Transient, Category="AI|Detection")
+    TWeakObjectPtr<APawn> CurrentTarget;
+
+    // AddEngagedEnemy를 보낸 플레이어. 다음에 RemoveEngagedEnemy를 보낼 대상이다.
     UPROPERTY(Transient)
-    TWeakObjectPtr<APawn> VisibleTarget;
+    TWeakObjectPtr<APlayerCharacter> NotifiedPlayer;
 
     FVector LastKnownLocation = FVector::ZeroVector;
     bool bHasLastKnownLocation = false;

@@ -30,12 +30,15 @@
 #include "GAS/Ability/GACloneTech.h"
 #include "Component/InteractBoxComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
+#include "Subsystem/UIMessageSubsystem.h"
 
 #include "GAS/Ability/GALedgeHang.h"
 #include "GAS/Ability/GALedgeClimb.h"
 #include "Component/NoiseComponent.h"
 #include "Noise/NoiseTypes.h"
 #include "GAS/Ability/GAWallSlide.h"
+#include "Character/Enemy.h"
+#include "Component/HidingComponent.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -51,6 +54,8 @@ APlayerCharacter::APlayerCharacter()
 	AssassinateTargetingComponent = CreateDefaultSubobject<UAssassinationTargetingComponent>(TEXT("AssassinateTargeting"));
 
 	NoiseComponent = CreateDefaultSubobject<UNoiseComponent>(TEXT("NoiseComponent"));
+
+	HidingComponent = CreateDefaultSubobject<UHidingComponent>(TEXT("HidingComponent"));
 
 	// 암살도 배열의 기본 항목으로 둔다. 기본 공격 항목은 부모 생성자에서 추가한다.
 	FAbilityInfo& AssassinateInfo = AbilityClassArray.AddDefaulted_GetRef();
@@ -138,7 +143,7 @@ void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (IsAssassinating()) return;
+	if (IsAssassinating() || IsHiding()) return;
 
 	UpdateCursorTarget();
 	UpdateCursorFacing(DeltaSeconds);
@@ -516,6 +521,9 @@ void APlayerCharacter::Die()
 		return;
 	}
 
+	// 숨은 자리에서 죽으면 이동 평면으로 되돌린 뒤 사망을 처리한다.
+	if (IsValid(HidingComponent)) HidingComponent->ForceExit();
+
 	//사망 처리
 	bIsDead = true;
 	DoCameraMoveEnd();
@@ -606,6 +614,11 @@ bool APlayerCharacter::IsAssassinating() const
 {
 	if (!IsValid(ASC)) return false;
 	return ASC->HasMatchingGameplayTag(UGAAssassinate::GetAssassinatingTag());
+}
+
+bool APlayerCharacter::IsHiding() const
+{
+	return IsValid(HidingComponent) && HidingComponent->IsHiding();
 }
 
 bool APlayerCharacter::IsWallAttached() const
@@ -706,6 +719,13 @@ void APlayerCharacter::DoInteract()
 	if (bIsDead) return;
 	if (IsAssassinating()) return;
 
+	// 은신구역에 있는 동안 상호작용 입력은 나오기로만 쓴다. 들어가거나 나오는 중에는 무시된다.
+	if (IsHiding())
+	{
+		HidingComponent->RequestExit();
+		return;
+	}
+
 	// 상호작용보다 암살을 우선하고, 실패하더라도 같은 입력으로 상호작용하지 않는다.
 	if (IsValid(AssassinateTargetingComponent))
 	{
@@ -718,44 +738,6 @@ void APlayerCharacter::DoInteract()
 	}
 
 	this->InteractComponent->TryInteract();
-	//// Clone-tech interactables (levers, clone launch, traps) use a separate interface.
-	//TArray<AActor*> Candidates;
-	//InteractBox->GetOverlappingActors(Candidates);
-	//for (AActor* Candidate : Candidates)
-	//{
-	//    if (IsValid(Candidate) && Candidate != this && Candidate->Implements<UInteractable>()
-	//        && IInteractable::Execute_bIsInteractReady(Candidate))
-	//    {
-	//        IInteractable::Execute_Interact(Candidate, this);
-	//        return;
-	//    }
-	//}
-
-	//// do a sphere trace to look for interactive objects
-	//FHitResult OutHit;
-
-	//const FVector Start = GetActorLocation();
-	//const FVector End = Start + FVector(100.0f, 0.0f, 0.0f);
-
-	//FCollisionShape ColSphere;
-	//ColSphere.SetSphere(InteractionRadius);
-
-	//FCollisionObjectQueryParams ObjectParams;
-	//ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-	//ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
-
-	//FCollisionQueryParams QueryParams;
-	//QueryParams.AddIgnoredActor(this);
-
-	//if (GetWorld()->SweepSingleByObjectType(OutHit, Start, End, FQuat::Identity, ObjectParams, ColSphere, QueryParams))
-	//{
-	//    // have we hit an interactable?
-	//    if (ISideScrollingInteractable* Interactable = Cast<ISideScrollingInteractable>(OutHit.GetActor()))
-	//    {
-	//        // interact
-	//        Interactable->Interaction(this);
-	//    }
-	//}
 }
 
 void APlayerCharacter::DoWAllMove(float Up)
@@ -861,6 +843,19 @@ void APlayerCharacter::SetCloneTargeting(bool bTargeting)
 		return;
 	}
 	bIsCloneTargeting = bTargeting;
+	// 타게팅 중에는 기본 IMC를 빼서 타게팅 IMC(확정, 취소)만 받는다.
+	if (APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController()))
+	{
+		static const FName CloneTargetingLock(TEXT("CloneTargeting"));
+		if (bTargeting)
+		{
+			APC->PushInputLock(CloneTargetingLock);
+		}
+		else
+		{
+			APC->PopInputLock(CloneTargetingLock);
+		}
+	}
 	// 분신 소환 또는 취소 시 카메라를 중앙으로 되돌린다.
 	if (!bTargeting && bIsExploring)
 	{
@@ -1038,7 +1033,14 @@ void APlayerCharacter::DoCloneRecall()
 {
 	if (bIsDead) return;
 	if (!IsValid(ASC)) return;
-
+	if (this->PlayerCondition == EPlayerCondition::Combat)
+	{
+		UUIMessageSubsystem::ShowMessage(Cast<APlayerController>(
+			GetController()), 
+			FText::FromString(TEXT("적에게 발각시엔 사용할 수 없습니다."))
+		);
+		return;
+	}
 	/* TODO: Player 상태가 발각됐거나 전투중이면 바로 리턴하는 코드가 필요해용
 	*/
 	// 기본 어빌리티와 같은 입력 ID 규칙으로 분신 회수 대상을 찾는다.
@@ -1088,8 +1090,52 @@ void APlayerCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSa
 void APlayerCharacter::ReturnToSafePoint_Implementation()
 {
 	if (!bHasSafePoint || bIsDead) return;
+	// 평면 고정을 되돌린 뒤에 안전 지점 평면으로 옮긴다.
+	if (IsValid(HidingComponent)) HidingComponent->ForceExit();
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
 	SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
 	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
+}
+
+void APlayerCharacter::AddEngagedEnemy(AEnemy* InEnemy)
+{
+	if (!IsValid(InEnemy)) return;
+	EngagedEnemies.Add(InEnemy);
+	// 숨어 있다가 발각되면 은신이 풀린다. 나오는 연출은 OnPlayerConditionChanged(Combat)를 받은 쪽이 처리한다.
+	SetPlayerCondition(EPlayerCondition::Combat);
+}
+
+void APlayerCharacter::RemoveEngagedEnemy(AEnemy* InEnemy)
+{
+	EngagedEnemies.Remove(InEnemy);
+	// 알리지 못하고 사라진 적이 플레이어를 Combat에 묶어 두지 않도록 함께 정리한다.
+	for (auto It = EngagedEnemies.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid()) It.RemoveCurrent();
+	}
+
+	// 전투가 끝나도 숨은 자리로 돌아가지 않는다. 발각될 때 이미 은신이 풀렸다.
+	if (EngagedEnemies.Num() == 0 && PlayerCondition == EPlayerCondition::Combat)
+		SetPlayerCondition(EPlayerCondition::Normal);
+}
+
+bool APlayerCharacter::TryEnterHiding()
+{
+	if (PlayerCondition == EPlayerCondition::Combat || bIsDead) return false;
+	SetPlayerCondition(EPlayerCondition::Hidden);
+	return true;
+}
+
+void APlayerCharacter::ExitHiding()
+{
+	if (PlayerCondition == EPlayerCondition::Hidden)
+		SetPlayerCondition(EPlayerCondition::Normal);
+}
+
+void APlayerCharacter::SetPlayerCondition(EPlayerCondition InPlayerCondition)
+{
+	if (InPlayerCondition == PlayerCondition) return;
+	PlayerCondition = InPlayerCondition;
+	OnPlayerConditionChanged.Broadcast(PlayerCondition);
 }

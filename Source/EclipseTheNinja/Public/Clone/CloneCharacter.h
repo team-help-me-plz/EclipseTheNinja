@@ -13,6 +13,7 @@
 
 class ACloneCharacter;
 class UInteractHighlightComponent;
+class UWidgetComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCloneDespawned, ACloneCharacter*, Clone);
 
@@ -61,6 +62,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Clone")
 	FOnCloneDespawned	OnCloneDespawned;
 
+	// 풀에 반환되어 대기 중이면 false. 풀링된 분신은 파괴되지 않으므로 유효성 검사만으로는 구분할 수 없다.
+	bool	IsSpawned() const { return (this->bIsSpawned); }
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Margin")
 	float	TargetLocationMargin = 49.f;
@@ -70,6 +74,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
+
+	// 선택되어 E키로 상호작용할 수 있을 때만 보이는 키 위젯. 위치와 위젯 클래스는 블루프린트에서 지정
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UWidgetComponent>	InteractKeyWidget = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Move")
 	float	TurnPauseTime = 0.2f;

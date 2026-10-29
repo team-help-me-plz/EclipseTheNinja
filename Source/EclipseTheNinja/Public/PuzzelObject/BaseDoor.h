@@ -15,6 +15,7 @@ class UStaticMeshComponent;
 class UCheckpointBoundComponent;
 class UInteractHighlightComponent;
 class UActivateHighlightComponent;
+class UWidgetComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API ABaseDoor : public AActor, public IActivatable, public IInteractable, public ICheckpointResettable, public IVineLockable
@@ -67,6 +68,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UActivateHighlightComponent>	ActivateHighlight = nullptr;
+
+	// 선택되어 E키로 상호작용할 수 있을 때만 보이는 키 위젯. 위치와 위젯 클래스는 블루프린트에서 지정
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UWidgetComponent>	InteractKeyWidget = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.01"))
 	float	DoorMoveTime = 3.0;
