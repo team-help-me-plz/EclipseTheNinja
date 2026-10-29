@@ -20,6 +20,7 @@ class UGABaseAttack;
 class UInteractBoxComponent;
 class UAssassinationTargetingComponent;
 class UNoiseComponent;
+class UHidingComponent;
 class UGAAssassinate;
 class AEnemy;
 struct FInputActionValue;
@@ -50,6 +51,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Noise")
 	TObjectPtr<UNoiseComponent> NoiseComponent;
+
+	// 은신구역에 들어가고 나오는 연출을 맡는다. 숨기 몽타주는 여기에 지정한다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hiding")
+	TObjectPtr<UHidingComponent> HidingComponent;
 
 	// 예전 BP에 저장된 암살 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
 	UPROPERTY()
@@ -168,7 +173,7 @@ public:
 
 	// 표창 투척은 카메라 이동 모드(조준 모드)에서만 허용하며, 분신 타게팅의 좌클릭 확인, 암살 연출 재생 시에는 투척할 수 없도록 한다.
 	UFUNCTION(BlueprintPure, Category = "Combat|Kunai")
-	bool CanThrowKunai() const { return bIsExploring && !bIsCloneTargeting && !bIsDead && !IsAssassinating(); }
+	bool CanThrowKunai() const { return bIsExploring && !bIsCloneTargeting && !bIsDead && !IsAssassinating() && !IsHiding(); }
 
 	// 표창 투척 어빌리티를 실행하는 함수
 	UFUNCTION(BlueprintCallable, Category = "Combat|Kunai")
@@ -200,6 +205,9 @@ public:
 	UAssassinationTargetingComponent* GetAssassinationTargetingComponent() const { return AssassinateTargetingComponent; }
 	bool IsAssassinating() const;
 	bool IsWallAttached() const;
+	// 은신구역에 들어가는 중, 숨어 있는 중, 나오는 중 모두 true.
+	// 이 동안의 입력은 HidingComponent가 컨트롤러 IMC를 바꿔서 제한한다.
+	bool IsHiding() const;
 	void SetAssassinationFacing(float Yaw);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cursor Look")
@@ -234,6 +242,10 @@ public:
 	// 적이 플레이어를 전투 대상으로 삼거나 놓았을 때 호출한다. 같은 적을 여러 번 넣어도 한 번만 센다.
 	void	AddEngagedEnemy(AEnemy* InEnemy);
 	void	RemoveEngagedEnemy(AEnemy* InEnemy);
+
+	// 은신 지점에서 호출한다. 전투 중이면 false를 반환하고 숨지 않는다.
+	bool	TryEnterHiding();
+	void	ExitHiding();
 
 protected:
 	virtual void BeginPlay() override;
