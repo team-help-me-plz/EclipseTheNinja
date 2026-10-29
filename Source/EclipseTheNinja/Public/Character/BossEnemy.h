@@ -8,6 +8,7 @@
 #include "BossEnemy.generated.h"
 
 class UGameplayAbility;
+struct FAbilityEndedData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossEnergyLinkActivated, int32, LinkIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossEnergyLinkEvent);
@@ -103,6 +104,13 @@ public:
 	// 원거리 패턴은 근접 거리보다 먼 곳에서도 공격을 시작하고, 모두 쿨타임이면 추격을 계속한다.
 	virtual bool CanStartAIAttack(AActor* Target) const override;
 
+	// 패턴 사이 휴식 중에는 대상을 바라보며 PatternRestKeepDistance까지만 다가간다. 휴식이 아니면 일반 추격을 한다.
+	virtual void UpdateCombatMovement(AActor* Target, float DeltaSeconds) override;
+
+	// 패턴이 끝난 뒤의 휴식 시간(또는 활성화 실패 후 재시도 대기)이 남아 있는지.
+	UFUNCTION(BlueprintPure, Category = "Boss|Pattern")
+	bool IsRestingBetweenPatterns() const;
+
 	// 원거리 패턴을 쓸 수 있도록 전투 중에는 발각 반경 대신 감지 반경(경계 배율 적용)까지 대상을 계속 본다.
 	virtual float GetCombatSightRadius() const override;
 
@@ -128,6 +136,9 @@ public:
 
 	// 실행 중인 패턴 어빌리티를 취소한다.
 	virtual void CancelAIBaseAttack() override;
+
+	// 보스는 패턴이 끝난 뒤부터 PatternRestTime으로 쉬므로, 패턴 시작 기준 간격(AttackInterval)은 쓰지 않는다.
+	virtual float GetAIAttackCooldown() const override { return 0.1f; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -175,6 +186,9 @@ protected:
 	// 고른 패턴을 화면과 출력 로그에 남긴다.
 	void LogPatternChoice(FName RowName, const FBossPatternRow& Row, float TotalWeight) const;
 
+	// 패턴 어빌리티가 끝나거나 취소되면 PatternRestTimeMin~Max 사이의 휴식 시간 뒤에 다음 패턴을 시작하게 한다.
+	void OnPatternAbilityEnded(const FAbilityEndedData& EndedData);
+
 	// FaceDirection으로 정한 방향까지 TurnRate만큼 회전한다.
 	void UpdateTurning(float DeltaTime);
 
@@ -202,8 +216,23 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern", meta = (ClampMin = "0.0", Units = "cm/s", EditCondition = "bAssumeAttackRangeWhileChasing"))
 	float ChaseAssumeMinTargetSpeed = 150.0f;
 
+	/** 패턴이 끝난 뒤 다음 패턴까지 쉬는 최소 시간(초). 플레이어가 한 텀 쉬어갈 수 있는 틈이다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern", meta = (ClampMin = "0.0", Units = "s"))
+	float PatternRestTimeMin = 1.0f;
+
+	/** 패턴이 끝난 뒤 다음 패턴까지 쉬는 최대 시간(초). 최소값과 같으면 항상 같은 시간만큼 쉰다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern", meta = (ClampMin = "0.0", Units = "s"))
+	float PatternRestTimeMax = 2.0f;
+
+	/** 휴식 중 대상과 유지할 좌우 거리(cm). 이보다 멀면 다가가고, 가까우면 제자리에서 대상을 바라본다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Pattern", meta = (ClampMin = "0.0", Units = "cm"))
+	float PatternRestKeepDistance = 200.0f;
+
 	// 마지막으로 실행한 패턴 어빌리티. 실행 중 판정과 취소에 사용한다.
 	FGameplayAbilitySpecHandle CurrentPatternHandle;
+
+	// ASC의 어빌리티 종료 델리게이트 바인딩
+	FDelegateHandle PatternEndedHandle;
 
 	// 패턴 행 이름별로 다시 쓸 수 있게 되는 월드 시간(초).
 	TMap<FName, double> PatternReadyTimes;

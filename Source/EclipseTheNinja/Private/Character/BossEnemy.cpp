@@ -46,12 +46,23 @@ void ABossEnemy::BeginPlay()
 	{
 		return A > B;
 	});
+
+	// 패턴이 끝난 시점부터 휴식 시간을 센다.
+	if (ASC)
+	{
+		PatternEndedHandle = ASC->OnAbilityEnded.AddUObject(this, &ABossEnemy::OnPatternAbilityEnded);
+	}
 }
 
 void ABossEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
 	GetWorldTimerManager().ClearTimer(ExecutionWaitTimer);
+
+	if (ASC)
+	{
+		ASC->OnAbilityEnded.Remove(PatternEndedHandle);
+	}
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -397,6 +408,12 @@ void ABossEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 
 bool ABossEnemy::CanStartAIAttack(AActor* Target) const
 {
+	// 패턴 사이 휴식 중에는 공격 분기로 넘어가지 않고 추격 분기에서 대상을 바라보며 거리를 맞춘다.
+	if (IsRestingBetweenPatterns())
+	{
+		return false;
+	}
+
 	if (!PatternTable)
 	{
 		return Super::CanStartAIAttack(Target);
@@ -411,6 +428,39 @@ bool ABossEnemy::CanStartAIAttack(AActor* Target) const
 	float TotalWeight = 0.0f;
 	GatherUsablePatterns(Target, Candidates, TotalWeight);
 	return !Candidates.IsEmpty();
+}
+
+bool ABossEnemy::IsRestingBetweenPatterns() const
+{
+	return GetWorld()->GetTimeSeconds() < NextAttackTime;
+}
+
+void ABossEnemy::UpdateCombatMovement(AActor* Target, float DeltaSeconds)
+{
+	if (!IsRestingBetweenPatterns())
+	{
+		Super::UpdateCombatMovement(Target, DeltaSeconds);
+		return;
+	}
+
+	if (!IsValidAITarget(Target) || DeltaSeconds <= 0.0f)
+	{
+		return;
+	}
+
+	const float OffsetX = Target->GetActorLocation().X - GetActorLocation().X;
+
+	// 휴식 거리보다 멀면 대상 앞 휴식 거리 지점까지 다가간다. 다가가는 동안의 회전은 MoveAlongX가 맡는다.
+	if (FMath::Abs(OffsetX) > PatternRestKeepDistance)
+	{
+		const float DestinationX = Target->GetActorLocation().X - FMath::Sign(OffsetX) * PatternRestKeepDistance;
+		MoveAlongX(DestinationX, ChaseSpeed, DeltaSeconds);
+		return;
+	}
+
+	// 충분히 가까우면 제자리에서 대상을 바라보며 다음 패턴을 기다린다.
+	StopHorizontalMovement();
+	FaceLocation(Target->GetActorLocation());
 }
 
 float ABossEnemy::GetCombatSightRadius() const
@@ -646,6 +696,22 @@ bool ABossEnemy::IsAttackActive() const
 	}
 
 	return Super::IsAttackActive();
+}
+
+void ABossEnemy::OnPatternAbilityEnded(const FAbilityEndedData& EndedData)
+{
+	if (bIsDead || !CurrentPatternHandle.IsValid() || EndedData.AbilitySpecHandle != CurrentPatternHandle)
+	{
+		return;
+	}
+
+	const float RestTime = FMath::FRandRange(
+		PatternRestTimeMin,
+		FMath::Max(PatternRestTimeMin, PatternRestTimeMax)
+	);
+
+	// 피격 경직 등으로 이미 더 늦게 잡힌 공격 시각은 앞당기지 않는다.
+	NextAttackTime = FMath::Max(NextAttackTime, GetWorld()->GetTimeSeconds() + RestTime);
 }
 
 void ABossEnemy::CancelAIBaseAttack()
