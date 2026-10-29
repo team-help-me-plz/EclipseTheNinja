@@ -13,6 +13,7 @@
 
 class ACloneCharacter;
 class UInteractHighlightComponent;
+class UWidgetComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCloneDespawned, ACloneCharacter*, Clone);
 
@@ -70,6 +71,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
+
+	// 선택되어 E키로 상호작용할 수 있을 때만 보이는 키 위젯. 위치와 위젯 클래스는 블루프린트에서 지정
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UWidgetComponent>	InteractKeyWidget = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Move")
 	float	TurnPauseTime = 0.2f;

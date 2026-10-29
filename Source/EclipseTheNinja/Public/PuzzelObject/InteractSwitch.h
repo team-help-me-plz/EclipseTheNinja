@@ -13,6 +13,7 @@ class AMeshAssembly;
 class USphereComponent;
 class UCheckpointBoundComponent;
 class UInteractHighlightComponent;
+class UWidgetComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API AInteractSwitch : public AActor, public IInteractable, public ICheckpointResettable
@@ -55,6 +56,10 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
+
+	// 선택되어 E키로 상호작용할 수 있을 때만 보이는 키 위젯. 위치와 위젯 클래스는 블루프린트에서 지정
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UWidgetComponent>	InteractKeyWidget = nullptr;
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|Target")
 	TObjectPtr<AActor>			TargetActor = nullptr;

@@ -5,6 +5,7 @@
 #include "Component/ActivateHighlightComponent.h"
 
 #include "Components/MeshComponent.h"
+#include "Components/WidgetComponent.h"
 #include "Materials/MaterialInstance.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -39,8 +40,19 @@ UInteractHighlightComponent::UInteractHighlightComponent()
 	}
 }
 
+void UInteractHighlightComponent::SetKeyWidget(UWidgetComponent* InWidget)
+{
+	this->KeyWidget = InWidget;
+}
+
 void UInteractHighlightComponent::SetHighlight(EInteractState InState, bool InbIsSelected)
 {
+	// 상호작용 키 위젯은 지금 E키로 상호작용할 수 있을 때만 보인다 (쿨다운, Done이면 숨김)
+	if (IsValid(this->KeyWidget))
+	{
+		this->KeyWidget->SetVisibility(InbIsSelected && InState == EInteractState::Ready);
+	}
+
 	if (InState == EInteractState::Done)
 	{
 		this->SetParentHighlight(nullptr);

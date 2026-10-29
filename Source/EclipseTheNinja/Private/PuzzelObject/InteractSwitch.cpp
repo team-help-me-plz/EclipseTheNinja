@@ -9,6 +9,7 @@
 #include "Component/InteractHighlightComponent.h"
 
 #include "Components/SphereComponent.h"
+#include "Components/WidgetComponent.h"
 
 // Sets default values
 AInteractSwitch::AInteractSwitch()
@@ -28,6 +29,13 @@ AInteractSwitch::AInteractSwitch()
 
 	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 	this->InteractHighlight = CreateDefaultSubobject<UInteractHighlightComponent>(TEXT("InteractHighlight"));
+
+	this->InteractKeyWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractKeyWidget"));
+	this->InteractKeyWidget->SetupAttachment(GetRootComponent());
+	this->InteractKeyWidget->SetWidgetSpace(EWidgetSpace::Screen);
+	this->InteractKeyWidget->SetDrawAtDesiredSize(true);
+	this->InteractKeyWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	this->InteractKeyWidget->SetVisibility(false);
 }
 
 void AInteractSwitch::ResetToInitial_Implementation()
@@ -44,6 +52,10 @@ void AInteractSwitch::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (IsValid(this->InteractHighlight))
+	{
+		this->InteractHighlight->SetKeyWidget(this->InteractKeyWidget);
+	}
 	this->RefreshInteractState();
 
 	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();

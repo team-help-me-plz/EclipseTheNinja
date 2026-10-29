@@ -8,6 +8,7 @@
 #include "Subsystem/UIMessageSubsystem.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "Components/WidgetComponent.h"
 #include "Engine/StaticMesh.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -30,6 +31,13 @@ ABaseDoor::ABaseDoor()
 	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 	this->InteractHighlight = CreateDefaultSubobject<UInteractHighlightComponent>(TEXT("InteractHighlight"));
 	this->ActivateHighlight = CreateDefaultSubobject<UActivateHighlightComponent>(TEXT("ActivateHighlight"));
+
+	this->InteractKeyWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractKeyWidget"));
+	this->InteractKeyWidget->SetupAttachment(GetRootComponent());
+	this->InteractKeyWidget->SetWidgetSpace(EWidgetSpace::Screen);
+	this->InteractKeyWidget->SetDrawAtDesiredSize(true);
+	this->InteractKeyWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	this->InteractKeyWidget->SetVisibility(false);
 }
 
 void ABaseDoor::BeginPlay()
@@ -40,6 +48,10 @@ void ABaseDoor::BeginPlay()
 	//this->OpenLocation = GetActorLocation() + this->OpenOffset;
 	this->OpenAlpha = 0.0;
 	this->bInitialIsOpen = this->bIsOpen;
+	if (IsValid(this->InteractHighlight))
+	{
+		this->InteractHighlight->SetKeyWidget(this->InteractKeyWidget);
+	}
 	this->RefreshInteractState();
 }
 
@@ -50,6 +62,10 @@ void ABaseDoor::ResetToInitial_Implementation()
 
 	GetWorldTimerManager().ClearTimer(this->InteractionCooldownTimer);
 	this->bIsInteractCooldown = false;
+	if (IsValid(this->InteractHighlight))
+	{
+		this->InteractHighlight->SetKeyWidget(this->InteractKeyWidget);
+	}
 	this->RefreshInteractState();
 }
 

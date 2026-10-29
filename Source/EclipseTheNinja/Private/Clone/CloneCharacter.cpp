@@ -6,6 +6,7 @@
 #include "Component/InteractHighlightComponent.h"
 
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/WidgetComponent.h"
 #include "Engine/TargetPoint.h"
 
 // Sets default values
@@ -27,6 +28,13 @@ ACloneCharacter::ACloneCharacter()
 	Movement->RotationRate = FRotator(0.f, 540.f, 0.f);
 
 	this->InteractHighlight = CreateDefaultSubobject<UInteractHighlightComponent>(TEXT("InteractHighlight"));
+
+	this->InteractKeyWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractKeyWidget"));
+	this->InteractKeyWidget->SetupAttachment(GetRootComponent());
+	this->InteractKeyWidget->SetWidgetSpace(EWidgetSpace::Screen);
+	this->InteractKeyWidget->SetDrawAtDesiredSize(true);
+	this->InteractKeyWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	this->InteractKeyWidget->SetVisibility(false);
 }
 
 // Called when the game starts or when spawned
@@ -36,6 +44,10 @@ void ACloneCharacter::BeginPlay()
 
 	InitializeWalkState();
 	this->bIsSpawned = true;
+	if (IsValid(this->InteractHighlight))
+	{
+		this->InteractHighlight->SetKeyWidget(this->InteractKeyWidget);
+	}
 	this->RefreshInteractState();
 }
 
