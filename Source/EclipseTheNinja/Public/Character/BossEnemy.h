@@ -20,13 +20,13 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossPhaseChanged, int32, NewPhase
  * 감지·경계·추격·피격·체크포인트 리셋은 AEnemy의 일반 적 흐름을 그대로 사용한다.
  * 이 클래스는 보스 전용 규칙만 추가한다.
  * - 공격: BT의 Attack 태스크가 호출하면 PatternTable에서 쿨타임과 사용 거리를 통과한 패턴을 가중치 랜덤으로 골라 실행한다.
- *   패턴은 각각 UGABossPatternBase 계열 어빌리티이며, 테이블이 없으면 BossQuickDraw 입력 ID의 어빌리티(발도)를 실행한다.
+ *   패턴은 각각 UGABossPatternBase 계열 어빌리티이며, 테이블이 없으면 공격하지 않는다.
  * - 에너지 링크: 체력이 EnergyLinkThresholds 비율에 닿으면 그 값에서 체력을 멈추고 무적 실드를 켠다.
  *   실드는 레버(IActivatable) 또는 BreakEnergyLink 호출로 해제되고, 제한시간이 지나면 보스가 플레이어를 처형(암살)한다.
  * - 암살: 가장 가까운 아래쪽 에너지 링크 체력까지 즉시 깎는다. 체력이 AssassinationKillRatio 이하면 즉시 처치한다.
  * - 페이즈: 1페이즈에서 시작해 에너지 링크를 파훼할 때마다 1씩 오른다. 체력 구간이 아니라 파훼 횟수로 정한다.
  *   RunPhase 전에는 StanceWalkSpeed로 자세를 잡고 걷고, RunPhase부터 ChaseSpeed로 달린다.
- *   패턴 테이블의 MinPhase보다 낮은 페이즈에서는 그 패턴을 고르지 않는다.
+ *   패턴 테이블의 PhaseWeights에서 지금 페이즈의 가중치로 패턴을 고르며, 가중치가 0인 페이즈에서는 그 패턴을 고르지 않는다.
  */
 UCLASS()
 class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
@@ -131,7 +131,7 @@ public:
 	// 공격 도중 대상이 죽거나 사라져도 패턴 몽타주를 끝까지 재생한다.
 	virtual bool ShouldFinishAttackWithoutTarget() const override { return true; }
 
-	// 패턴 테이블로 고른 어빌리티가 실행 중인지. 테이블이 없으면 기본 입력 ID 어빌리티를 본다.
+	// 패턴 테이블로 고른 어빌리티가 실행 중인지. 아직 패턴을 쓰지 않았으면 기본 공격 입력 ID 어빌리티를 본다.
 	virtual bool IsAttackActive() const override;
 
 	// 실행 중인 패턴 어빌리티를 취소한다.
@@ -148,10 +148,8 @@ protected:
 	// 에너지 링크 체력에 닿았는지 검사한 뒤 일반 적의 피격/사망 처리로 넘긴다.
 	virtual void OnHealthChanged(const FOnAttributeChangeData& Data) override;
 
-	virtual EAbilityInputID GetAIAttackInputID() const override { return EAbilityInputID::BossQuickDraw; }
-
 	// 패턴 테이블에서 쿨타임·거리 조건을 통과한 패턴 중 가중치 랜덤으로 하나를 골라 그 어빌리티를 활성화한다.
-	// 테이블이 없으면 BossQuickDraw 입력 ID의 어빌리티를 실행한다. 고를 패턴이 없으면 공격하지 않는다.
+	// 테이블이 없거나 고를 패턴이 없으면 공격하지 않는다.
 	virtual bool ActivateAIAttack() override;
 
 	// 지금 대상에게 쓸 수 있는(쿨타임이 끝났고 사용 거리 안인) 패턴 행과 그 가중치 합을 모은다.
@@ -161,7 +159,7 @@ protected:
 		float& OutTotalWeight
 	) const;
 
-	// 패턴 행이 지금 페이즈에서 쓸 수 있고(MinPhase), 쿨타임이 아니고, 대상과의 거리가 패턴의 사용 거리 안인지.
+	// 패턴 행이 지금 페이즈에서 쓸 수 있고(PhaseWeights > 0), 쿨타임이 아니고, 대상과의 거리가 패턴의 사용 거리 안인지.
 	// bAssumeInAttackDistance면 실제 거리와 함께 AttackDistance에 있는 것으로도 검사한다.
 	bool IsPatternUsable(
 		FName RowName,

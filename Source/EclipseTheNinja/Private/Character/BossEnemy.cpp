@@ -414,12 +414,7 @@ bool ABossEnemy::CanStartAIAttack(AActor* Target) const
 		return false;
 	}
 
-	if (!PatternTable)
-	{
-		return Super::CanStartAIAttack(Target);
-	}
-
-	if (!IsValidAITarget(Target))
+	if (!PatternTable || !IsValidAITarget(Target))
 	{
 		return false;
 	}
@@ -481,12 +476,10 @@ bool ABossEnemy::ActivateAIAttack()
 		return false;
 	}
 
+	// 패턴은 모두 패턴 테이블로 고른다. 테이블이 없으면 공격하지 않는다.
 	if (!PatternTable)
 	{
-		// 테이블이 없으면 기존처럼 입력 ID로 지정한 기본 패턴을 실행한다.
-		const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(GetAIAttackInputID());
-		CurrentPatternHandle = Spec ? Spec->Handle : FGameplayAbilitySpecHandle();
-		return TryActivateAbilityByInputID(GetAIAttackInputID());
+		return false;
 	}
 
 	FName RowName;
@@ -542,6 +535,7 @@ void ABossEnemy::GatherUsablePatterns(
 
 	const float Distance = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
 	const bool bAssumeInAttackDistance = IsChasingFleeingTarget(Target);
+	const int32 Phase = GetPhase();
 	for (const TPair<FName, uint8*>& Pair : PatternTable->GetRowMap())
 	{
 		const FBossPatternRow* Row = reinterpret_cast<const FBossPatternRow*>(Pair.Value);
@@ -551,7 +545,7 @@ void ABossEnemy::GatherUsablePatterns(
 		}
 
 		OutCandidates.Emplace(Pair.Key, Row);
-		OutTotalWeight += Row->Weight;
+		OutTotalWeight += Row->GetWeightForPhase(Phase);
 	}
 }
 
@@ -562,13 +556,8 @@ bool ABossEnemy::IsPatternUsable(
 	bool bAssumeInAttackDistance
 ) const
 {
-	// 가중치가 있고 어빌리티가 지정된 행만 후보로 삼는다.
-	if (Row.Weight <= 0.0f || !Row.AbilityClass)
-	{
-		return false;
-	}
-
-	if (GetPhase() < Row.MinPhase)
+	// 지금 페이즈의 가중치가 있고 어빌리티가 지정된 행만 후보로 삼는다.
+	if (Row.GetWeightForPhase(GetPhase()) <= 0.0f || !Row.AbilityClass)
 	{
 		return false;
 	}
@@ -652,10 +641,11 @@ const FBossPatternRow* ABossEnemy::PickNextPattern(const AActor* Target, FName& 
 	}
 
 	// 0 ~ 후보 가중치 합 사이 값을 뽑아 누적 가중치가 그 값을 넘는 행을 고른다.
+	const int32 Phase = GetPhase();
 	float Roll = FMath::FRandRange(0.0f, OutTotalWeight);
 	for (const TPair<FName, const FBossPatternRow*>& Candidate : Candidates)
 	{
-		Roll -= Candidate.Value->Weight;
+		Roll -= Candidate.Value->GetWeightForPhase(Phase);
 		if (Roll <= 0.0f)
 		{
 			OutRowName = Candidate.Key;
@@ -669,14 +659,15 @@ const FBossPatternRow* ABossEnemy::PickNextPattern(const AActor* Target, FName& 
 
 void ABossEnemy::LogPatternChoice(FName RowName, const FBossPatternRow& Row, float TotalWeight) const
 {
+	const float Weight = Row.GetWeightForPhase(GetPhase());
 	const FString Message = FString::Printf(
 		TEXT("[보스 패턴] %d페이즈 %s (%s) - 가중치 %.1f / 합 %.1f (%.1f%%), 쿨타임 %.1f초"),
 		GetPhase(),
 		*Row.DisplayName.ToString(),
 		*RowName.ToString(),
-		Row.Weight,
+		Weight,
 		TotalWeight,
-		TotalWeight > 0.0f ? Row.Weight / TotalWeight * 100.0f : 0.0f,
+		TotalWeight > 0.0f ? Weight / TotalWeight * 100.0f : 0.0f,
 		Row.Cooldown
 	);
 
