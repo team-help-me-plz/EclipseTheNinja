@@ -9,7 +9,6 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "TimerManager.h"
 
 void UGABossGaleSlash::OnPatternHit(const FBossAttackHitArea& HitArea)
 {
@@ -27,9 +26,8 @@ void UGABossGaleSlash::OnPatternHit(const FBossAttackHitArea& HitArea)
 
 	bDashStarted = true;
 	bDashing = true;
-	bDashHitTarget = false;
 	DashHitArea = HitArea;
-	DashPrevLocation = Enemy->GetActorLocation();
+	DashStartLocation = Enemy->GetActorLocation();
 
 	// 플레이어를 뚫고 지나가도록 돌진하는 동안 캡슐이 Pawn과 부딪히지 않게 한다.
 	if (bPassThroughPawns)
@@ -40,12 +38,9 @@ void UGABossGaleSlash::OnPatternHit(const FBossAttackHitArea& HitArea)
 		bPawnCollisionChanged = true;
 	}
 
-	// 시작 위치에 이미 겹쳐 있는 대상도 맞도록 출발 전에 한 번 검사한다.
-	SweepDashPath();
-
 	// 보스가 바라보는 방향으로 DashDistance만큼 이동한다. 끝나면 미끄러지지 않도록 속도를 0으로 둔다.
 	const FVector DashDirection = Enemy->GetActorForwardVector().GetSafeNormal2D();
-	const FVector TargetLocation = DashPrevLocation + DashDirection * DashDistance;
+	const FVector TargetLocation = DashStartLocation + DashDirection * DashDistance;
 
 	UAbilityTask_ApplyRootMotionMoveToForce* DashTask = UAbilityTask_ApplyRootMotionMoveToForce::ApplyRootMotionMoveToForce(
 		this,
@@ -63,67 +58,41 @@ void UGABossGaleSlash::OnPatternHit(const FBossAttackHitArea& HitArea)
 	DashTask->OnTimedOutAndDestinationReached.AddDynamic(this, &UGABossGaleSlash::OnDashFinished);
 	DashTask->OnTimedOut.AddDynamic(this, &UGABossGaleSlash::OnDashFinished);
 	DashTask->ReadyForActivation();
-
-	DashTickTimer = Enemy->GetWorldTimerManager().SetTimerForNextTick(this, &UGABossGaleSlash::TickDash);
 }
 
-void UGABossGaleSlash::TickDash()
+FBossAttackHitArea UGABossGaleSlash::MakeDashPathArea(const AEnemy* Enemy) const
 {
-	const AActor* Avatar = GetAvatarActorFromActorInfo();
-	if (!IsActive() || !bDashing || !Avatar)
-	{
-		return;
-	}
+	// 실제로 이동한 거리를 보스 기준(회전·스케일을 뺀) 좌표로 바꾼다. 벽에 막히면 막힌 곳까지만 덮는다.
+	const FTransform& ActorTransform = Enemy->GetActorTransform();
+	const FVector LocalDelta = ActorTransform.InverseTransformVector(Enemy->GetActorLocation() - DashStartLocation);
 
-	SweepDashPath();
-
-	DashTickTimer = Avatar->GetWorldTimerManager().SetTimerForNextTick(this, &UGABossGaleSlash::TickDash);
+	// 도착 위치 기준으로 출발 위치 상자까지 늘린다. 상자 중심은 이동한 거리의 절반만큼 뒤로 간다.
+	FBossAttackHitArea PathArea = DashHitArea;
+	PathArea.Offset = DashHitArea.Offset - LocalDelta * 0.5f;
+	PathArea.HalfExtent = DashHitArea.HalfExtent + LocalDelta.GetAbs() * 0.5f;
+	return PathArea;
 }
 
-void UGABossGaleSlash::SweepDashPath()
+void UGABossGaleSlash::ApplyDashPathDamage()
 {
 	AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
 	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
-	if (!Enemy || !SourceASC)
+	if (!Enemy || !SourceASC || Enemy->IsDead())
 	{
 		return;
 	}
 
-	// 판정 상자는 보스를 따라 움직이므로, 지난 위치의 상자에서 지금 위치의 상자까지 쓴다.
-	const FTransform& ActorTransform = Enemy->GetActorTransform();
-	const FVector WorldOffset = ActorTransform.TransformVector(DashHitArea.Offset);
-	const FVector CurrentLocation = Enemy->GetActorLocation();
-	const FVector SweepStart = DashPrevLocation + WorldOffset;
-	const FVector SweepEnd = CurrentLocation + WorldOffset;
-	DashPrevLocation = CurrentLocation;
+	const FBossAttackHitArea PathArea = MakeDashPathArea(Enemy);
 
 	TArray<FHitResult> Hits;
-	if (FVector::DistSquared(SweepStart, SweepEnd) < KINDA_SMALL_NUMBER)
-	{
-		// 움직이지 않은 프레임은 그 자리의 상자만 검사한다.
-		QueryHitArea(Enemy, DashHitArea, Hits);
-	}
-	else
-	{
-		FCollisionObjectQueryParams ObjectParams;
-		ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
-		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(BossGaleSlash), false, Enemy);
+	QueryHitArea(Enemy, PathArea, Hits);
 
-		Enemy->GetWorld()->SweepMultiByObjectType(
-			Hits,
-			SweepStart,
-			SweepEnd,
-			ActorTransform.GetRotation(),
-			ObjectParams,
-			FCollisionShape::MakeBox(GetScaledHitExtent(ActorTransform, DashHitArea)),
-			QueryParams
-		);
-	}
-
-	// 돌진 한 번에 전투 대상은 한 번만 맞는다. 적끼리는 공격하지 않는다.
+	// 경로 안의 전투 대상에게만 한 번 피해를 준다. 적끼리는 공격하지 않는다.
 	AActor* CombatTarget = Enemy->GetCombatTarget();
 	const float HitDamage = Damage * DashHitArea.DamageScale;
-	if (!bDashHitTarget && CombatTarget && FMath::IsFinite(HitDamage) && HitDamage > 0.0f)
+	bool bHitTarget = false;
+
+	if (CombatTarget && FMath::IsFinite(HitDamage) && HitDamage > 0.0f)
 	{
 		for (const FHitResult& Hit : Hits)
 		{
@@ -132,13 +101,13 @@ void UGABossGaleSlash::SweepDashPath()
 				continue;
 			}
 
-			bDashHitTarget = ApplyHitDamage(SourceASC, CombatTarget, Hit, HitDamage);
+			bHitTarget = ApplyHitDamage(SourceASC, CombatTarget, Hit, HitDamage);
 			break;
 		}
 	}
 
-	// 디버그를 켜면 프레임마다 지금 위치의 상자가 남아 돌진 경로가 보인다.
-	DrawDebugHitArea(Enemy, DashHitArea, Hits, bDashHitTarget);
+	// 디버그를 켜면 출발~도착 위치를 덮는 판정 상자 하나가 그려진다.
+	DrawDebugHitArea(Enemy, PathArea, Hits, bHitTarget);
 }
 
 void UGABossGaleSlash::OnDashFinished()
@@ -148,15 +117,11 @@ void UGABossGaleSlash::OnDashFinished()
 		return;
 	}
 
-	// 마지막 프레임의 이동 구간까지 검사한 뒤 돌진을 끝낸다.
-	SweepDashPath();
+	// 다 지나간 뒤에 출발~도착 사이를 한 번 판정한다.
 	bDashing = false;
+	ApplyDashPathDamage();
 
 	const AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
-	if (Enemy)
-	{
-		Enemy->GetWorldTimerManager().ClearTimer(DashTickTimer);
-	}
 
 	RestorePawnCollision();
 
@@ -213,22 +178,16 @@ void UGABossGaleSlash::EndAbility(
 	bool bWasCancelled
 )
 {
-	// 돌진 도중 패턴이 끊겨도 충돌과 타이머가 남지 않게 정리한다.
+	// 돌진 도중 패턴이 끊기면 판정 없이 멈추고, 바꾼 충돌을 되돌린다.
 	const AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
-	if (Enemy)
+	if (Enemy && bDashing)
 	{
-		Enemy->GetWorldTimerManager().ClearTimer(DashTickTimer);
-
-		if (bDashing)
-		{
-			Enemy->GetCharacterMovement()->StopMovementImmediately();
-		}
+		Enemy->GetCharacterMovement()->StopMovementImmediately();
 	}
 
 	RestorePawnCollision();
 	bDashStarted = false;
 	bDashing = false;
-	bDashHitTarget = false;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

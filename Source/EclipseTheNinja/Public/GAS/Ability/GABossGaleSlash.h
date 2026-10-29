@@ -9,9 +9,10 @@
  * 보스 질풍참 패턴. 발도 준비 자세로 오래 기를 모은 뒤, 순식간에 정면으로 DashDistance만큼 지나가며 벤다.
  *
  * - 준비: UGABossPatternBase의 Windup 설정(WindupExtraTime 등)으로 준비 자세 길이를 정한다.
- * - 시전: 몽타주의 첫 Boss Attack Hit 노티파이에서 돌진을 시작한다. 돌진하는 동안 노티파이의 판정 상자를
- *   보스와 함께 이동 경로를 따라 쓸고 지나가며, 경로에 걸린 전투 대상에게 한 번만 피해를 준다.
- *   돌진 중에는 Pawn과 부딪히지 않아 플레이어를 뚫고 지나간다. 벽에 막히면 그 자리에서 멈춘다.
+ * - 시전: 몽타주의 첫 Boss Attack Hit 노티파이에서 돌진을 시작한다. 돌진 중에는 판정하지 않고,
+ *   돌진이 끝나는 순간 출발 위치와 도착 위치 사이(노티파이 판정 상자가 지나간 범위 전체)를 한 번 검사해
+ *   그 안의 전투 대상에게 피해를 한 번 준다. 지나간 뒤에 베인 것이 드러나는 연출이다.
+ *   돌진 중에는 Pawn과 부딪히지 않아 플레이어를 뚫고 지나간다. 벽에 막히면 그 자리에서 멈추고, 실제로 지나간 거리만 판정한다.
  * - 후딜레이: 돌진이 끝나면 DashEndHoldTime만큼 베고 난 자세로 멈춘 뒤, 몽타주의 남은 부분(평상 자세로 돌아오는 동작)을 재생한다.
  *
  * 시전 순간의 반짝임 같은 이펙트는 몽타주에 엔진의 Play Niagara Particle Effect 노티파이로 넣는다.
@@ -34,13 +35,13 @@ protected:
 	// 첫 타격 노티파이에서 돌진을 시작한다. 이후 노티파이는 무시한다.
 	virtual void OnPatternHit(const FBossAttackHitArea& HitArea) override;
 
-	// 매 프레임 지난 위치에서 지금 위치까지 판정 상자를 쓸어 대상을 맞힌다.
-	void TickDash();
+	// 출발 위치의 판정 상자부터 지금 위치의 판정 상자까지 모두 덮는, 보스 기준 판정 영역을 만든다.
+	FBossAttackHitArea MakeDashPathArea(const AEnemy* Enemy) const;
 
-	// 판정 상자를 이전 보스 위치에서 지금 보스 위치까지 쓸어 전투 대상에게 피해를 준다.
-	void SweepDashPath();
+	// 돌진 경로 영역을 한 번 검사해 안에 있는 전투 대상에게 피해를 한 번 준다.
+	void ApplyDashPathDamage();
 
-	// 돌진이 끝나면(목표 도달 또는 벽에 막혀 시간 초과) 충돌을 되돌리고 후딜레이를 시작한다.
+	// 돌진이 끝나면(목표 도달 또는 벽에 막혀 시간 초과) 경로 판정을 하고, 충돌을 되돌리고, 후딜레이를 시작한다.
 	UFUNCTION()
 	void OnDashFinished();
 
@@ -73,10 +74,8 @@ protected:
 	// 돌진 상태
 	bool bDashStarted = false;
 	bool bDashing = false;
-	bool bDashHitTarget = false;
 	FBossAttackHitArea DashHitArea;
-	FVector DashPrevLocation = FVector::ZeroVector;
-	FTimerHandle DashTickTimer;
+	FVector DashStartLocation = FVector::ZeroVector;
 
 	// 돌진 전 캡슐의 Pawn 채널 응답. 돌진이 끝나면 되돌린다.
 	bool bPawnCollisionChanged = false;
