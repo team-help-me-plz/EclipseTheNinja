@@ -494,6 +494,12 @@ bool AEnemy::IsLivingPlayer(const APawn* Player) const
 	{
 		return false;
 	}
+	// 회수되어 풀에서 대기 중인 분신은 대상이 아니다.
+	const ACloneCharacter* Clone = Cast<ACloneCharacter>(Player);
+	if (Clone && !Clone->IsSpawned())
+	{
+		return false;
+	}
 	const IAbilitySystemInterface* AbilityOwner = Cast<IAbilitySystemInterface>(Player);
 	const UAbilitySystemComponent* PlayerASC = AbilityOwner ? AbilityOwner->GetAbilitySystemComponent() : nullptr;
 

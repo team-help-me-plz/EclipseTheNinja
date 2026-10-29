@@ -62,6 +62,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Clone")
 	FOnCloneDespawned	OnCloneDespawned;
 
+	// 풀에 반환되어 대기 중이면 false. 풀링된 분신은 파괴되지 않으므로 유효성 검사만으로는 구분할 수 없다.
+	bool	IsSpawned() const { return (this->bIsSpawned); }
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Margin")
 	float	TargetLocationMargin = 49.f;
