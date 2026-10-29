@@ -18,8 +18,10 @@
 #include "CollisionShape.h"
 #include "CollisionQueryParams.h"
 #include "DrawDebugHelpers.h"
-#include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "GameFramework/RootMotionSource.h"
+#include "Curves/CurveFloat.h"
+#include "TimerManager.h"
 #include "Character/Enemy.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
@@ -107,35 +109,23 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	FVector End = Start + Dir * DashDistance;
 	FCollisionShape Shape = FCollisionShape::MakeCapsule(FMath::Max(1.f, Radius - 2.f), FMath::Max(1.f, halfHeight - 2.f));
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SwiftStrike), false, Player);
-	FCollisionResponseParams ResponseParams;
-	ResponseParams.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+	// 시작할 때 살짝 겹쳐 있어도 제자리에서 멈추지 않게 한다. 겹침은 이동 중에 캐릭터 무브먼트가 풀어 준다.
+	Params.bFindInitialOverlaps = false;
 
-	if (GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_Visibility, Shape, Params, ResponseParams))
+	// 실제 이동과 같은 기준으로 막히는 지점을 찾는다. 투명벽처럼 Visibility는 무시하고 Pawn만 막는 물체도 반영된다.
+	const ECollisionChannel MoveChannel = Capsule->GetCollisionObjectType();
+	FCollisionResponseParams WorldResponse(Capsule->GetCollisionResponseToChannels());
+	WorldResponse.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+
+	if (GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, MoveChannel, Shape, Params, WorldResponse))
 	{
-		if (!Hit.bStartPenetrating)
-		{
-			// TODO
-		}
-
 		End = Hit.Location;
 	}
 
+	End = ResolveDashEnd(Start, End, Dir, Shape, MoveChannel, Params, WorldResponse, Capsule->GetCollisionResponseToChannel(ECC_Pawn));
+
 	const float ActualDistance = FVector::Dist2D(Start, End);
 	const float MoveDuration = FMath::Max(0.03f, Duration * ActualDistance / DashDistance);
-
-	UAbilityTask_ApplyRootMotionMoveToForce* MoveTask = UAbilityTask_ApplyRootMotionMoveToForce::ApplyRootMotionMoveToForce(
-		this,
-		NAME_None,
-		End,
-		MoveDuration,
-		false,
-		MOVE_Walking,
-		false,
-		nullptr,
-		ERootMotionFinishVelocityMode::SetVelocity,
-		FVector::ZeroVector,
-		0.0f
-	);
 
 	AttackTargets.Reset();
 	CollectTargets(Player, Start, End, Shape);
@@ -151,9 +141,6 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		SourceASC->AddLooseGameplayTag(EclipseGameplayTags::State_Invincible);
 		bDashInvincibilityAdded = true;
 	}
-
-	MoveTask->OnTimedOutAndDestinationReached.AddDynamic(this, &UGASwiftStrike::OnSwiftStrikeFinished);
-	MoveTask->OnTimedOut.AddDynamic(this, &UGASwiftStrike::OnSwiftStrikeFinished);
 
 	// 짧은 돌진이 먼저 끝나더라도 몽타주 완료를 기다릴 수 있도록 먼저 재생한다.
 	TSoftObjectPtr<UAnimMontage> SelectedMontage = SwiftStrikeMontage;
@@ -211,11 +198,141 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 
 	// 몽타주 재생 실패로 취소되었다면 이동을 시작하지 않는다.
 	if (!IsActive()) return;
-	MoveTask->ReadyForActivation();
+
+	UCharacterMovementComponent* DashMovement = Player->GetCharacterMovement();
+	if (!IsValid(DashMovement))
+	{
+		OnSwiftStrikeFinished();
+		return;
+	}
+
+	// 등속 대신 감속 곡선으로 이동해 출발 직후 대부분을 가고 끝에서 급하게 멈춘다.
+	TSharedPtr<FRootMotionSource_MoveToDynamicForce> DashForce = MakeShared<FRootMotionSource_MoveToDynamicForce>();
+	DashForce->InstanceName = TEXT("SwiftStrike");
+	DashForce->AccumulateMode = ERootMotionAccumulateMode::Override;
+	DashForce->Settings.SetFlag(ERootMotionSourceSettingsFlags::UseSensitiveLiftoffCheck);
+	DashForce->Priority = 900;
+	DashForce->StartLocation = Start;
+	DashForce->InitialTargetLocation = End;
+	DashForce->TargetLocation = End;
+	DashForce->Duration = MoveDuration;
+	DashForce->bRestrictSpeedToExpected = false;
+	DashForce->TimeMappingCurve = GetDashTimeCurve();
+	DashForce->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::SetVelocity;
+	DashDirection = (End - Start).GetSafeNormal2D();
+	DashForce->FinishVelocityParams.SetVelocity = DashDirection * DashEndSpeed;
+	DashRootMotionSourceID = DashMovement->ApplyRootMotionSource(DashForce);
+
+	GetWorld()->GetTimerManager().SetTimer(DashTimerHandle, this, &UGASwiftStrike::OnSwiftStrikeFinished, MoveDuration, false);
+}
+
+FVector UGASwiftStrike::ResolveDashEnd(const FVector& Start, const FVector& End, const FVector& Dir, const FCollisionShape& Shape,
+	ECollisionChannel MoveChannel, const FCollisionQueryParams& Params, const FCollisionResponseParams& WorldResponse, ECollisionResponse PawnResponse) const
+{
+	UWorld* World = GetWorld();
+	if (!World || PawnResponse != ECR_Block) return End;
+
+	// 돌진이 끝나 Pawn 충돌이 돌아왔을 때 막히는 적과 겹치는지만 검사한다.
+	FCollisionResponseParams PawnOnly(ECR_Ignore);
+	PawnOnly.CollisionResponse.SetResponse(ECC_Pawn, ECR_Block);
+	auto IsBlockedByPawn = [&](const FVector& Location)
+	{
+		return World->OverlapBlockingTestByChannel(Location, FQuat::Identity, MoveChannel, Shape, Params, PawnOnly);
+	};
+	if (!IsBlockedByPawn(End)) return End;
+
+	// 적 뒤에 빈 공간이 있으면 관통해서 그 뒤에 선다. 벽에 막히면 그 앞까지만 본다.
+	const FVector Forward = Dir.GetSafeNormal2D();
+	FVector ForwardLimit = End + Forward * MaxPassThroughDistance;
+	FHitResult WallHit;
+	if (World->SweepSingleByChannel(WallHit, End, ForwardLimit, FQuat::Identity, MoveChannel, Shape, Params, WorldResponse))
+	{
+		ForwardLimit = WallHit.Location;
+	}
+	const float ForwardRoom = FVector::Dist2D(End, ForwardLimit);
+	for (float Step = EndSearchStep; Step <= ForwardRoom; Step += EndSearchStep)
+	{
+		const FVector Candidate = End + Forward * Step;
+		if (!IsBlockedByPawn(Candidate)) return Candidate;
+	}
+
+	// 빈 곳이 없으면 원래 끝점에서 적 사이에 선다. 겹침은 캐릭터 무브먼트가 밀어서 푼다.
+	return End;
+}
+
+UCurveFloat* UGASwiftStrike::GetDashTimeCurve()
+{
+	if (DashTimeCurve) return DashTimeCurve;
+
+	// 지수가 바뀌었을 때만 1 - (1 - t)^n 감속 곡선을 다시 만든다.
+	if (!GeneratedDashTimeCurve || !FMath::IsNearlyEqual(GeneratedDashEaseExponent, DashEaseExponent))
+	{
+		GeneratedDashTimeCurve = NewObject<UCurveFloat>(this);
+		constexpr int32 KeyCount = 16;
+		for (int32 Index = 0; Index <= KeyCount; ++Index)
+		{
+			const float Time = float(Index) / KeyCount;
+			const FKeyHandle Key = GeneratedDashTimeCurve->FloatCurve.AddKey(Time, 1.f - FMath::Pow(1.f - Time, DashEaseExponent));
+			GeneratedDashTimeCurve->FloatCurve.SetKeyInterpMode(Key, RCIM_Cubic);
+		}
+		GeneratedDashEaseExponent = DashEaseExponent;
+	}
+	return GeneratedDashTimeCurve;
+}
+
+void UGASwiftStrike::StopDashRootMotion()
+{
+	GetWorld()->GetTimerManager().ClearTimer(DashTimerHandle);
+	if (DashRootMotionSourceID == 0) return;
+
+	const ACharacter* Player = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	UCharacterMovementComponent* Movement = IsValid(Player) ? Player->GetCharacterMovement() : nullptr;
+	if (IsValid(Movement))
+	{
+		Movement->RemoveRootMotionSourceByID(DashRootMotionSourceID);
+		// 끝 속도를 남겨 미끄러지며 서게 한다. 공중에서는 낙하 속도를 새로 시작한다.
+		Movement->Velocity = DashDirection * DashEndSpeed;
+	}
+	DashRootMotionSourceID = 0;
+}
+
+void UGASwiftStrike::StartHitStop()
+{
+	if (HitStopDuration <= 0.f || AttackTargets.Num() == 0) return;
+
+	EndHitStop();
+	HitStopActors.Add(GetAvatarActorFromActorInfo());
+	for (const FHitResult& Hit : AttackTargets)
+	{
+		HitStopActors.Add(Hit.GetActor());
+	}
+	for (const TWeakObjectPtr<AActor>& Actor : HitStopActors)
+	{
+		if (Actor.IsValid()) Actor->CustomTimeDilation = HitStopTimeDilation;
+	}
+	// 월드 시간은 느려지지 않으므로 지정한 실제 시간 뒤에 풀린다.
+	// EndAbility가 어빌리티에 묶인 타이머를 모두 지우므로, 히트스톱 중에 어빌리티가 끝나도 풀리도록 플레이어에 묶는다.
+	TWeakObjectPtr<UGASwiftStrike> WeakThis(this);
+	const FTimerDelegate Restore = FTimerDelegate::CreateWeakLambda(GetAvatarActorFromActorInfo(), [WeakThis]()
+	{
+		if (WeakThis.IsValid()) WeakThis->EndHitStop();
+	});
+	GetWorld()->GetTimerManager().SetTimer(HitStopTimerHandle, Restore, HitStopDuration, false);
+}
+
+void UGASwiftStrike::EndHitStop()
+{
+	GetWorld()->GetTimerManager().ClearTimer(HitStopTimerHandle);
+	for (const TWeakObjectPtr<AActor>& Actor : HitStopActors)
+	{
+		if (Actor.IsValid()) Actor->CustomTimeDilation = 1.f;
+	}
+	HitStopActors.Reset();
 }
 
 void UGASwiftStrike::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	StopDashRootMotion();
 	RestoreDashState();
 	AttackTargets.Reset();
 
@@ -228,9 +345,11 @@ void UGASwiftStrike::OnSwiftStrikeFinished()
 	if (bDashFinished) return;
 
 	bDashFinished = true;
+	StopDashRootMotion();
 	RestoreDashState();
 
 	ApplyHitToTargets();
+	StartHitStop();
 	AttackTargets.Reset();
 
 	if (!IsActive()) return;
@@ -335,7 +454,7 @@ void UGASwiftStrike::ApplyHitToTargets()
 		if (!SourceASC || !TargetASC || !TargetASC->GetSet<UStatAttributeSet>()
 			|| TargetASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) <= 0.0f)
 		{
-			return;
+			continue;
 		}
 
 		FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
