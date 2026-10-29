@@ -21,9 +21,6 @@ class ECLIPSETHENINJA_API UStatAttributeSet : public UAttributeSet
 public:
 	UStatAttributeSet();
 
-	/** 이 태그를 가진 ASC는 Damage 메타 어트리뷰트를 체력에 반영하지 않는다. (보스 실드 등) */
-	static FGameplayTag GetInvulnerableTag();
-
 	FOnStatDamageReceived OnDamageReceived;
 	FOnStatDamageReceived OnDotDamageReceived;
 

@@ -15,6 +15,7 @@
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "GAS/Effects/GEBossEnemyDefaultStats.h"
 #include "GAS/StatAttributeSet.h"
+#include "GAS/Tags/EclipseGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -146,7 +147,7 @@ void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 void ABossEnemy::ActivateEnergyLink(int32 LinkIndex)
 {
 	bEnergyLinkActive = true;
-	ASC->SetLooseGameplayTagCount(UStatAttributeSet::GetInvulnerableTag(), 1);
+	ASC->SetLooseGameplayTagCount(EclipseGameplayTags::State_Invincible, 1);
 
 	if (EnergyLinkTimeLimit > 0.0f)
 	{
@@ -289,7 +290,7 @@ void ABossEnemy::ClearEnergyLinkState()
 
 	if (ASC)
 	{
-		ASC->SetLooseGameplayTagCount(UStatAttributeSet::GetInvulnerableTag(), 0);
+		ASC->SetLooseGameplayTagCount(EclipseGameplayTags::State_Invincible, 0);
 	}
 }
 
