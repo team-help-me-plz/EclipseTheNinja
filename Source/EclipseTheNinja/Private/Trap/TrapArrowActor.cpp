@@ -12,6 +12,9 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "AbilitySystemComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
 
 // Sets default values
 ATrapArrowActor::ATrapArrowActor()
@@ -37,6 +40,19 @@ ATrapArrowActor::ATrapArrowActor()
 	this->ProjectileMovement->ProjectileGravityScale = 0.f;
 	this->ProjectileMovement->bRotationFollowsVelocity = true;
 	this->ProjectileMovement->bShouldBounce = false;
+
+	// 발사될 때만 켜므로 자동 재생은 끈다 (풀에서 꺼낼 때 자동으로 켜지지 않게)
+	this->FlyEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("FlyEffect"));
+	this->FlyEffect->SetupAttachment(GetRootComponent());
+	this->FlyEffect->bAutoActivate = false;
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> FlySystem(
+		TEXT("/Game/VFX/KYstabFX01/Particles/Niagara/NS_ky_stab13.NS_ky_stab13"));
+
+	if (FlySystem.Succeeded())
+	{
+		this->FlyEffect->SetAsset(FlySystem.Object);
+	}
 }
 
 // Called when the game starts or when spawned
@@ -110,6 +126,7 @@ void ATrapArrowActor::SetLaunch(float InVelocity, float InDamage)
 	this->ProjectileMovement->MaxSpeed = InVelocity;
 	this->ProjectileMovement->SetVelocityInLocalSpace(FVector(InVelocity, 0.f, 0.f));
 	this->ArrowDamage = InDamage;
+	this->FlyEffect->Activate(true);
 
 	SetLifeSpan(Lifetime);
 }
@@ -124,4 +141,6 @@ void ATrapArrowActor::OnSpawnFromPool_Implementation()
 void ATrapArrowActor::OnReturnToPool_Implementation()
 {
 	this->ProjectileMovement->StopMovementImmediately();
+	// 다음 발사 위치에 이전 파티클이 남지 않도록 바로 지운다
+	this->FlyEffect->DeactivateImmediate();
 }

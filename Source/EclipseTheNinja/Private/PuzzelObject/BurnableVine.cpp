@@ -14,6 +14,8 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
 
 // Sets default values
 ABurnableVine::ABurnableVine()
@@ -40,6 +42,14 @@ ABurnableVine::ABurnableVine()
 	this->BurnEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("BurnEffect"));
 	this->BurnEffect->SetupAttachment(GetRootComponent());
 	this->BurnEffect->bAutoActivate = false;
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> BurnSystem(
+		TEXT("/Game/VFX/3D_Fire_and_Explosions/Effects/P_Fire_4.P_Fire_4"));
+
+	if (BurnSystem.Succeeded())
+	{
+		this->BurnEffect->SetAsset(BurnSystem.Object);
+	}
 
 	this->CheckpointBoundComponent = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBoundComponent"));
 }

@@ -14,6 +14,7 @@ class UCheckpointBoundComponent;
 class UBoxComponent;
 class AMeshAssembly;
 class UActivateHighlightComponent;
+class UNiagaraComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API AFallingObject : public AActor, public IActivatable, public ICheckpointResettable
@@ -62,6 +63,8 @@ protected:
 	bool	IgnorePawnWhileFalling(AActor* InActor);
 	void	ClearIgnoredPawns();
 
+	void	StopLandEffect();
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TObjectPtr<USceneComponent>		RootScene = nullptr;
 
@@ -83,6 +86,14 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UActivateHighlightComponent>	ActivateHighlight = nullptr;
+
+	// 착지했을 때 바닥에서 재생할 이펙트
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|Effect")
+	TObjectPtr<UNiagaraComponent>	LandEffect = nullptr;
+
+	// 착지 이펙트를 재생할 시간. 루프 이펙트라서 이 시간이 지나면 새 파티클 생성을 멈춘다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|Effect", meta = (ClampMin = "0.01"))
+	float	LandEffectDuration = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|Damage")
 	float	FallingDamage = 10.f;
@@ -118,4 +129,6 @@ private:
 
 	// 낙하 중 이동 Sweep에서 무시하고 있는 캐릭터
 	TArray<TWeakObjectPtr<APawn>>	IgnoredPawns;
+
+	FTimerHandle	LandEffectTimer;
 };

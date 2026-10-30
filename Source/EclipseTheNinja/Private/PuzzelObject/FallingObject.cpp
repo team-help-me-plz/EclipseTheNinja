@@ -12,6 +12,9 @@
 
 #include "Components/BoxComponent.h"
 #include "AbilitySystemComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
 
 // Sets default values
 AFallingObject::AFallingObject()
@@ -47,6 +50,19 @@ AFallingObject::AFallingObject()
 	this->ActivateHighlight = CreateDefaultSubobject<UActivateHighlightComponent>(TEXT("ActivateHighlight"));
 
 	this->CheckpointBoundComponent = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBoundComponent"));
+
+	// 착지할 때만 켜므로 자동 재생은 끈다. 위치는 착지 시 바닥으로 옮긴다
+	this->LandEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("LandEffect"));
+	this->LandEffect->SetupAttachment(GetRootComponent());
+	this->LandEffect->bAutoActivate = false;
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> LandSystem(
+		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/LitSandPuff/Looped/NS_SandPuff_Medium_Looped.NS_SandPuff_Medium_Looped"));
+
+	if (LandSystem.Succeeded())
+	{
+		this->LandEffect->SetAsset(LandSystem.Object);
+	}
 }
 
 // Called when the game starts or when spawned
@@ -140,6 +156,9 @@ void AFallingObject::ResetToInitial_Implementation()
 	this->FallSpeed = 0.f;
 	this->HitActors.Reset();
 	this->ClearIgnoredPawns();
+	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다
+	GetWorldTimerManager().ClearTimer(this->LandEffectTimer);
+	this->LandEffect->DeactivateImmediate();
 	this->FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	this->FallingBody->SetRelativeLocation(this->InitialBodyRelativeLocation);
 	this->RopeComponent->RestoreRope();
@@ -278,6 +297,25 @@ void AFallingObject::ObjectLand()
 	//SetActorTickEnabled(false);
 	this->ClearIgnoredPawns();
 	this->TryBlockPawn();
+
+	// 떨어진 물체의 바닥면에서 착지 이펙트를 재생한다
+	const FVector	BodyLocation = this->FallingBody->GetComponentLocation();
+	const FVector	LandLocation(BodyLocation.X, BodyLocation.Y, BodyLocation.Z - this->FallingBody->GetScaledBoxExtent().Z);
+	this->LandEffect->SetWorldLocation(LandLocation);
+	this->LandEffect->Activate(true);
+	GetWorldTimerManager().SetTimer(
+		this->LandEffectTimer,
+		this,
+		&AFallingObject::StopLandEffect,
+		this->LandEffectDuration,
+		false
+	);
+}
+
+void AFallingObject::StopLandEffect()
+{
+	// 새 파티클 생성만 멈추고, 남은 먼지는 수명대로 자연스럽게 사라지게 한다
+	this->LandEffect->Deactivate();
 }
 
 bool AFallingObject::IgnorePawnWhileFalling(AActor* InActor)

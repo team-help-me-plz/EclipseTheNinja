@@ -11,6 +11,7 @@
 class UBoxComponent;
 class UStaticMeshComponent;
 class UCheckpointBoundComponent;
+class UNiagaraComponent;
 
 enum class EBreakablePlatformState
 {
@@ -73,6 +74,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
+
+	// 무너져 있는 동안 재생할 이펙트. 플랫폼이 복구되면 멈춘다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<UNiagaraComponent>	BreakEffect = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Break|Timer")
 	float	BreakTime = 0.5f;
