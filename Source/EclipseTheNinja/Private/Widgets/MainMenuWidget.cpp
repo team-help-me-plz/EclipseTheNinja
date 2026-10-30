@@ -302,11 +302,16 @@ void UMainMenuWidget::HandleStartClicked()
 		)
 		return;
 	}
-	// UI 전용 입력 모드가 다음 레벨까지 남지 않도록 복구
+	// UI 전용 입력 모드가 다음 레벨까지 남지 않도록 복구.
+	// 입력 모드는 레벨이 바뀌어도 뷰포트에 남는다. GameOnly는 마우스를 숨기고 가운데에 묶어
+	// 커서 위치로 조준·회전하는 게임 입력이 깨지므로, 커서를 보이게 둔 GameAndUI로 넘긴다
 	if (APlayerController* PlayerController = GetOwningPlayer())
 	{
-		PlayerController->SetInputMode(FInputModeGameOnly());
-		PlayerController->SetShowMouseCursor(false);
+		FInputModeGameAndUI	InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
+		PlayerController->SetInputMode(InputMode);
+		PlayerController->SetShowMouseCursor(true);
 	}
 	UGameplayStatics::OpenLevelBySoftObjectPtr(this, this->StartLevel);
 }
