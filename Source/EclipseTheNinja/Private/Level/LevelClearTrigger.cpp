@@ -2,6 +2,7 @@
 
 #include "Level/LevelClearTrigger.h"
 
+#include "Character/BossEnemy.h"
 #include "Components/BoxComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -30,12 +31,28 @@ void ALevelClearTrigger::BeginPlay()
 {
     Super::BeginPlay();
 
-    this->ClearTrigger->OnComponentBeginOverlap.AddDynamic(this, &ALevelClearTrigger::OnTriggerBeginOverlap);
+    if (IsValid(this->BossToDefeat))
+    {
+        // 보스전은 출구에 먼저 도착해도 클리어할 수 없다.
+        this->ClearTrigger->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        this->ClearTrigger->SetGenerateOverlapEvents(false);
+        this->BossToDefeat->OnDeathFinished.AddUObject(this, &ALevelClearTrigger::OnBossDeathFinished);
+    }
+    else
+    {
+        this->ClearTrigger->OnComponentBeginOverlap.AddDynamic(this, &ALevelClearTrigger::OnTriggerBeginOverlap);
+    }
 }
 
 void ALevelClearTrigger::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     // 카운트다운 도중 월드가 내려가면 티커가 남지 않도록 해제
+    if (IsValid(this->BossToDefeat))
+    {
+        this->BossToDefeat->OnDeathFinished.RemoveAll(this);
+    }
+
+    GetWorldTimerManager().ClearTimer(this->TravelTimerHandle);
     if (this->QuitTickerHandle.IsValid())
     {
         FTSTicker::GetCoreTicker().RemoveTicker(this->QuitTickerHandle);
@@ -43,6 +60,14 @@ void ALevelClearTrigger::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
 
     Super::EndPlay(EndPlayReason);
+}
+
+void ALevelClearTrigger::OnBossDeathFinished(AEnemy* Enemy)
+{
+    if (Enemy == this->BossToDefeat && IsValid(Enemy) && Enemy->IsDead())
+    {
+        ClearLevel();
+    }
 }
 
 void ALevelClearTrigger::OnTriggerBeginOverlap(
@@ -53,6 +78,11 @@ void ALevelClearTrigger::OnTriggerBeginOverlap(
     bool bFromSweep,
     const FHitResult& SweepResult)
 {
+    if (IsValid(this->BossToDefeat))
+    {
+        return;
+    }
+
     // 분신 등 AI 폰은 무시하고 플레이어가 조종하는 폰만 클리어 처리
     const APawn* Pawn = Cast<APawn>(OtherActor);
     if (!IsValid(Pawn) || !Pawn->IsPlayerControlled())

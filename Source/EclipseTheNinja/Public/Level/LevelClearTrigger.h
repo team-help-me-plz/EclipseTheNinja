@@ -9,6 +9,8 @@
 
 class UBoxComponent;
 class UGameEndCountdownWidget;
+class AEnemy;
+class ABossEnemy;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLevelCleared);
 
@@ -35,6 +37,9 @@ protected:
     virtual void BeginPlay() override;
 
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+    // 지정한 보스의 사망 연출이 끝나면 기존 클리어/종료 흐름을 실행한다.
+    void OnBossDeathFinished(AEnemy* Enemy);
 
     UFUNCTION()
     void OnTriggerBeginOverlap(
@@ -63,6 +68,10 @@ public:
     FOnLevelCleared OnLevelCleared;
 
 protected:
+    // 지정하면 도착 지점 오버랩 대신 이 보스의 처치 완료로 클리어한다.
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Boss")
+    TObjectPtr<ABossEnemy> BossToDefeat = nullptr;
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<USceneComponent> SceneRoot = nullptr;
 
