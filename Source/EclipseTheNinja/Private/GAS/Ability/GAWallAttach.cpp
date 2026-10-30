@@ -332,8 +332,8 @@ bool UGAWallAttach::FindWall(const ACharacter* Player, FHitResult& OutHit, bool*
 			// 비교용: 붙은 벽(WallAttach 채널) 지점
 			DrawDebugPoint(GetWorld(), OutHit.ImpactPoint, 10.f, FColor::Yellow, false, Duration);
 		}
-	}
 #endif
+	}
 
 	return true;
 }
