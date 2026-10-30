@@ -54,6 +54,16 @@ enum class ECheckpointId : uint8
     W2P4_Armory,                // 가시 속 버튼으로 움직이는 플랫폼 + 하단 암살 + 벽 점프 수직 통로
     W2P4_UpperKeep,             // 가시 너머 플랫폼에 분신 -> 발판 -> 도착 직전 교환 + 레버 낙하물 + 최종 관문
 
+    // Lvl_Week_3_Prototype_1 (외성 - 덩굴 성벽)
+    W3P1_VineGate,              // 덩굴 벽 태우기 + 앉아서 지나는 통로 + 덩굴에 감긴 레버 문
+    W3P1_Moat,                  // 모서리 매달리기·벽 슬라이딩으로 조용히 해자 진입 + 가시 너머 벽타기
+    W3P1_Rampart,               // 성벽 위 은신구역 + 질풍참 공중 돌진 + 덩굴 문
+
+    // Lvl_Week_3_Prototype_2 (천수각 내부)
+    W3P2_Hall,                  // 순찰 회랑 은신구역 + 앉기 통로 + 분신 발판 문
+    W3P2_Shaft,                 // 벽타기·벽 점프 수직 통로 + 매달리기·벽 슬라이딩 하강 암살 + 덩굴 문
+    W3P2_Keep,                  // 부서지는 판자 + 질풍참 + 덩굴 레버 + 최종 관문
+
     // Lvl_BossEnemyTest
     BossTest_Arena,             // 보스 몬스터 테스트 구간
 };
