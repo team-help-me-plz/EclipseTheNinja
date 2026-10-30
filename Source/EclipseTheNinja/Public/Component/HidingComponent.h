@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Animation/AnimEnums.h"
+#include "Engine/EngineTypes.h"
 #include "Character/PlayerCondition.h"
 #include "HidingComponent.generated.h"
 
@@ -35,6 +37,7 @@ public:
 	// 은신구역이 상호작용을 받으면 호출한다. 공중이거나 전투 중이면 숨지 않고 false를 돌려준다.
 	bool	TryEnter(const AStealthZone* InZone);
 	// 숨은 뒤 나오기 입력으로 호출한다. 들어가거나 나오는 중에는 무시한다.
+	// 다른 캐릭터가 은신구역 앞을 막고 있으면 메시지를 띄우고 나오지 않는다.
 	void	RequestExit();
 	// 사망, 리스폰처럼 연출을 끝까지 볼 수 없을 때 바로 원래 자리로 되돌린다.
 	void	ForceExit();
@@ -64,6 +67,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hiding|Input")
 	TObjectPtr<UInputMappingContext>	HidingMappingContext = nullptr;
 
+	// 들어가고, 숨어 있고, 나오는 동안 통과할 장애물 오브젝트 채널. Project Settings에서 만든 Obstacle 채널을 지정한다.
+	// 바닥과 바깥 벽은 이 채널을 쓰지 않아야 한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hiding|Collision")
+	TEnumAsByte<ECollisionChannel>	ObstacleChannel = ECC_GameTraceChannel6;
+
 	// 몽타주나 섹션이 없을 때 들어가고 나오는 데 걸리는 시간
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hiding|Move", meta = (ClampMin = "0.05", Units = "s"))
 	float	FallbackMoveTime = 0.5f;
@@ -88,8 +96,18 @@ private:
 
 	TWeakObjectPtr<APlayerCharacter>	Player;
 	EHidingPhase	Phase = EHidingPhase::None;
+	// 지금 숨어 있는 은신구역. 나오기 전에 앞이 막혔는지 확인한다
+	TWeakObjectPtr<const AStealthZone>	ActiveZone;
 	FVector			HideLocation = FVector::ZeroVector;
+	// 들어가기 전에 서 있던 Y. 나올 때 이 Y로 돌아온다
+	double			OutsideY = 0.0;
 	bool			bSavedPlaneConstraint = true;
+	// 숨는 동안 IgnoreRootMotion으로 바꾸기 전의 루트 모션 모드. 나올 때 되돌린다
+	TEnumAsByte<ERootMotionMode::Type>	SavedRootMotionMode = ERootMotionMode::RootMotionFromMontagesOnly;
+	bool			bRootMotionModeOverridden = false;
+	// 숨는 동안 끄는 캡슐의 Pawn, 장애물 채널 응답. 나올 때 되돌린다
+	TEnumAsByte<ECollisionResponse>	SavedPawnResponse = ECR_Block;
+	TEnumAsByte<ECollisionResponse>	SavedObstacleResponse = ECR_Block;
 	// 들어가는 중에 발각되면 다 들어간 뒤 바로 나온다
 	bool			bExitAfterEnter = false;
 	uint16			MoveSourceID = 0;

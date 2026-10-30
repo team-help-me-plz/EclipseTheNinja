@@ -102,6 +102,20 @@ FVector AStealthZone::GetHideLocation() const
 	return (this->HidePoint->GetComponentLocation());
 }
 
+bool AStealthZone::IsExitBlocked(const AActor* InHider) const
+{
+	TArray<AActor*> OverlappingPawns;
+	this->InteractArea->GetOverlappingActors(OverlappingPawns, APawn::StaticClass());
+	for (const AActor* Pawn : OverlappingPawns)
+	{
+		if (IsValid(Pawn) && Pawn != InHider)
+		{
+			return (true);
+		}
+	}
+	return (false);
+}
+
 void AStealthZone::RefreshHighlight()
 {
 	if (IsValid(this->InteractHighlight))
