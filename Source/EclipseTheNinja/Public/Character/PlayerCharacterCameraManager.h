@@ -87,6 +87,12 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Side Scrolling Camera", meta = (ClampMin = 0, ClampMax = 1))
 	float CameraMoveDistance = .4f;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Side Scrolling Camera")
+	bool bOrthographic = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Side Scrolling Camera", meta = (ClampMin = 1))
+	float OrthoWidth = 1200.0f;
+
 
 protected:
 	virtual void BeginPlay() override;

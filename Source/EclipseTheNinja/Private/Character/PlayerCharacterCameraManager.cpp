@@ -78,6 +78,11 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 		// set the view target FOV and rotation
 		OutVT.POV.Rotation = FRotator(0.0f, -90.0f, 0.0f);
 		OutVT.POV.FOV = 65.0f;
+		if (bOrthographic)
+		{
+			OutVT.POV.ProjectionMode = ECameraProjectionMode::Orthographic;
+			OutVT.POV.OrthoWidth = OrthoWidth;   // 화면 가로에 보이는 월드 폭(cm)
+		}
 
 		// cache the current location
 		FVector CurrentActorLocation = OutVT.Target->GetActorLocation();
