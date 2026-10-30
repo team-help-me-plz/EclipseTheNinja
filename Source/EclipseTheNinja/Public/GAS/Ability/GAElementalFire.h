@@ -6,6 +6,9 @@
 #include "GAS/Ability/GACooldownBase.h"
 #include "GAElementalFire.generated.h"
 
+class UNiagaraSystem;
+class UNiagaraComponent;
+
 DECLARE_MULTICAST_DELEGATE(FOnElementalFireStateChanged);
 
 /** 공격력 기준 불속성 데미지 계산 결과 */
@@ -98,6 +101,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attack|Fire")
 	float	FireDotRatio = 0.2f;
 
+	/** 불이 붙어 있는 동안 칼에 붙여 재생할 이펙트 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
+	TObjectPtr<UNiagaraSystem>	FireSwordSystem = nullptr;
+
+	/** 이펙트를 붙일 캐릭터 메시의 소켓(본) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
+	FName	FireSwordSocketName = TEXT("weapon_r");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
+	FVector	FireSwordLocationOffset = FVector::ZeroVector;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
+	FRotator	FireSwordRotationOffset = FRotator::ZeroRotator;
+
 	///** 화염 속성 적용 시 공격 후 들어갈 총 데미지의 최대 배율 */
 	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Attack|Fire")
 	//float	FireDotRatio = 0.2f;
@@ -115,4 +132,8 @@ protected:
 private:
 	// 이번 발동에서 적용한 불속성 GE
 	FActiveGameplayEffectHandle FireElementEffectHandle;
+
+	// 이번 발동에서 칼에 붙인 불꽃 이펙트
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent>	FireSwordEffect = nullptr;
 };

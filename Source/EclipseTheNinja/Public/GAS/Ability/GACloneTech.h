@@ -85,6 +85,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Despawn")
 	float	RecallCooldown = 1.f;
 
+	// 분신이 소환되거나 사라질 때(회수, 수명 종료) 분신 위치에서 재생할 이펙트
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Effect")
+	TObjectPtr<UNiagaraSystem>	CloneEffectSystem = nullptr;
+
+	// 이펙트를 재생할 시간. 루프 이펙트라서 이 시간이 지나면 새 파티클 생성을 멈춘다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Effect", meta = (ClampMin = "0.01"))
+	float	CloneEffectDuration = 0.3f;
+
 	UPROPERTY(Transient)
 	TWeakObjectPtr<ACloneCharacter>	SpawnedClone;
 
@@ -103,6 +111,9 @@ private:
 
 	/** 플레이어 캐릭터에 분신술 타게팅 상태를 알린다. */
 	void SetAvatarCloneTargeting(bool bTargeting) const;
+
+	/** 분신 소환/회수 이펙트를 InLocation에서 CloneEffectDuration 동안 재생한다. */
+	void PlayCloneEffect(const FVector& InLocation) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitCloneTargeting>	TargetingTask;

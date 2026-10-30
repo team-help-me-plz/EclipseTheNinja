@@ -7,6 +7,10 @@
 #include "Interface/Interactor.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
+
 // Sets default values
 ABreakablePlatform::ABreakablePlatform()
 {
@@ -24,6 +28,19 @@ ABreakablePlatform::ABreakablePlatform()
 	this->MeshAssembly->SetupAttachment(GetRootComponent());
 
 	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+
+	// 무너질 때만 켜므로 자동 재생은 끈다.
+	this->BreakEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("BreakEffect"));
+	this->BreakEffect->SetupAttachment(GetRootComponent());
+	this->BreakEffect->bAutoActivate = false;
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> BreakSystem(
+		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/SandFalling/Looped/NS_Sand_Ceiling_04_Looped.NS_Sand_Ceiling_04_Looped"));
+
+	if (BreakSystem.Succeeded())
+	{
+		this->BreakEffect->SetAsset(BreakSystem.Object);
+	}
 }
 
 void ABreakablePlatform::ResetToInitial_Implementation()
@@ -31,6 +48,8 @@ void ABreakablePlatform::ResetToInitial_Implementation()
 	GetWorldTimerManager().ClearTimer(this->PlatformBreakTimer);
 	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTimer);
 	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTryTimer);
+	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다.
+	this->BreakEffect->DeactivateImmediate();
 	this->RestorePlatform();
 }
 
@@ -113,6 +132,7 @@ void ABreakablePlatform::BreakPlatform()
 {
 	this->State = EBreakablePlatformState::Broken;
 	this->MeshAssembly->SetVisibility(false);
+	this->BreakEffect->Activate(true);
 
 	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
 	if (!IsValid(AssemblyActor))
@@ -156,6 +176,8 @@ void ABreakablePlatform::RestorePlatform()
 {
 	this->State = EBreakablePlatformState::Ready;
 	this->MeshAssembly->SetVisibility(true);
+	// 새 파티클 생성만 멈추고, 남은 모래는 수명대로 자연스럽게 사라지게 한다.
+	this->BreakEffect->Deactivate();
 
 	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
 	if (!IsValid(AssemblyActor))
