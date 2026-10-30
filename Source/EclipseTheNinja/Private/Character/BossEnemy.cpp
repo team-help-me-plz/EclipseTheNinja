@@ -20,6 +20,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
+#include "Widgets/BossHealthBarWidget.h"
 
 ABossEnemy::ABossEnemy()
 {
@@ -57,6 +58,7 @@ void ABossEnemy::BeginPlay()
 
 void ABossEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	HideBossHealthBar();
 	GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
 	GetWorldTimerManager().ClearTimer(ExecutionWaitTimer);
 
@@ -73,6 +75,23 @@ void ABossEnemy::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	UpdateTurning(DeltaTime);
+
+	if (!bIsDead && !BossHealthBar && EnemyDetectComponent
+		&& EnemyDetectComponent->GetCurrentAlertLevel() == EEnemyAlertLevel::Combat)
+	{
+		ShowBossHealthBar();
+	}
+
+	// A failed attempt must not leave a boss HUD on the respawn screen.
+	if (BossHealthBar)
+	{
+		const APlayerController* PC = BossHealthBar->GetOwningPlayer();
+		const ABaseCharacter* Player = PC ? Cast<ABaseCharacter>(PC->GetPawn()) : nullptr;
+		if (!Player || !Player->GetStatAttribute() || Player->GetStatAttribute()->GetHealth() <= 0.0f)
+		{
+			BossHealthBar->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
 
 #if WITH_EDITOR
 	ProcessDebugRequests();
@@ -106,9 +125,46 @@ float ABossEnemy::GetHealthRatio() const
 	return StatAttributeSet->GetHealth() / StatAttributeSet->GetMaxHealth();
 }
 
+void ABossEnemy::ShowBossHealthBar()
+{
+	if (BossHealthBar || bIsDead || !BossHealthBarClass || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	if (PC && PC->IsLocalController() && PC->GetPawn())
+	{
+		BossHealthBar = CreateWidget<UBossHealthBarWidget>(PC, BossHealthBarClass);
+		if (BossHealthBar)
+		{
+			BossHealthBar->AddToViewport(10);
+			BossHealthBar->InitBoss(this, BossDisplayName);
+		}
+	}
+}
+
+void ABossEnemy::HideBossHealthBar()
+{
+	if (BossHealthBar)
+	{
+		BossHealthBar->RemoveFromParent();
+		BossHealthBar = nullptr;
+	}
+}
+
 void ABossEnemy::SetDrawDebugAttack(bool bEnable)
 {
 	bDrawDebugAttack = bEnable;
+}
+
+float ABossEnemy::GetEnergyLinkTimeRemaining() const
+{
+	if (!bEnergyLinkActive || EnergyLinkTimeLimit <= 0.0f)
+	{
+		return -1.0f;
+	}
+
+	return FMath::Max(0.0f, GetWorldTimerManager().GetTimerRemaining(EnergyLinkTimer));
 }
 
 void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
@@ -337,6 +393,7 @@ void ABossEnemy::ToggleActivate_Implementation()
 
 void ABossEnemy::ResetToInitial_Implementation()
 {
+	HideBossHealthBar();
 	ClearEnergyLinkState();
 	NextEnergyLinkIndex = 0;
 

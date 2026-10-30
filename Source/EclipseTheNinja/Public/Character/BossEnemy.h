@@ -8,6 +8,7 @@
 #include "BossEnemy.generated.h"
 
 class UGameplayAbility;
+class UBossHealthBarWidget;
 struct FAbilityEndedData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossEnergyLinkActivated, int32, LinkIndex);
@@ -36,9 +37,20 @@ class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
 public:
 	ABossEnemy();
 
+	/** Also callable by an arena trigger/cinematic. Detection of combat starts the UI automatically. */
+	UFUNCTION(BlueprintCallable, Category = "Boss|UI")
+	void ShowBossHealthBar();
+
 	/** 에너지 링크 실드가 켜져 있는지. */
 	UFUNCTION(BlueprintPure, Category = "Boss|Energy Link")
 	bool IsEnergyLinkActive() const { return bEnergyLinkActive; }
+
+	/** Actual gimmick deadline in seconds. -1 means no active timed energy link; 0 means expired. */
+	UFUNCTION(BlueprintPure, Category = "Boss|Energy Link")
+	float GetEnergyLinkTimeRemaining() const;
+
+	UFUNCTION(BlueprintPure, Category = "Boss|Energy Link")
+	float GetEnergyLinkTimeLimit() const { return EnergyLinkTimeLimit; }
 
 	/** 현재 체력 비율(0~1). */
 	UFUNCTION(BlueprintPure, Category = "Boss")
@@ -141,6 +153,17 @@ public:
 	virtual float GetAIAttackCooldown() const override { return 0.1f; }
 
 protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Boss|UI")
+	TSubclassOf<UBossHealthBarWidget> BossHealthBarClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Boss|UI")
+	FText BossDisplayName = NSLOCTEXT("BossUI", "OniName", "오니 사무라이");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBossHealthBarWidget> BossHealthBar;
+
+	void HideBossHealthBar();
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaTime) override;
