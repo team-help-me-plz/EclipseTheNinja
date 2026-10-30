@@ -1073,8 +1073,6 @@ void APlayerCharacter::DoCloneRecall()
 		);
 		return;
 	}
-	/* TODO: Player 상태가 발각됐거나 전투중이면 바로 리턴하는 코드가 필요해용
-	*/
 	// 기본 어빌리티와 같은 입력 ID 규칙으로 분신 회수 대상을 찾는다.
 	FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::CloneTech);
 	// 분신이 없어지면 UGACloneTech는 EndAbility가 호출되므로 Activate 검사는 하지 않는다

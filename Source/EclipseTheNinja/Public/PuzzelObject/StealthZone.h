@@ -31,6 +31,10 @@ public:
 	// 숨었을 때 플레이어가 서 있을 위치
 	FVector	GetHideLocation() const;
 
+	// 숨은 캐릭터(InHider)가 아닌 다른 캐릭터가 구역에 겹쳐 있으면 나갈 수 없다
+	bool			IsExitBlocked(const AActor* InHider) const;
+	const FText&	GetCannotExitText() const { return (this->CannotExitText); }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -55,6 +59,10 @@ protected:
 	// 발각된(전투) 상태에서 상호작용하면 띄우는 메시지
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "StealthZone")
 	FText	CannotHideText = FText::FromString(TEXT("적에게 발각되어 숨을 수 없습니다."));
+
+	// 다른 캐릭터가 구역 앞을 막고 있을 때 나오기를 누르면 띄우는 메시지
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "StealthZone")
+	FText	CannotExitText = FText::FromString(TEXT("앞이 막혀 있어 나갈 수 없습니다."));
 
 private:
 	void	RefreshHighlight();

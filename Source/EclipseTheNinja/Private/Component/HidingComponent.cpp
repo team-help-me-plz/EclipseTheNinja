@@ -2,9 +2,12 @@
 #include "Character/PlayerCharacter.h"
 #include "Character/PlayerCharacterController.h"
 #include "PuzzelObject/StealthZone.h"
+#include "Subsystem/UIMessageSubsystem.h"
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
@@ -37,15 +40,27 @@ bool UHidingComponent::TryEnter(const AStealthZone* InZone)
 
 	this->Phase = EHidingPhase::Entering;
 	this->bExitAfterEnter = false;
+	this->ActiveZone = InZone;
 	SetInputLocked(true);
+
 	// 높이는 그대로 두고 은신 지점의 X, Y로만 들어간다
 	this->HideLocation = InZone->GetHideLocation();
 	this->HideLocation.Z = OwnerPlayer->GetActorLocation().Z;
+	// 이동 평면 원점은 순간이동(리스폰, 분신 교환 등) 뒤에 갱신되지 않으므로 실제 서 있던 Y로 돌아온다
+	this->OutsideY = OwnerPlayer->GetActorLocation().Y;
 
 	// 안쪽(-Y)으로 들어가야 하므로 이동하는 동안 평면 고정을 푼다
 	Movement->StopMovementImmediately();
 	this->bSavedPlaneConstraint = Movement->bConstrainToPlane;
 	Movement->SetPlaneConstraintEnabled(false);
+
+	// 들어가고, 숨어 있고, 나오는 동안(EndHiding까지) 장애물 메시와 다른 캐릭터를 통과한다.
+	// 바닥(WorldStatic)은 그대로 밟는다
+	UCapsuleComponent* Capsule = OwnerPlayer->GetCapsuleComponent();
+	this->SavedPawnResponse = Capsule->GetCollisionResponseToChannel(ECC_Pawn);
+	Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	this->SavedObstacleResponse = Capsule->GetCollisionResponseToChannel(this->ObstacleChannel);
+	Capsule->SetCollisionResponseToChannel(this->ObstacleChannel, ECR_Ignore);
 
 	// +X를 바라보면 왼쪽이 -Y다
 	UAnimMontage* Montage = OwnerPlayer->GetActorForwardVector().X >= 0.f ? this->LeftMontage : this->RightMontage;
@@ -53,11 +68,10 @@ bool UHidingComponent::TryEnter(const AStealthZone* InZone)
 	if (AnimInstance && Montage && AnimInstance->Montage_Play(Montage) > 0.f)
 	{
 		this->ActiveMontage = Montage;
-		// 위치는 코드가 맡으므로 몽타주 루트 모션은 끈다
-		if (FAnimMontageInstance* MontageInstance = AnimInstance->GetActiveInstanceForMontage(Montage))
-		{
-			MontageInstance->PushDisableRootMotion();
-		}
+		// 위치는 코드가 맡는다. 루트 모션을 추출만 하고 적용하지 않아야 메시 루트가 캡슐에 붙어 있는다
+		this->SavedRootMotionMode = AnimInstance->RootMotionMode;
+		this->bRootMotionModeOverridden = true;
+		AnimInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
 		FOnMontageEnded EndDelegate;
 		EndDelegate.BindUObject(this, &UHidingComponent::OnMontageEnded);
 		AnimInstance->Montage_SetEndDelegate(EndDelegate, Montage);
@@ -72,6 +86,15 @@ bool UHidingComponent::TryEnter(const AStealthZone* InZone)
 void UHidingComponent::RequestExit()
 {
 	if (this->Phase != EHidingPhase::Hidden) return;
+
+	// 다른 캐릭터가 앞을 막고 있으면 나가지 않는다
+	const AStealthZone* Zone = this->ActiveZone.Get();
+	APlayerCharacter* OwnerPlayer = this->Player.Get();
+	if (Zone && Zone->IsExitBlocked(OwnerPlayer))
+	{
+		UUIMessageSubsystem::ShowMessage(Cast<APlayerController>(OwnerPlayer->GetController()), Zone->GetCannotExitText());
+		return;
+	}
 	BeginExit();
 }
 
@@ -90,9 +113,9 @@ void UHidingComponent::BeginExit()
 		AnimInstance->Montage_JumpToSection(this->EndSection, this->ActiveMontage);
 	}
 
-	// 원래 이동 평면으로 돌아간다
+	// 들어가기 전에 서 있던 Y로 돌아간다
 	FVector OutsideLocation = this->HideLocation;
-	OutsideLocation.Y = OwnerPlayer->GetCharacterMovement()->GetPlaneConstraintOrigin().Y;
+	OutsideLocation.Y = this->OutsideY;
 
 	const float Duration = GetSectionTime(this->EndSection);
 	MoveTo(OutsideLocation, Duration);
@@ -153,13 +176,23 @@ void UHidingComponent::EndHiding(bool bStopMontage)
 		}
 	}
 	this->ActiveMontage = nullptr;
+	if (AnimInstance && this->bRootMotionModeOverridden)
+	{
+		AnimInstance->SetRootMotionMode(this->SavedRootMotionMode);
+	}
+	this->bRootMotionModeOverridden = false;
 
-	// 이동 평면 위로 정확히 맞춘 뒤 평면 고정을 되돌린다
+	// 들어가기 전 Y로 정확히 맞춘 뒤 평면 고정을 되돌린다
 	FVector Location = OwnerPlayer->GetActorLocation();
-	Location.Y = Movement->GetPlaneConstraintOrigin().Y;
+	Location.Y = this->OutsideY;
 	OwnerPlayer->SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
 	Movement->StopMovementImmediately();
 	Movement->SetPlaneConstraintEnabled(this->bSavedPlaneConstraint);
+	// 원래 자리로 돌아온 뒤에 장애물, 캐릭터 충돌을 되돌린다
+	UCapsuleComponent* Capsule = OwnerPlayer->GetCapsuleComponent();
+	Capsule->SetCollisionResponseToChannel(ECC_Pawn, this->SavedPawnResponse);
+	Capsule->SetCollisionResponseToChannel(this->ObstacleChannel, this->SavedObstacleResponse);
+	this->ActiveZone.Reset();
 
 	SetInputLocked(false);
 	OwnerPlayer->ExitHiding();
