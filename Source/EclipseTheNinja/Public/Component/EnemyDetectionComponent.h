@@ -80,6 +80,19 @@ public:
     /** 현재 감지 상태를 Blackboard에 다시 기록한다. (BT 재시작 시 사용) */
     void RefreshBlackboard() { UpdateBlackboard(); }
 
+    /** 대상과 마지막 목격 위치를 잊고 즉시 일반 상태로 돌아간다. ForgetDelay를 기다리지 않는다. */
+    UFUNCTION(BlueprintCallable, Category="AI|Detection")
+    void ForgetTarget();
+
+    /** 지금 노리는 대상. 전투 중에는 시야를 놓쳐도 유지된다. */
+    APawn* GetCurrentTarget() const { return CurrentTarget.Get(); }
+
+    /** 마지막 목격 위치를 기억하고 있는지. */
+    bool HasLastKnownLocation() const { return bHasLastKnownLocation; }
+
+    /** 마지막 목격 위치. HasLastKnownLocation이 false면 의미 없는 값이다. */
+    const FVector& GetLastKnownLocation() const { return LastKnownLocation; }
+
 	void NotifyNoise(const FVector& InLocation, const float InRadius, const float InStrength);
 
 protected:

@@ -131,6 +131,12 @@ public:
 	 */
 	virtual bool ShouldLockMovementDuringAttack() const { return false; }
 
+	/**
+	 * 전투 중 대상을 놓친 뒤 ForgetDelay가 지나도 기억을 유지할지. 기본 적은 false라 ForgetDelay 뒤 일반 상태로 돌아간다.
+	 * true를 반환하는 적은 놓친 대상을 직접 찾다가, 끝나면 감지 컴포넌트의 ForgetTarget으로 일반 상태로 돌아가야 한다.
+	 */
+	virtual bool ShouldHoldCombatMemory() const { return false; }
+
 	UFUNCTION(BlueprintPure, Category = "AI|Movement")
 	float GetAIChaseSpeed() const { return ChaseSpeed; }
 

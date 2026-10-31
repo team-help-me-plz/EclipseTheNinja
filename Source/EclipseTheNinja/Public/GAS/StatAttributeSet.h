@@ -24,6 +24,9 @@ public:
 	FOnStatDamageReceived OnDamageReceived;
 	FOnStatDamageReceived OnDotDamageReceived;
 
+	/** 무적이라 피해를 받지 않았을 때 원본 피해 Context를 전달한다. 체력은 그대로지만 공격받은 것을 알아채야 하는 쪽(적 감지 등)에 쓴다. */
+	FOnStatDamageReceived OnDamageBlocked;
+
 	// CurrentValue 변경 전에 실행되는 함수
 	// 값의 Clamping용도로 사용
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;

@@ -95,6 +95,9 @@ void AEnemy::BeginPlay()
 	StatAttributeSet->OnDamageReceived.AddUObject(this, &AEnemy::OnDamageReceived);
 	StatAttributeSet->OnDotDamageReceived.AddUObject(this, &AEnemy::OnDotDamageReceived);
 
+	// 무적(보스 에너지 링크 등)으로 막힌 공격도 공격자를 알아채도록 같은 감지 갱신을 한다.
+	StatAttributeSet->OnDamageBlocked.AddUObject(this, &AEnemy::OnDamageReceived);
+
 	InitializeOverHeadWidget();
 	if (StatAttributeSet->GetHealth() <= 0.0f)
 	{
@@ -134,6 +137,7 @@ void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		StatAttributeSet->OnDamageReceived.RemoveAll(this);
 		StatAttributeSet->OnDotDamageReceived.RemoveAll(this);
+		StatAttributeSet->OnDamageBlocked.RemoveAll(this);
 	}
 
 	Super::EndPlay(EndPlayReason);

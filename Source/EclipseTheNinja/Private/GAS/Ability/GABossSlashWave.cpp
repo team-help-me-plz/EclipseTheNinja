@@ -5,6 +5,7 @@
 #include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "Component/BossLostTargetComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
@@ -210,7 +211,10 @@ FVector UGABossSlashWave::GetLaunchDirection(const AActor* Avatar, const FVector
 {
 	const AEnemy* Enemy = Cast<AEnemy>(Avatar);
 	const AActor* Target = Enemy ? Enemy->GetCombatTarget() : nullptr;
-	if (!Target)
+
+	// 대상을 놓친 보스가 난사할 때는 대상 위치를 모르므로 바라보는 방향으로 쏜다.
+	const UBossLostTargetComponent* LostTargetComp = Avatar->FindComponentByClass<UBossLostTargetComponent>();
+	if (!Target || (LostTargetComp && LostTargetComp->IsRampaging()))
 	{
 		return Avatar->GetActorForwardVector();
 	}

@@ -4,6 +4,7 @@
 #include "AbilitySystemComponent.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/AssassinationDropComponent.h"
+#include "Component/BossLostTargetComponent.h"
 #include "Component/EnemyDetectionComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
@@ -31,6 +32,9 @@ ABossEnemy::ABossEnemy()
 
 	// 보스는 암살로 처치되어도 회복 아이템을 떨어뜨리지 않는다.
 	AssassinationDropComp->SetDropActorClass(nullptr);
+
+	// 대상을 놓치면 일반 적의 수색 대신 포효와 난사를 한다.
+	LostTargetComp = CreateDefaultSubobject<UBossLostTargetComponent>(TEXT("LostTargetComp"));
 
 	// 기믹 실패 시 처형 연출. 플레이어 피격 모션은 일반 암살의 피격자 몽타주를 그대로 쓴다.
 	ExecutionAbilityClass = UGABossExecution::StaticClass();
@@ -410,6 +414,21 @@ void ABossEnemy::ResetToInitial_Implementation()
 	}
 }
 
+bool ABossEnemy::ShouldLockMovementDuringAttack() const
+{
+	return !LostTargetComp || !LostTargetComp->IsHandlingLostTarget();
+}
+
+bool ABossEnemy::ShouldHoldCombatMemory() const
+{
+	return LostTargetComp && LostTargetComp->IsHandlingLostTarget();
+}
+
+bool ABossEnemy::ShouldRun() const
+{
+	return IsRunPhase() || (LostTargetComp && LostTargetComp->IsApproaching());
+}
+
 void ABossEnemy::FaceDirection(float DirectionX)
 {
 	if (TurnRate <= 0.0f)
@@ -449,7 +468,8 @@ void ABossEnemy::UpdateTurning(float DeltaTime)
 void ABossEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 {
 	// 달리기 전 페이즈에서는 자세를 잡고 천천히 다가간다. 순찰·수색처럼 원래 느린 이동은 그대로다.
-	const float LimitedSpeed = IsRunPhase()
+	// 놓친 대상의 마지막 목격 위치로 갈 때는 페이즈와 무관하게 달린다.
+	const float LimitedSpeed = ShouldRun()
 		? Speed
 		: FMath::Min(Speed, StanceWalkSpeed);
 
@@ -489,6 +509,14 @@ bool ABossEnemy::IsRestingBetweenPatterns() const
 
 void ABossEnemy::UpdateCombatMovement(AActor* Target, float DeltaSeconds)
 {
+	// 패턴 재생 중에는 이동·방향 전환 입력을 넣지 않는다.
+	// 난사 중 시작한 패턴은 BT 공격 태스크가 붙잡지 않아, 그 도중 대상을 발견하면 추격 태스크가 이 함수를 부른다.
+	// 속도는 건드리지 않으므로 돌진 패턴의 이동은 그대로 진행된다.
+	if (IsAttackActive())
+	{
+		return;
+	}
+
 	if (!IsRestingBetweenPatterns())
 	{
 		Super::UpdateCombatMovement(Target, DeltaSeconds);
@@ -548,21 +576,7 @@ bool ABossEnemy::ActivateAIAttack()
 		return false;
 	}
 
-	// 처음 고른 어빌리티는 그때 부여한다. 같은 어빌리티를 쓰는 패턴끼리는 스펙을 공유한다.
-	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Pattern->AbilityClass);
-	if (!Spec && HasAuthority())
-	{
-		const FGameplayAbilitySpecHandle NewHandle = ASC->GiveAbility(FGameplayAbilitySpec(Pattern->AbilityClass, 1));
-		Spec = ASC->FindAbilitySpecFromHandle(NewHandle);
-	}
-
-	if (!Spec)
-	{
-		return false;
-	}
-
-	CurrentPatternHandle = Spec->Handle;
-	const bool bActivated = ASC->TryActivateAbility(CurrentPatternHandle);
+	const bool bActivated = ActivatePatternAbility(*Pattern);
 	if (bActivated)
 	{
 		// 쿨타임은 패턴을 시작한 시점부터 센다.
@@ -575,6 +589,43 @@ bool ABossEnemy::ActivateAIAttack()
 	}
 
 	return bActivated;
+}
+
+bool ABossEnemy::ActivatePatternAgainst(const FBossPatternRow& Row, APawn* Target)
+{
+	if (!IsValidAITarget(Target))
+	{
+		return false;
+	}
+
+	// 패턴 어빌리티는 공격 대상과 공격 상태를 요구한다. 근접 판정도 이 대상에게만 들어간다.
+	CombatTarget = Target;
+	SetBehaviorState(EEnemyBehaviorState::Attack);
+	return ActivatePatternAbility(Row);
+}
+
+bool ABossEnemy::ActivatePatternAbility(const FBossPatternRow& Row)
+{
+	if (!ASC || !Row.AbilityClass)
+	{
+		return false;
+	}
+
+	// 처음 고른 어빌리티는 그때 부여한다. 같은 어빌리티를 쓰는 패턴끼리는 스펙을 공유한다.
+	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Row.AbilityClass);
+	if (!Spec && HasAuthority())
+	{
+		const FGameplayAbilitySpecHandle NewHandle = ASC->GiveAbility(FGameplayAbilitySpec(Row.AbilityClass, 1));
+		Spec = ASC->FindAbilitySpecFromHandle(NewHandle);
+	}
+
+	if (!Spec)
+	{
+		return false;
+	}
+
+	CurrentPatternHandle = Spec->Handle;
+	return ASC->TryActivateAbility(CurrentPatternHandle);
 }
 
 void ABossEnemy::GatherUsablePatterns(
@@ -624,15 +675,13 @@ bool ABossEnemy::IsPatternUsable(
 		return false;
 	}
 
-	// 어빌리티 자체에 GAS 쿨타임이 걸려 있으면 어차피 활성화되지 않으므로 뺀다.
-	const UGameplayAbility* AbilityCDO = Row.AbilityClass->GetDefaultObject<UGameplayAbility>();
-	const FGameplayTagContainer* CooldownTags = AbilityCDO ? AbilityCDO->GetCooldownTags() : nullptr;
-	if (CooldownTags && !CooldownTags->IsEmpty() && ASC->HasAnyMatchingGameplayTags(*CooldownTags))
+	if (IsPatternAbilityOnCooldown(Row))
 	{
 		return false;
 	}
 
 	// 사용 거리는 어빌리티 CDO의 설정을 읽는다. 보스 패턴 계열이 아니면 기본 공격 거리를 쓴다.
+	const UGameplayAbility* AbilityCDO = Row.AbilityClass->GetDefaultObject<UGameplayAbility>();
 	const UGABossPatternBase* PatternCDO = Cast<UGABossPatternBase>(AbilityCDO);
 	const float MinDistance = PatternCDO ? PatternCDO->GetMinUseDistance() : 0.0f;
 	const float MaxDistance = PatternCDO && PatternCDO->GetMaxUseDistance() > 0.0f
@@ -651,6 +700,14 @@ bool ABossEnemy::IsPatternUsable(
 
 	// 달아나는 대상을 쫓는 중이면 공격 거리에 들어온 것으로 보고 다시 검사한다.
 	return bAssumeInAttackDistance && IsInRange(AttackDistance);
+}
+
+bool ABossEnemy::IsPatternAbilityOnCooldown(const FBossPatternRow& Row) const
+{
+	// 어빌리티 자체에 GAS 쿨타임이 걸려 있으면 어차피 활성화되지 않으므로 뺀다.
+	const UGameplayAbility* AbilityCDO = Row.AbilityClass ? Row.AbilityClass->GetDefaultObject<UGameplayAbility>() : nullptr;
+	const FGameplayTagContainer* CooldownTags = AbilityCDO ? AbilityCDO->GetCooldownTags() : nullptr;
+	return ASC && CooldownTags && !CooldownTags->IsEmpty() && ASC->HasAnyMatchingGameplayTags(*CooldownTags);
 }
 
 bool ABossEnemy::IsPatternOnCooldown(FName RowName) const
