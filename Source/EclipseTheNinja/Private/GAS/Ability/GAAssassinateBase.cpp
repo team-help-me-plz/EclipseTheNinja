@@ -286,9 +286,14 @@ void UGAAssassinateBase::ExecuteVictim()
 	// 암살 피격 애니메이션 수신
 	Enemy->ReceiveAssassination(VictimExecutionMontage);
 
+	// 실제 재생 중인 몽타주를 불러옴
+	UAnimInstance* VictimAnimInstance = Enemy->GetMesh()->GetAnimInstance();
+	UAnimMontage* PlayedMontage = VictimAnimInstance ? VictimAnimInstance->GetCurrentActiveMontage() : nullptr;
+	if (!PlayedMontage) return;
+
 	// 피격자는 이동이 꺼져 있으므로 끌려가거나 쓰러지며 움직이는 루트 이동을 메시로 보여주고, 쓰러진 자리에 둔다.
 	UAbilityTask_MontageRootOffset* OffsetTask = UAbilityTask_MontageRootOffset::FollowMontageRoot(
-		this, Enemy, VictimExecutionMontage, false, true);
+		this, Enemy, PlayedMontage, false, true);
 	OffsetTask->ReadyForActivation();
 }
 

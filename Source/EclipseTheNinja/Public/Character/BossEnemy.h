@@ -24,7 +24,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossPhaseChanged, int32, NewPhase
  *   패턴은 각각 UGABossPatternBase 계열 어빌리티이며, 테이블이 없으면 공격하지 않는다.
  * - 에너지 링크: 체력이 EnergyLinkThresholds 비율에 닿으면 그 값에서 체력을 멈추고 무적 실드를 켠다.
  *   실드는 레버(IActivatable) 또는 BreakEnergyLink 호출로 해제되고, 제한시간이 지나면 보스가 플레이어를 처형(암살)한다.
- * - 암살: 가장 가까운 아래쪽 에너지 링크 체력까지 즉시 깎는다. 체력이 AssassinationKillRatio 이하면 즉시 처치한다.
+ * - 암살: 최대 체력의 AssassinationKillRatio만큼 깎고, 도중에 에너지 링크 체력이 있으면 그 체력에서 멈춘다. 이 피해로 체력이 0이 되면 즉시 처치한다.
  * - 페이즈: 1페이즈에서 시작해 에너지 링크를 파훼할 때마다 1씩 오른다. 체력 구간이 아니라 파훼 횟수로 정한다.
  *   RunPhase 전에는 StanceWalkSpeed로 자세를 잡고 걷고, RunPhase부터 ChaseSpeed로 달린다.
  *   패턴 테이블의 PhaseWeights에서 지금 페이즈의 가중치로 패턴을 고르며, 가중치가 0인 페이즈에서는 그 패턴을 고르지 않는다.
@@ -304,6 +304,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
 	TSoftObjectPtr<UAnimMontage> ExecutionVictimMontage;
 
+	/** 암살을 당하고 체력이 남아 있을 경우 재생하는 몽타주 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
+	TObjectPtr<UAnimMontage> AssassinationReactionMontage;
+
 	/** 보스가 플레이어 등 뒤 몇 cm에 서서 처형할지. 두 캡슐이 겹치는 거리보다 가까워지지는 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution", meta = (ClampMin = "0.0", Units = "cm"))
 	float ExecutionBehindDistance = 150.0f;
@@ -316,9 +320,9 @@ protected:
 	double ExecutionWaitStartTime = 0.0;
 	FTimerHandle ExecutionWaitTimer;
 
-	/** 이 체력 비율 이하에서 암살에 성공하면 보스를 즉시 처치한다. 기획: 20%. */
+	/** 암살 한 번에 깎는 최대 체력 비율. 남은 체력이 이 값 이하면 즉시 처치한다. 기획: 20%. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float AssassinationKillRatio = 0.2f;
+	float AssassinationDamageRatio = 0.2f;
 
 	/** 실드가 켜져 있는 동안 보스 주위에 디버그 구를 그린다. 실드 이펙트가 생기기 전 테스트용. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Debug")

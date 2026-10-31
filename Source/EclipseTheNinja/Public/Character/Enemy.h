@@ -65,6 +65,7 @@ public:
 
 	/** 암살 성공 시 호출된다. 기본 적은 즉시 사망하고, 보스처럼 규칙이 다른 적은 재정의한다. */
 	virtual void ReceiveAssassination(UAnimMontage* Montage);
+	virtual void ReceiveAssassination(UAnimMontage* Montage, float InDamage);
 
 	/** 지금 암살 대상으로 지정될 수 있는지. 경계 단계 검사와 별도로 적 종류별 조건(보스 실드 등)을 추가한다. */
 	virtual bool CanBeAssassinated() const { return true; }

@@ -362,28 +362,27 @@ void ABossEnemy::ReceiveAssassination(UAnimMontage* Montage)
 		return;
 	}
 
-	// 체력이 충분히 낮으면 일반 적처럼 즉시 처치한다.
-	const float Ratio = GetHealthRatio();
-	if (Ratio <= AssassinationKillRatio + KINDA_SMALL_NUMBER)
+	// 암살 피해는 최대 체력의 AssassinationDamageRatio만큼이다.
+	const float Health = StatAttributeSet->GetHealth();
+	const float Damage = AssassinationDamageRatio * StatAttributeSet->GetMaxHealth();
+
+	// 피해 중간에 남은 에너지 링크 체력이 있으면 OnHealthChanged가 그 체력에서 멈추므로 죽지 않는다.
+	bool bStoppedByEnergyLink = false;
+	if (EnergyLinkThresholds.IsValidIndex(NextEnergyLinkIndex))
+	{
+		const float ThresholdHealth = EnergyLinkThresholds[NextEnergyLinkIndex] * StatAttributeSet->GetMaxHealth();
+		bStoppedByEnergyLink = ThresholdHealth > 0.0f && ThresholdHealth < Health;
+	}
+
+	// 피해로 죽는 체력이면 일반 적처럼 암살 몽타주로 즉시 처치한다.
+	if (!bStoppedByEnergyLink && Health <= Damage + KINDA_SMALL_NUMBER)
 	{
 		Super::ReceiveAssassination(Montage);
 		return;
 	}
 
-	// 현재 체력보다 낮은 가장 가까운 에너지 링크 체력까지 깎는다.
-	// 남은 에너지 링크가 없으면 즉시 처치 체력까지 깎아, 다음 암살로 처치할 수 있게 한다.
-	float TargetRatio = AssassinationKillRatio;
-	for (int32 Index = NextEnergyLinkIndex; Index < EnergyLinkThresholds.Num(); ++Index)
-	{
-		if (EnergyLinkThresholds[Index] < Ratio)
-		{
-			TargetRatio = FMath::Max(EnergyLinkThresholds[Index], AssassinationKillRatio);
-			break;
-		}
-	}
-
-	// 체력 변경 델리게이트가 OnHealthChanged를 호출해 에너지 링크 발동까지 처리한다.
-	ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), TargetRatio * StatAttributeSet->GetMaxHealth());
+	// 살아남는 체력이면 피해를 적용하고 암살 리액션을 재생한다. 경계 고정과 에너지 링크는 OnHealthChanged()에서 처리한다.
+	Super::ReceiveAssassination(AssassinationReactionMontage, Damage);
 }
 
 void ABossEnemy::ToggleActivate_Implementation()

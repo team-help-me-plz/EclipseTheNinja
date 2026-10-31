@@ -6,6 +6,7 @@
 #include "Component/EnemyDetectionComponent.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Effects/GEDefaultStats.h"
+#include "GAS/Effects/GEBasicAttackDamage.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffectExtension.h"
 #include "Components/WidgetComponent.h"
@@ -222,6 +223,37 @@ void AEnemy::ReceiveAssassination(UAnimMontage* Montage)
 	{
 		Die();
 	}
+	PendingAssassinationMontage = nullptr;
+}
+
+void AEnemy::ReceiveAssassination(UAnimMontage* Montage, float InDamage)
+{
+	if (bIsDead) return;
+	if (!IsValid(ASC)) return;
+	if (!FMath::IsFinite(InDamage) || InDamage <= 0.0f) return;
+
+	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+	FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(UGEBasicAttackDamage::StaticClass(), 1.0f, Context);
+	if (!Spec.IsValid()) return;
+
+	Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), InDamage);
+
+	// 피해로 체력이 0이 되면 OnHealthChanged에서 암살 몽타주로 사망 처리한다.
+	PendingAssassinationMontage = Montage;
+	ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+
+	if (!bIsDead)
+	{
+		// 생존 리액션이 없으면 사망 몽타주로 대체하지 않는다.
+		if (IsValid(Montage))
+		{
+			if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+			{
+				AnimInstance->Montage_Play(Montage);
+			}
+		}
+	}
+
 	PendingAssassinationMontage = nullptr;
 }
 
