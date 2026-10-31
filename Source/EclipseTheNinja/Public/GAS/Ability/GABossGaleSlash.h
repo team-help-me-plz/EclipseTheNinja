@@ -23,6 +23,8 @@ class ECLIPSETHENINJA_API UGABossGaleSlash : public UGABossPatternAttack
 	GENERATED_BODY()
 
 public:
+	UGABossGaleSlash();
+
 	virtual void EndAbility(
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
@@ -34,6 +36,12 @@ public:
 protected:
 	// 첫 타격 노티파이에서 돌진을 시작한다. 이후 노티파이는 무시한다.
 	virtual void OnPatternHit(const FBossAttackHitArea& HitArea) override;
+
+	// 첫 타격 노티파이의 판정 상자가 DashDistance만큼 지나가는 경로 전체를 범위로 보여 준다.
+	virtual bool GetTelegraphArea(const AEnemy* Enemy, FBossTelegraphArea& OutArea) const override;
+
+	// 보스가 돌진해도 경로 표시는 출발 위치에 남아 있어야 한다.
+	virtual bool ShouldTelegraphFollowBoss() const override { return false; }
 
 	// 출발 위치의 판정 상자부터 지금 위치의 판정 상자까지 모두 덮는, 보스 기준 판정 영역을 만든다.
 	FBossAttackHitArea MakeDashPathArea(const AEnemy* Enemy) const;

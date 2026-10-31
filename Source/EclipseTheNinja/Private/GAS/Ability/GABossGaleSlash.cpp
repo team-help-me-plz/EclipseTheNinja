@@ -4,11 +4,43 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
+#include "Character/BossAttackTelegraph.h"
 #include "Character/Enemy.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
+
+UGABossGaleSlash::UGABossGaleSlash()
+{
+	// 판정은 첫 노티파이가 아니라 돌진이 끝날 때 나므로 범위 표시는 OnDashFinished에서 지운다.
+	bHideTelegraphOnLastHit = false;
+}
+
+bool UGABossGaleSlash::GetTelegraphArea(const AEnemy* Enemy, FBossTelegraphArea& OutArea) const
+{
+	FBossAttackHitArea HitArea;
+	if (!Enemy || !FindFirstHitArea(HitArea))
+	{
+		return false;
+	}
+
+	// DashDistance는 스케일과 무관한 거리라 보스 기준 좌표로 바꿔 판정 상자를 앞으로 늘인다.
+	const float ScaleX = FMath::Max(FMath::Abs(Enemy->GetActorScale3D().X), KINDA_SMALL_NUMBER);
+	const float LocalDashDistance = DashDistance / ScaleX;
+
+	OutArea.Center = FVector(
+		HitArea.Offset.X + LocalDashDistance * 0.5f,
+		HitArea.Offset.Y,
+		HitArea.Offset.Z
+	);
+	OutArea.HalfSize = FVector2D(
+		HitArea.HalfExtent.X + LocalDashDistance * 0.5f,
+		HitArea.HalfExtent.Z
+	);
+	OutArea.PitchDegrees = 0.0f;
+	return true;
+}
 
 void UGABossGaleSlash::OnPatternHit(const FBossAttackHitArea& HitArea)
 {
@@ -120,6 +152,7 @@ void UGABossGaleSlash::OnDashFinished()
 	// 다 지나간 뒤에 출발~도착 사이를 한 번 판정한다.
 	bDashing = false;
 	ApplyDashPathDamage();
+	HideTelegraph();
 
 	const AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
 

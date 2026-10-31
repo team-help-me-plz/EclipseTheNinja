@@ -1,6 +1,7 @@
 #include "GAS/Ability/GABossSlashWave.h"
 
 #include "AbilitySystemComponent.h"
+#include "Character/BossAttackTelegraph.h"
 #include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
 #include "Checkpoint/CheckpointSubsystem.h"
@@ -32,6 +33,29 @@ bool UGABossSlashWave::CanActivateAbility(
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
 }
 
+void UGABossSlashWave::ActivateAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	const FGameplayEventData* TriggerEventData
+)
+{
+	// 부모가 몽타주를 재생하고 범위를 띄우기 전에 방향을 정해야 범위 표시와 발사 방향이 같아진다.
+	const AEnemy* Enemy = ActorInfo ? Cast<AEnemy>(ActorInfo->AvatarActor.Get()) : nullptr;
+	LockedLaunchDirection = Enemy
+		? GetLaunchDirection(Enemy, GetSpawnLocation(Enemy))
+		: FVector::ForwardVector;
+
+	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+}
+
+FVector UGABossSlashWave::GetSpawnLocation(const AEnemy* Enemy) const
+{
+	FVector SpawnLocation = Enemy->GetActorTransform().TransformPosition(SpawnOffset);
+	SpawnLocation.Y = Enemy->GetActorLocation().Y;
+	return SpawnLocation;
+}
+
 void UGABossSlashWave::OnPatternHit(const FBossAttackHitArea& HitArea)
 {
 	AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
@@ -46,11 +70,9 @@ void UGABossSlashWave::OnPatternHit(const FBossAttackHitArea& HitArea)
 		return;
 	}
 
-	// 보스 정면 기준으로 발사 위치를 잡는다. 횡스크롤 평면(Y)은 보스와 같게 맞춘다.
-	FVector SpawnLocation = Enemy->GetActorTransform().TransformPosition(SpawnOffset);
-	SpawnLocation.Y = Enemy->GetActorLocation().Y;
-
-	const FVector Direction = GetLaunchDirection(Enemy, SpawnLocation);
+	// 발사 순간의 대상 위치를 따라가지 않고, 시전 시작 때 정한 방향으로 날린다.
+	const FVector SpawnLocation = GetSpawnLocation(Enemy);
+	const FVector Direction = LockedLaunchDirection;
 
 	// 피해 Spec은 발사 시점에 만들어 검기에 넘긴다. 맞힌 쪽의 피격 처리가 보스를 공격자로 알 수 있게 Instigator를 넣는다.
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
@@ -113,6 +135,27 @@ void UGABossSlashWave::OnPatternHit(const FBossAttackHitArea& HitArea)
 			Boss->GetDebugAttackDrawDuration()
 		);
 	}
+}
+
+bool UGABossSlashWave::GetTelegraphArea(const AEnemy* Enemy, FBossTelegraphArea& OutArea) const
+{
+	if (!Enemy)
+	{
+		return false;
+	}
+
+	// 발사에 쓸 고정 방향을 보스 기준 방향으로 바꾼다.
+	const FTransform& ActorTransform = Enemy->GetActorTransform();
+	const FVector LocalDirection = ActorTransform.InverseTransformVectorNoScale(LockedLaunchDirection);
+
+	// 길이와 두께는 스케일과 무관한 거리라 보스 기준 좌표로 바꾼다.
+	const float Scale = FMath::Max(FMath::Abs(ActorTransform.GetScale3D().X), KINDA_SMALL_NUMBER);
+	const float LocalHalfLength = TelegraphLength * 0.5f / Scale;
+
+	OutArea.Center = SpawnOffset + FVector(LocalDirection.X, 0.0f, LocalDirection.Z).GetSafeNormal() * LocalHalfLength;
+	OutArea.HalfSize = FVector2D(LocalHalfLength, TelegraphHalfHeight / Scale);
+	OutArea.PitchDegrees = FMath::RadiansToDegrees(FMath::Atan2(LocalDirection.Z, LocalDirection.X));
+	return true;
 }
 
 void UGABossSlashWave::DrawDebugLaunch(
