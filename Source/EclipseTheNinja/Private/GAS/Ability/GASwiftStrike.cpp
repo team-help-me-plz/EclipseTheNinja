@@ -14,6 +14,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "CollisionShape.h"
 #include "CollisionQueryParams.h"
@@ -403,6 +404,22 @@ void UGASwiftStrike::RestoreDashState()
 		{
 			// 이 어빌리티가 더한 개수만 제거해 다른 무적 효과는 유지한다.
 			SourceASC->RemoveLooseGameplayTag(EclipseGameplayTags::State_Invincible);
+		}
+
+		// 무적 중에 겹친 함정은 다시 들어오기 전까지 시작 오버랩이 오지 않으므로, 끝나는 시점에 메시 오버랩을 새로 잡는다.
+		// 함정이 안전 지점으로 옮기며 어빌리티를 취소할 수 있으므로, 종료 처리 중이 아닌 다음 틱에 갱신한다.
+		if (ACharacter* Avatar = Cast<ACharacter>(GetAvatarActorFromActorInfo()))
+		{
+			GetWorld()->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(Avatar, [Avatar]()
+			{
+				USkeletalMeshComponent* Mesh = Avatar->GetMesh();
+				if (!IsValid(Mesh) || !Mesh->GetGenerateOverlapEvents()) return;
+				// 오버랩 이벤트를 끈 채 갱신하면 기존 오버랩이 모두 끝나고, 다시 켜서 갱신하면 겹친 대상에 시작 오버랩이 다시 온다.
+				Mesh->SetGenerateOverlapEvents(false);
+				Mesh->UpdateOverlaps();
+				Mesh->SetGenerateOverlapEvents(true);
+				Mesh->UpdateOverlaps();
+			}));
 		}
 	}
 
