@@ -577,9 +577,10 @@ bool UGALedgeHang::FindLedgeInDirection(const ACharacter* Player, float OutDir, 
 	}
 
 	// 2. 모서리 아래 벽면: 바깥 공중에서 안쪽으로 트레이스해서 매달릴 벽을 찾는다
+	// 가장자리에 걸터 서 있으면 캡슐 중심이 이미 모서리 밖에 있으므로, 캡슐 안쪽 끝까지 트레이스한다.
 	FHitResult WallHit;
 	const FVector WallStart(Probe.X, Probe.Y, FeetZ - 20.f);
-	const FVector WallEnd(Location.X, Location.Y, FeetZ - 20.f);
+	const FVector WallEnd(Location.X - OutDir * Radius, Location.Y, FeetZ - 20.f);
 	if (!GetWorld()->LineTraceSingleByChannel(WallHit, WallStart, WallEnd, ECC_LedgeWallAttach, Params)) return false;
 	if (WallHit.bStartPenetrating) return false;
 	if (FMath::Abs(WallHit.ImpactNormal.Z) > 0.1f) return false;

@@ -246,6 +246,31 @@ void UGAWallAttach::OnInterrupted()
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, false, true);
 }
 
+bool UGAWallAttach::CanClimbToward(const ACharacter* Player, float Up) const
+{
+	if (!IsValid(Player) || FMath::IsNearlyZero(Up)) return true;
+
+	// 매달린 동안에는 벽을 바라보고 있다
+	const float SearchDir = Player->GetActorForwardVector().X > 0 ? 1.f : -1.f;
+	const FVector ForwardVector(SearchDir, 0.f, 0.f);
+
+	// 움직이는 쪽 캡슐 끝에서 조금 더 나아간 높이의 벽을 확인한다
+	const float HalfHeight = Player->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	FVector ProbeStart = Player->GetActorLocation();
+	ProbeStart.Z += (Up > 0.f ? 1.f : -1.f) * (HalfHeight + ClimbCheckLead);
+	const FVector ProbeEnd = ProbeStart + ForwardVector * WallSearchDist;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(WallClimbMove), false, Player);
+
+	// 벽이 없으면(모서리 위, 벽 아래 끝) 기존처럼 움직인다. 올라가기·내려가기는 다른 어빌리티가 맡는다.
+	FHitResult WallHit;
+	if (!GetWorld()->LineTraceSingleByChannel(WallHit, ProbeStart, ProbeEnd, ECC_WallAttach, Params)) return true;
+
+	// 벽이 있으면 벽타기 벽이어야 이어서 움직인다
+	FHitResult ClimbHit;
+	return GetWorld()->LineTraceSingleByChannel(ClimbHit, ProbeStart, ProbeEnd, ECC_WallClimbing, Params);
+}
+
 bool UGAWallAttach::FindWall(const ACharacter* Player, FHitResult& OutHit, bool* bOutClimbable) const
 {
 	// 액터의 위치에서 액터의 전방으로 WallSearchDist 만큼 트레이스
