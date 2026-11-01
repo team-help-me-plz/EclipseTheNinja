@@ -1170,6 +1170,22 @@ void APlayerCharacter::ReturnToSafePoint_Implementation()
 	if (!bHasSafePoint || bIsDead) return;
 	// 평면 고정을 되돌린 뒤에 안전 지점 평면으로 옮긴다.
 	if (IsValid(HidingComponent)) HidingComponent->ForceExit();
+
+	// 매달리기·공격 등 진행 중인 어빌리티를 끝내고 옮긴다. 매달린 자세나 루트 모션 이동이 안전 지점까지 따라오지 않게 한다.
+	// 분신은 플레이어 위치와 상관없이 유지되므로 분신술은 끝내지 않는다.
+	if (IsValid(ASC))
+	{
+		TArray<FGameplayAbilitySpecHandle> ActiveHandles;
+		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+		{
+			if (!Spec.IsActive() || !Spec.Ability || Spec.Ability->IsA<UGACloneTech>()) continue;
+			ActiveHandles.Add(Spec.Handle);
+		}
+		for (const FGameplayAbilitySpecHandle& Handle : ActiveHandles)
+		{
+			ASC->CancelAbilityHandle(Handle);
+		}
+	}
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
 	SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
