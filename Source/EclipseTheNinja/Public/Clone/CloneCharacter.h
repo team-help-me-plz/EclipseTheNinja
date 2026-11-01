@@ -82,8 +82,23 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Move")
 	float	TurnPauseTime = 0.2f;
 
+	// 목표 지점 근처에서 좌우 왕복이 이 시간 이상 이어지면 도달 불가로 판정하고 멈춘다 (높이가 다른 목표 등)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Move", meta = (ClampMin = "0.0"))
+	float	UnreachableOscillationTime = 0.5f;
+
+public:
+	// 마지막 명령의 목표 지점이 도달 불가로 판정되었는지
+	bool	IsTargetUnreachable() const { return (this->bIsTargetUnreachable); }
+
 private:
 	float	TurnPauseRemaining = 0.f;
+
+	// 이동 중 방향을 뒤집은 횟수. 두 번째부터는 목표를 지나쳐 되돌아가는 왕복으로 본다
+	int32	WalkDirFlipCount = 0;
+	float	OscillationElapsed = 0.f;
+	bool	bIsTargetUnreachable = false;
+
+	void	ResetMoveProgress();
 	void	ResetInteractionCooldown();
 
 	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신

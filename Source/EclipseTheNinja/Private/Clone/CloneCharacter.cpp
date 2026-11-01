@@ -88,6 +88,14 @@ void ACloneCharacter::StopCloneMovement()
 	ConsumeMovementInputVector();
 }
 
+void ACloneCharacter::ResetMoveProgress()
+{
+	this->TurnPauseRemaining = 0.f;
+	this->WalkDirFlipCount = 0;
+	this->OscillationElapsed = 0.f;
+	this->bIsTargetUnreachable = false;
+}
+
 void ACloneCharacter::OnSpawnFromPool_Implementation()
 {
 	InitializeWalkState();
@@ -106,6 +114,7 @@ void ACloneCharacter::OnReturnToPool_Implementation()
 	this->TargetActor = nullptr;
 	this->TargetLocation = FVector::ZeroVector;
 	this->CommandType = ECloneCommandType::Move;
+	this->ResetMoveProgress();
 
 	GetWorldTimerManager().ClearTimer(this->InteractionCooldownTimer);
 	this->bIsInteractCooldown = false;
@@ -133,6 +142,25 @@ void ACloneCharacter::Tick(float DeltaTime)
 			{
 				this->WalkDir *= -1.f;
 				this->TurnPauseRemaining = this->TurnPauseTime;
+				this->WalkDirFlipCount++;
+			}
+			// 처음 한 번은 목표 쪽으로 돌아서는 것일 수 있으므로, 두 번째 반전부터 왕복 시간을 잰다
+			if (this->WalkDirFlipCount >= 2)
+			{
+				this->OscillationElapsed += DeltaTime;
+				if (this->OscillationElapsed >= this->UnreachableOscillationTime)
+				{
+					UE_LOG(
+						LogTemp,
+						Log,
+						TEXT("[ACloneCharacter::Tick] 목표 지점(%s)에 도달할 수 없어 이동을 멈춥니다."),
+						*this->TargetLocation.ToString()
+					);
+					this->bIsTargetUnreachable = true;
+					this->TurnPauseRemaining = 0.f;
+					StopCloneMovement();
+					return ;
+				}
 			}
 			if (this->TurnPauseRemaining > 0.f)
 			{
@@ -177,6 +205,7 @@ void ACloneCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 
 void ACloneCharacter::SetCommand(const FCloneCommandType& InCommand)
 {
+	this->ResetMoveProgress();
 	this->CommandType = InCommand.Type;
 	switch (InCommand.Type)
 	{
