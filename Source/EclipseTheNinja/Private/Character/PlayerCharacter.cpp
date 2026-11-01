@@ -600,14 +600,21 @@ void APlayerCharacter::DoBasicAttack()
 	if (bIsDead) return;
 	if (!ASC) return;
 	if (IsAssassinating()) return;
+
+	if (!FindAbilitySpecByInputID(EAbilityInputID::BasicAttack)) return;
+	if (!BasicAttackMontage) return;
+
+	// 근접 공격은 땅에 서 있을 때만 나간다. 점프·낙하 중에는 공격하지 않는다.
+	if (!GetCharacterMovement()->IsMovingOnGround()) return;
+
+	// 공격 몽타주는 선 자세라서, 앉은 채 위가 막혀 있으면 벽을 뚫고 일어서 보이므로 공격하지 않는다.
+	if (!HasRoomToStand()) return;
+
 	if (bIsExploring)
 	{
 		DoThrowKunai();
 		return;
 	}
-
-	if (!FindAbilitySpecByInputID(EAbilityInputID::BasicAttack)) return;
-	if (!BasicAttackMontage) return;
 
 	// 첫 공격 전에만 방향을 확정하고, 콤보 추가 입력은 기존 공격 방향을 유지한다.
 	if (!ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
@@ -673,6 +680,26 @@ bool APlayerCharacter::IsOnWall() const
 	if (!IsValid(ASC)) return false;
 	return ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag())
 		|| ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag());
+}
+
+bool APlayerCharacter::HasRoomToStand() const
+{
+	if (!bIsCrouched) return true;
+
+	// 캡슐 바닥은 그대로 두고 서 있는 높이로 늘렸을 때 막히는지 본다. 바닥에 닿은 부분이 걸리지 않도록 아래를 조금 띄운다.
+	const UCapsuleComponent* Capsule = GetCapsuleComponent();
+	const float CrouchedHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+	const float StandHalfHeight = GetDefaultHalfHeight();
+	constexpr float FloorClearance = 2.0f;
+	const FVector StandLocation = GetActorLocation() + FVector(0.0f, 0.0f, StandHalfHeight - CrouchedHalfHeight + FloorClearance);
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(
+		Capsule->GetScaledCapsuleRadius(), FMath::Max(1.0f, StandHalfHeight - FloorClearance));
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CrouchStandCheck), false, this);
+	FCollisionResponseParams ResponseParams;
+	GetCharacterMovement()->InitCollisionParams(Params, ResponseParams);
+	return !GetWorld()->OverlapBlockingTestByChannel(StandLocation, FQuat::Identity,
+		Capsule->GetCollisionObjectType(), Shape, Params, ResponseParams);
 }
 
 void APlayerCharacter::SetAssassinationFacing(float Yaw)

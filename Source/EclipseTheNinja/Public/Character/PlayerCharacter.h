@@ -276,6 +276,8 @@ private:
 	bool IsAttacking() const;
 	// 벽에 붙음·모서리 매달림·오르기·벽 타고 내려가기 중인지.
 	bool IsOnWall() const;
+	// 앉은 상태에서 일어설 공간이 있는지. 서 있으면 항상 true.
+	bool HasRoomToStand() const;
 
 	// 현재 제자리 턴이 회전 마무리(SettleFacing)로 시작되었는지. 커서 회전 종료 처리가 이 턴을 끊지 않게 한다.
 	bool bMoveTurnActive = false;
