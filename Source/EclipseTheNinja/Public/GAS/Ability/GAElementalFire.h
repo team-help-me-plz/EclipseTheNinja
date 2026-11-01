@@ -105,15 +105,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
 	TObjectPtr<UNiagaraSystem>	FireSwordSystem = nullptr;
 
-	/** 이펙트를 붙일 캐릭터 메시의 소켓(본) */
+	/**
+	 * 이펙트를 붙일 소켓. 캐릭터에 붙은 메시 중 이 소켓을 가진 메시(칼)에 붙는다.
+	 * 이펙트 위치/회전은 소켓 트랜스폼을 그대로 따르므로 스켈레톤 에디터에서 소켓을 조정하면 된다.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
-	FName	FireSwordSocketName = TEXT("weapon_r");
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
-	FVector	FireSwordLocationOffset = FVector::ZeroVector;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
-	FRotator	FireSwordRotationOffset = FRotator::ZeroRotator;
+	FName	FireSwordSocketName = TEXT("b_ElementalSocket");
 
 	///** 화염 속성 적용 시 공격 후 들어갈 총 데미지의 최대 배율 */
 	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Attack|Fire")
@@ -130,6 +127,9 @@ protected:
 #endif
 
 private:
+	// 아바타에 붙은 메시 중 FireSwordSocketName 소켓을 가진 메시를 찾는다.
+	USceneComponent* FindFireSwordAttachComponent() const;
+
 	// 이번 발동에서 적용한 불속성 GE
 	FActiveGameplayEffectHandle FireElementEffectHandle;
 
