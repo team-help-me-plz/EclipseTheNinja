@@ -10,6 +10,7 @@
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
 
+#include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -89,16 +90,38 @@ void UGAElementalFire::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	WaitRemovedTask->OnRemoved.AddDynamic(this, &UGAElementalFire::OnFireElementRemoved);
 	WaitRemovedTask->ReadyForActivation();
 
-	// 불이 붙어 있는 동안 칼에 불꽃 이펙트를 붙인다. 불이 꺼지면 EndAbility에서 멈춘다.
-	const ACharacter* Character = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-	if (FireSwordSystem && Character && Character->GetMesh())
+	// 불이 붙어 있는 동안 칼 소켓에 불꽃 이펙트를 붙인다. 불이 꺼지면 EndAbility에서 멈춘다.
+	USceneComponent* AttachComponent = FireSwordSystem ? FindFireSwordAttachComponent() : nullptr;
+	if (AttachComponent)
 	{
-		FireSwordEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(FireSwordSystem, Character->GetMesh(),
-			FireSwordSocketName, FireSwordLocationOffset, FireSwordRotationOffset,
+		FireSwordEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(FireSwordSystem, AttachComponent,
+			FireSwordSocketName, FVector::ZeroVector, FRotator::ZeroRotator,
 			EAttachLocation::SnapToTarget, true);
 	}
 
 	OnFireElementStarted.Broadcast();
+}
+
+USceneComponent* UGAElementalFire::FindFireSwordAttachComponent() const
+{
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar) return nullptr;
+
+	// 칼은 캐릭터 메시와 별도의 메시 컴포넌트이므로 소켓을 가진 메시를 찾는다.
+	TInlineComponentArray<UMeshComponent*> Meshes(Avatar);
+	for (UMeshComponent* Mesh : Meshes)
+	{
+		if (Mesh && Mesh->DoesSocketExist(FireSwordSocketName))
+		{
+			return Mesh;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("%s: '%s' 소켓을 가진 메시가 %s에 없어 캐릭터 메시에 붙입니다."),
+		*GetName(), *FireSwordSocketName.ToString(), *Avatar->GetName());
+
+	const ACharacter* Character = Cast<ACharacter>(Avatar);
+	return Character ? Character->GetMesh() : nullptr;
 }
 
 bool UGAElementalFire::GetFireElementTime(float& OutRemaining, float& OutDuration) const
