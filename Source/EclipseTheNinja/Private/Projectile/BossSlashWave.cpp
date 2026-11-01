@@ -81,6 +81,17 @@ void ABossSlashWave::InitializeSlashWave(
 	Movement->Velocity = SafeDirection * FMath::Max(1.0f, Speed);
 	Movement->UpdateComponentVelocity();
 
+	// 스스로 날아가는 이펙트는 재생 속도를 바꿔 투사체 속도에 맞춘다. 방향이 정해진 뒤 처음부터 다시 재생한다.
+	if (Effect->GetAsset())
+	{
+		if (EffectFlightSpeed > 0.0f)
+		{
+			Effect->SetCustomTimeDilation(FMath::Max(1.0f, Speed) / EffectFlightSpeed);
+		}
+
+		Effect->Activate(true);
+	}
+
 	// 스폰 순간 이미 겹쳐 있던 대상은 BeginOverlap이 다시 오지 않으므로 직접 검사한다.
 	TArray<AActor*> OverlappingActors;
 	HitBox->GetOverlappingActors(OverlappingActors);

@@ -10,6 +10,8 @@
 class UGameplayAbility;
 class UBossHealthBarWidget;
 class UBossLostTargetComponent;
+class UBossEnemyGimmickComponent;
+class UBossEnemyVFXComponent;
 struct FAbilityEndedData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossEnergyLinkActivated, int32, LinkIndex);
@@ -25,12 +27,14 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossPhaseChanged, int32, NewPhase
  *   패턴은 각각 UGABossPatternBase 계열 어빌리티이며, 테이블이 없으면 공격하지 않는다.
  * - 에너지 링크: 체력이 EnergyLinkThresholds 비율에 닿으면 그 값에서 체력을 멈추고 무적 실드를 켠다.
  *   실드는 레버(IActivatable) 또는 BreakEnergyLink 호출로 해제되고, 제한시간이 지나면 보스가 플레이어를 처형(암살)한다.
+ *   링크마다 풀어야 하는 기믹(기믹 스테이지 포탈·레버)의 순서와 레이저 연출은 UBossEnemyGimmickComponent가 맡는다.
  * - 암살: 최대 체력의 AssassinationDamageRatio만큼 깎고, 도중에 에너지 링크 체력이 있으면 그 체력에서 멈춘다. 이 피해로 체력이 0이 되면 즉시 처치한다.
  * - 페이즈: 1페이즈에서 시작해 에너지 링크를 파훼할 때마다 1씩 오른다. 체력 구간이 아니라 파훼 횟수로 정한다.
  *   RunPhase 전에는 StanceWalkSpeed로 자세를 잡고 걷고, RunPhase부터 ChaseSpeed로 달린다.
  *   패턴 테이블의 PhaseWeights에서 지금 페이즈의 가중치로 패턴을 고르며, 가중치가 0인 페이즈에서는 그 패턴을 고르지 않는다.
  * - 놓침: 전투 중 대상을 놓쳤을 때의 포효·난사·순찰 복귀는 BT의 UBTTask_BossLostTarget이 UBossLostTargetComponent로 진행한다.
  *   보스는 컴포넌트가 쓸 패턴 시전 함수만 제공한다.
+ * - VFX: 실드 이펙트, 피격 시 피·실드 튕김, 패턴의 칼 궤적과 질풍참 이펙트는 UBossEnemyVFXComponent가 맡는다.
  */
 UCLASS()
 class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
@@ -238,6 +242,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UBossLostTargetComponent> LostTargetComp;
 
+	/** 에너지 링크마다 풀어야 하는 기믹의 순서와 레이저 연출을 맡는다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UBossEnemyGimmickComponent> GimmickComp;
+
+	/** 실드·피격·공격 VFX를 맡는다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UBossEnemyVFXComponent> VFXComp;
+
 	// 패턴 어빌리티가 끝나거나 취소되면 PatternRestTimeMin~Max 사이의 휴식 시간 뒤에 다음 패턴을 시작하게 한다.
 	void OnPatternAbilityEnded(const FAbilityEndedData& EndedData);
 
@@ -288,6 +300,9 @@ protected:
 
 	// 패턴 행 이름별로 다시 쓸 수 있게 되는 월드 시간(초).
 	TMap<FName, double> PatternReadyTimes;
+
+	// LinkIndex 링크가 발동하는 체력. 비율 곱셈의 부동소수점 오차가 남지 않도록 정수로 반올림한다.
+	float GetEnergyLinkThresholdHealth(int32 LinkIndex) const;
 
 	// 실드를 켜고 제한시간 타이머를 시작한다.
 	void ActivateEnergyLink(int32 LinkIndex);
@@ -355,9 +370,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float AssassinationDamageRatio = 0.2f;
 
-	/** 실드가 켜져 있는 동안 보스 주위에 디버그 구를 그린다. 실드 이펙트가 생기기 전 테스트용. */
+	/** 실드가 켜져 있는 동안 보스 주위에 디버그 구를 그린다. 실드 이펙트(VFXComp)가 생겨 기본은 끈다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Debug")
-	bool bDrawDebugShield = true;
+	bool bDrawDebugShield = false;
 
 	/**
 	 * 공격 판정을 디버그로 그린다. BP에서는 SetDrawDebugAttack으로 켜고 끈다.

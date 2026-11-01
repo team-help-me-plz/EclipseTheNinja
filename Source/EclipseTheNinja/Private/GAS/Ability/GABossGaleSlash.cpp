@@ -6,6 +6,7 @@
 #include "Animation/AnimInstance.h"
 #include "Character/BossAttackTelegraph.h"
 #include "Character/Enemy.h"
+#include "Component/BossEnemyVFXComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -155,6 +156,12 @@ void UGABossGaleSlash::OnDashFinished()
 	HideTelegraph();
 
 	const AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
+
+	// 돌진이 끝난 자리에서 모래 바람이 퍼지게 한다.
+	if (UBossEnemyVFXComponent* VFX = Enemy ? Enemy->FindComponentByClass<UBossEnemyVFXComponent>() : nullptr)
+	{
+		VFX->SpawnGaleGust(DashStartLocation, Enemy->GetActorLocation());
+	}
 
 	RestorePawnCollision();
 

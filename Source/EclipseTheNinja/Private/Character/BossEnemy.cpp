@@ -4,6 +4,8 @@
 #include "AbilitySystemComponent.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/AssassinationDropComponent.h"
+#include "Component/BossEnemyGimmickComponent.h"
+#include "Component/BossEnemyVFXComponent.h"
 #include "Component/BossLostTargetComponent.h"
 #include "Component/EnemyDetectionComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -35,6 +37,12 @@ ABossEnemy::ABossEnemy()
 
 	// 대상을 놓치면 일반 적의 수색 대신 포효와 난사를 한다.
 	LostTargetComp = CreateDefaultSubobject<UBossLostTargetComponent>(TEXT("LostTargetComp"));
+
+	// 에너지 링크 기믹의 해제 순서와 레이저 연출
+	GimmickComp = CreateDefaultSubobject<UBossEnemyGimmickComponent>(TEXT("GimmickComp"));
+
+	// 실드·피격·공격 VFX
+	VFXComp = CreateDefaultSubobject<UBossEnemyVFXComponent>(TEXT("VFXComp"));
 
 	// 기믹 실패 시 처형 연출. 플레이어 피격 모션은 일반 암살의 피격자 몽타주를 그대로 쓴다.
 	ExecutionAbilityClass = UGABossExecution::StaticClass();
@@ -181,7 +189,7 @@ void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 		return;
 	}
 
-	const float ThresholdHealth = EnergyLinkThresholds[NextEnergyLinkIndex] * StatAttributeSet->GetMaxHealth();
+	const float ThresholdHealth = GetEnergyLinkThresholdHealth(NextEnergyLinkIndex);
 	if (Data.NewValue > ThresholdHealth)
 	{
 		Super::OnHealthChanged(Data);
@@ -202,6 +210,17 @@ void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 	FOnAttributeChangeData ClampedData = Data;
 	ClampedData.NewValue = ThresholdHealth;
 	Super::OnHealthChanged(ClampedData);
+}
+
+float ABossEnemy::GetEnergyLinkThresholdHealth(int32 LinkIndex) const
+{
+	if (!EnergyLinkThresholds.IsValidIndex(LinkIndex) || !StatAttributeSet)
+	{
+		return 0.0f;
+	}
+
+	// 0.3 * 200이 60.000002가 되는 식의 오차가 남으면, 남은 체력만큼 피해를 줘도 0.000002가 남아 죽지 않는다.
+	return FMath::RoundToFloat(EnergyLinkThresholds[LinkIndex] * StatAttributeSet->GetMaxHealth());
 }
 
 void ABossEnemy::ActivateEnergyLink(int32 LinkIndex)
@@ -374,7 +393,7 @@ void ABossEnemy::ReceiveAssassination(UAnimMontage* Montage)
 	bool bStoppedByEnergyLink = false;
 	if (EnergyLinkThresholds.IsValidIndex(NextEnergyLinkIndex))
 	{
-		const float ThresholdHealth = EnergyLinkThresholds[NextEnergyLinkIndex] * StatAttributeSet->GetMaxHealth();
+		const float ThresholdHealth = GetEnergyLinkThresholdHealth(NextEnergyLinkIndex);
 		bStoppedByEnergyLink = ThresholdHealth > 0.0f && ThresholdHealth < Health;
 	}
 
@@ -399,6 +418,17 @@ void ABossEnemy::ResetToInitial_Implementation()
 	HideBossHealthBar();
 	ClearEnergyLinkState();
 	NextEnergyLinkIndex = 0;
+
+	// 링크 레이저를 끄고 기믹 포탈도 닫는다.
+	if (GimmickComp)
+	{
+		GimmickComp->ResetGimmick();
+	}
+
+	if (VFXComp)
+	{
+		VFXComp->ResetVFX();
+	}
 
 	// 리스폰한 보스는 모든 패턴을 바로 쓸 수 있게 패턴 쿨타임을 지운다.
 	PatternReadyTimes.Reset();
