@@ -183,6 +183,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Kunai")
 	void DoThrowKunai();
 
+	// 현재 커서 쪽(좌우)으로 몸을 즉시 돌린다. 표창 투척 어빌리티가 실행될 때 호출한다.
+	void FaceCursorForThrow();
+
 	virtual void RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void ReturnToSafePoint_Implementation() override;
 

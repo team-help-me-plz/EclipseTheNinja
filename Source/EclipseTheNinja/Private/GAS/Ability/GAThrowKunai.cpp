@@ -3,6 +3,7 @@
 #include "Character/PlayerCharacter.h"
 #include "Clone/CloneCharacter.h"
 #include "GAS/Ability/GABaseAttack.h"
+#include "GAS/Ability/GAWallAttach.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "GAS/StatAttributeSet.h"
 #include "Checkpoint/CheckpointSubsystem.h"
@@ -37,6 +38,8 @@ UGAThrowKunai::UGAThrowKunai()
     // 근접 공격과 투척이 같은 몽타주 슬롯을 동시에 사용하지 않도록 막는다.
     ActivationOwnedTags.AddTag(UGABaseAttack::GetAttackingTag());
     ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
+    // 벽에 붙음·모서리 매달림·오르기 중에는 조준만 하고 던지지 않는다.
+    ActivationBlockedTags.AddTag(UGAWallAttach::GetWallStateTag());
     DamageEffectClass = UGEBasicAttackDamage::StaticClass();
 }
 
@@ -124,8 +127,11 @@ void UGAThrowKunai::ActivateAbility(
         bHasInitialTargetLocation = true;
     }
 
-    if (const APlayerCharacter* Player = Cast<APlayerCharacter>(GetAvatarActorFromActorInfo()))
+    if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetAvatarActorFromActorInfo()))
     {
+        // 블록 태그(공격 중, 벽 매달림 등)를 통과해 실행된 경우에만 커서 쪽으로 몸을 돌린다.
+        Player->FaceCursorForThrow();
+
         // 좌클릭 경로에서 갱신한 커서를 몽타주 재생 전에 저장한다.
         // 준비 동작 중 커서/몸 방향이 바뀌어도 이번 투척의 조준은 바뀌지 않는다.
         InitialPlayerForward = Player->GetActorForwardVector();

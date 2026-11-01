@@ -716,12 +716,12 @@ void APlayerCharacter::DoThrowKunai()
 		return;
 	}
 
-	// 투척 어빌리티가 지급되지 않았으면 몸 방향도 바꾸지 않는다.
-	if (!FindAbilitySpecByInputID(EAbilityInputID::ThrowKunai))
-	{
-		return;
-	}
+	// 커서 쪽으로 몸을 돌리는 것은 어빌리티가 실행된 뒤에 한다. 매달림 등으로 막히면 몸도 돌지 않는다.
+	TryActivateAbilityByInputID(EAbilityInputID::ThrowKunai);
+}
 
+void APlayerCharacter::FaceCursorForThrow()
+{
 	// 좌클릭 입력이 Tick보다 먼저 와도 현재 커서로 조준한다.
 	UpdateCursorTarget();
 	if (bHasCursorTarget)
@@ -734,8 +734,6 @@ void APlayerCharacter::DoThrowKunai()
 	}
 
 	SnapToFacingTarget();
-
-	TryActivateAbilityByInputID(EAbilityInputID::ThrowKunai);
 }
 
 void APlayerCharacter::DoMove(float Forward)
