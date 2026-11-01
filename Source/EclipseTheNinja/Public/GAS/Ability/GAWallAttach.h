@@ -39,6 +39,10 @@ public:
 
 	inline bool GetIsClimbable() const { return bIsClimbable; }
 
+	// 벽타기 중 Up 방향(+ 위, - 아래)으로 더 움직여도 되는지. 캡슐 위·아래 끝 앞의 벽이 벽타기 벽이 아니면 false.
+	// 벽이 끝난 곳(모서리 위 등)은 막지 않는다. 매달릴 때뿐 아니라 이동할 때도 벽을 확인하기 위해 쓴다.
+	bool CanClimbToward(const ACharacter* Player, float Up) const;
+
 protected:
 	UFUNCTION()
 	void OnCompleted();
@@ -90,6 +94,10 @@ protected:
 	// 메시 오프셋을 주고 되돌리는 시간. 이전 몽타주(모서리 내려가기 등)가 섞여 빠지는 동안 메시가 튀지 않게 한다. 0이면 즉시.
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0", Units = "s"))
 	float MeshOffsetBlendTime = 0.25f;
+
+	// 벽을 타고 이동할 때, 캡슐 위·아래 끝에서 이만큼 더 나아간 곳의 벽이 벽타기 벽인지 미리 확인한다.
+	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0", Units = "cm"))
+	float ClimbCheckLead = 10.f;
 
 	// 벽타기 가능 판정 트레이스를 화면에 그린다
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach|Debug")

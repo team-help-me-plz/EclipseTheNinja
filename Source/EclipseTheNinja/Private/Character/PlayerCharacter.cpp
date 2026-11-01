@@ -814,6 +814,7 @@ void APlayerCharacter::DoWAllMove(float Up)
 	FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::WallAttach);
 	if (!Spec) return;
 	const UGAWallAttach* WallAttach = Cast<UGAWallAttach>(Spec->GetPrimaryInstance());
+	if (!WallAttach) return;
 
 	const bool bClimbableWall = WallAttach->GetIsClimbable();
 
@@ -826,6 +827,13 @@ void APlayerCharacter::DoWAllMove(float Up)
 	// 벽타기 벽에서는 위아래 입력으로 벽을 타고 움직인다. 올라가기가 시작됐으면 매달림이 끝나 있으므로 넣지 않는다.
 	if (bClimbableWall && IsWallAttached())
 	{
+		// 벽타기 벽과 일반 벽이 이어져 있으면, 이동할 쪽 벽이 일반 벽일 때 그 자리에서 멈춘다.
+		if (!FMath::IsNearlyZero(Up) && !WallAttach->CanClimbToward(this, Up))
+		{
+			GetCharacterMovement()->StopMovementImmediately();
+			return;
+		}
+
 		//AddMovementInput(FVector::UpVector, Up);
 		const float WallDir = GetActorForwardVector().X >= 0.f ? 1.f : -1.f;
 		AddMovementInput(FVector(WallDir * 0.05f, 0.f, Up), 1.f);
