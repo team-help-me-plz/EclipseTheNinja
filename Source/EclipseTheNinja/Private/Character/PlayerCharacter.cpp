@@ -143,7 +143,8 @@ void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (IsAssassinating() || IsHiding()) return;
+	// 사망 연출과 공격(콤보, 표창, 질풍참 등) 중에는 커서·이동 방향으로 몸을 돌리지 않는다.
+	if (bIsDead || IsAssassinating() || IsHiding() || IsAttacking()) return;
 
 	UpdateCursorTarget();
 	UpdateCursorFacing(DeltaSeconds);
@@ -479,6 +480,8 @@ void APlayerCharacter::UnPossessed()
 
 void APlayerCharacter::Move(const FInputActionValue& Value)
 {
+	if (bIsDead) return;
+
 	FVector2D MoveVector = Value.Get<FVector2D>();
 	if (IsWallAttached())
 	{
@@ -659,6 +662,19 @@ bool APlayerCharacter::IsWallAttached() const
 	return ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag());
 }
 
+bool APlayerCharacter::IsAttacking() const
+{
+	if (!IsValid(ASC)) return false;
+	return ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag());
+}
+
+bool APlayerCharacter::IsOnWall() const
+{
+	if (!IsValid(ASC)) return false;
+	return ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag())
+		|| ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag());
+}
+
 void APlayerCharacter::SetAssassinationFacing(float Yaw)
 {
 	SetCursorFacingActive(false);
@@ -697,17 +713,13 @@ void APlayerCharacter::DoThrowKunai()
 
 void APlayerCharacter::DoMove(float Forward)
 {
-	if (IsAssassinating()) return;
+	if (bIsDead || IsAssassinating()) return;
+
+	// 공격이 끝나기 전에 반대 방향 입력으로 몸이 돌아가지 않게 한다.
+	if (IsAttacking()) return;
 
 	// 매달린 동안(모서리에서 오르내리는 중 포함) 일반 이동 입력이 목표 방향을 바꾸지 않게 한다.
-	if (IsValid(ASC))
-	{
-		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag())
-			|| ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag()))
-		{
-			return;
-		}
-	}
+	if (IsOnWall()) return;
 
 	// is movement temporarily disabled after wall jumping?
 	if (!bHasWallJumped)
@@ -797,6 +809,9 @@ void APlayerCharacter::DoWAllMove(float Up)
 
 void APlayerCharacter::DoCameraMoveStart()
 {
+	// 공격 중(콤보, 표창, 질풍참 등)에는 조준 모드에 들어가지 않는다.
+	if (IsAttacking()) return;
+
 	APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController());
 	if (!APC)
 	{

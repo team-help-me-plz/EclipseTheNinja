@@ -272,6 +272,10 @@ private:
 	void SnapToFacingTarget();
 	// A/D 입력이 들어오면 진행 중인 턴 클립을 끊는다.
 	void CancelMoveTurn();
+	// 공격 중(기본 콤보, 표창, 질풍참 등 Attacking 태그를 가진 어빌리티)인지. 끝날 때까지 이동·회전 입력을 막는 데 쓴다.
+	bool IsAttacking() const;
+	// 벽에 붙음·모서리 매달림·오르기·벽 타고 내려가기 중인지.
+	bool IsOnWall() const;
 
 	// 현재 제자리 턴이 회전 마무리(SettleFacing)로 시작되었는지. 커서 회전 종료 처리가 이 턴을 끊지 않게 한다.
 	bool bMoveTurnActive = false;
