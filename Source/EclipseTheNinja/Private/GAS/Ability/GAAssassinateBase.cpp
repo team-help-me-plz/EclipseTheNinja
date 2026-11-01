@@ -155,6 +155,13 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 
 	// 암살자의 움직임 멈춤
 	UCharacterMovementComponent* PlayerMovement = Player->GetCharacterMovement();
+
+	// 앉은 상태에서 시작하면 일어서서 암살한다. 접근 위치가 서 있는 높이로 계산되도록 바로 일어선다.
+	if (Player->bIsCrouched)
+	{
+		Player->UnCrouch();
+		PlayerMovement->UnCrouch(false);
+	}
 	PlayerMovementMode = PlayerMovement->MovementMode;
 	PlayerCustomMode = PlayerMovement->CustomMovementMode;
 	PlayerMovement->StopMovementImmediately();

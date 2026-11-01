@@ -11,6 +11,17 @@
 #include "Components/CapsuleComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
+// 앉으면 캡슐 중심이 내려가므로, 높이 비교는 서 있을 때의 캡슐 중심 기준으로 한다.
+static FVector GetStandingLocation(const ACharacter* Character)
+{
+	FVector Location = Character->GetActorLocation();
+	if (Character->bIsCrouched)
+	{
+		Location.Z += Character->GetDefaultHalfHeight() - Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	}
+	return Location;
+}
+
 // Sets default values for this component's properties
 UAssassinateTargetComponent::UAssassinateTargetComponent()
 {
@@ -116,7 +127,7 @@ bool UAssassinateTargetComponent::IsApproachClear(const ACharacter* Assassin) co
 	if (!IsValid(Assassin) || !IsValid(OwnerActor)) return false;
 
 	// 평지 암살이 가능한지 확인한다.
-	if (FMath::Abs(Assassin->GetActorLocation().Z - OwnerActor->GetActorLocation().Z) > GroundHeightTolerance) return false;
+	if (FMath::Abs(GetStandingLocation(Assassin).Z - OwnerActor->GetActorLocation().Z) > GroundHeightTolerance) return false;
 
 	return IsPathClear(Assassin, Assassin->GetActorLocation(), GetApproachLocation(Assassin));
 }
@@ -141,7 +152,7 @@ bool UAssassinateTargetComponent::IsAerialApproachClear(const ACharacter* Assass
 	const AActor* OwnerActor = GetOwner();
 	if (!IsValid(Assassin) || !IsValid(OwnerActor)) return false;
 	// 높이차가 공중 암살 기준보다 작으면 암살 진행 불가
-	const float Height = Assassin->GetActorLocation().Z - OwnerActor->GetActorLocation().Z;
+	const float Height = GetStandingLocation(Assassin).Z - OwnerActor->GetActorLocation().Z;
 	if (Height < AerialMinHeight || Height > AerialMaxHeight) return false;
 
 	// 발판 위에서 대각선으로 확인하면 발판 모서리에 걸리므로, 같은 높이로 착지 위치 위까지 나간 뒤 수직으로 내려가는 경로를 확인한다.
