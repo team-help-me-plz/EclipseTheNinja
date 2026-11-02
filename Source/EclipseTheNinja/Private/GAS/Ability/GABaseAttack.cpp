@@ -21,10 +21,6 @@
 #include "GAS/Damage/FireDamageType.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Kismet/GameplayStatics.h"
-#include "NiagaraComponent.h"
-#include "NiagaraFunctionLibrary.h"
-#include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_BasicAttack, "Ability.Attack.Basic");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Attacking, "State.Attacking");
@@ -58,14 +54,6 @@ UGABaseAttack::UGABaseAttack()
 	ActivationBlockedTags.AddTag(TAG_Attacking);
 	// 벽에 매달린 동안에는 기본 공격 불가
 	ActivationBlockedTags.AddTag(UGAWallAttach::GetWallAttachingTag());
-
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> SwordTrailAsset(
-		TEXT("/Game/VFX/SwordEffects/Particles/NS_SwordEffect5_Trails.NS_SwordEffect5_Trails"));
-
-	if (SwordTrailAsset.Succeeded())
-	{
-		SwordTrailSystem = SwordTrailAsset.Object;
-	}
 }
 
 FGameplayTag UGABaseAttack::GetHitEventTag()
@@ -198,39 +186,8 @@ void UGABaseAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 			Anim->Montage_SetNextSection(
 				TEXT("Attack3"), NAME_None, AttackMontage);
 		}
-
-		// 콤보가 끝날 때까지 칼 소켓에 트레일을 붙인다. 공격이 끝나면 EndAbility에서 멈춘다.
-		USceneComponent* AttachComponent = SwordTrailSystem ? FindSwordTrailAttachComponent() : nullptr;
-		if (AttachComponent)
-		{
-			SwordTrailEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(SwordTrailSystem, AttachComponent,
-				SwordTrailSocketName, FVector::ZeroVector, FRotator::ZeroRotator,
-				EAttachLocation::SnapToTarget, true);
-			if (SwordTrailEffect)
-			{
-				SwordTrailEffect->SetVariableFloat(TEXT("User.TrailSize"), SwordTrailWidth);
-			}
-		}
 	}
 
-}
-
-USceneComponent* UGABaseAttack::FindSwordTrailAttachComponent() const
-{
-	const AActor* Avatar = GetAvatarActorFromActorInfo();
-	if (!Avatar) return nullptr;
-
-	// 칼은 캐릭터 메시와 별도의 메시 컴포넌트이므로 소켓을 가진 메시를 찾는다.
-	// 소켓이 없는 캐릭터(칼이 없는 적 등)는 트레일을 붙이지 않는다.
-	TInlineComponentArray<UMeshComponent*> Meshes(Avatar);
-	for (UMeshComponent* Mesh : Meshes)
-	{
-		if (Mesh && Mesh->DoesSocketExist(SwordTrailSocketName))
-		{
-			return Mesh;
-		}
-	}
-	return nullptr;
 }
 
 void UGABaseAttack::OnAttackCompleted()
@@ -261,13 +218,6 @@ void UGABaseAttack::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	bNextAttackPending = false;
 	bAcceptComboInput = false;
 	CurrentAttackMontage = nullptr;
-
-	// 새 리본 생성만 멈추고, 남은 리본은 수명대로 사라진 뒤 컴포넌트가 스스로 정리된다.
-	if (IsValid(SwordTrailEffect))
-	{
-		SwordTrailEffect->Deactivate();
-	}
-	SwordTrailEffect = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
