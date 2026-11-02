@@ -75,7 +75,7 @@ bool UGAAssassinateBase::CanActivateAbility(const FGameplayAbilitySpecHandle Han
 	UAssassinateTargetComponent* Target = Targeting->GetCurrentTarget();
 	if (!IsValid(Target)) return false;
 	if (!Target->IsPlayerInZone()) return false;
-	if (!Target->CanAssassinate()) return false;
+	if (!Target->CanAssassinate(Player)) return false;
 
 	// 타겟이 공중에 있는 경우는 실행불가
 	const AEnemy* Enemy = Cast<AEnemy>(Target->GetOwner());
@@ -112,7 +112,7 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	// 현재 암살 타겟이 유효하지 않거나 암살 불가능한 상태면 종료
 	TargetComponent = Targeting->GetCurrentTarget();
 	if (!TargetComponent.IsValid()) { OnInterrupted(); return; }
-	if (!TargetComponent->CanAssassinate()) { OnInterrupted(); return; }
+	if (!TargetComponent->CanAssassinate(Player)) { OnInterrupted(); return; }
 
 	// 암살 대상
 	Victim = Cast<AEnemy>(TargetComponent->GetOwner());

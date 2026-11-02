@@ -93,7 +93,7 @@ void UAssassinationTargetingComponent::SelectCandidate()
 	{
 		// 유효하지 않거나, 암살할 수 없으면 건너 뛴다.
 		if (!IsValid(Enemy)) continue;
-		if (!Enemy->CanAssassinate())
+		if (!Enemy->CanAssassinate(PlayerCharacter))
 		{
 			continue;
 		}
