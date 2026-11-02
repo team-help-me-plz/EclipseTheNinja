@@ -20,7 +20,9 @@ enum class EAbilityInputID : uint8
     LedgeClimb = 8,
     WallSlide = 9,
     SwiftStrike,
-    Parry = 11,
+    // 천장 매복 적의 낙하 기습 공격
+    CeilingAmbush = 11,
+    Parry = 12,
     CloneTech = 100,
     ElementalFire = 200,
 };

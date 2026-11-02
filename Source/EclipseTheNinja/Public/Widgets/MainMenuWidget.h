@@ -26,6 +26,15 @@ public:
 	virtual bool	Initialize() override;
 
 protected:
+    UFUNCTION() void HandleOverwriteConfirmed();
+    UFUNCTION() void HandleOverwriteCancelled();
+    void BeginNewGame();
+    void ShowSaveError();
+
+    UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UWidget> OverwritePanel;
+    UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UButton> OverwriteConfirmButton;
+    UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UButton> OverwriteCancelButton;
+    UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SaveStatusText;
 	virtual void	NativeConstruct() override;
 
 	UFUNCTION()

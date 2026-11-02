@@ -176,6 +176,11 @@ public:
     UPROPERTY(EditAnywhere, Category="Input")
     TObjectPtr<UInputAction> ParryAction;
 
+    void ApplyUnlockedAbilities(const TArray<EAbilityInputID>& Unlocked);
+
+    // Future unlockable abilities are configured in Blueprint defaults, separately from startup abilities.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability|Unlocks")
+    TArray<FAbilityInfo> UnlockableAbilities;
 
 	/** Constructor */
 	APlayerCharacter();

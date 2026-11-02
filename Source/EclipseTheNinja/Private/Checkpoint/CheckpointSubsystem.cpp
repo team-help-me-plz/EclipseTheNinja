@@ -1,6 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "Save/GameSaveSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Checkpoint/Checkpoint.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
@@ -54,6 +56,8 @@ void UCheckpointSubsystem::UnregisterCheckpoint(ACheckpoint* InCheckpoint)
 
 void UCheckpointSubsystem::ActivateCheckpoint(ECheckpointId NewCheckpointId)
 {
+    UGameSaveSubsystem* Save = GetWorld()->GetGameInstance()->GetSubsystem<UGameSaveSubsystem>();
+    if (Save && Save->IsRestoring()) return;
     // 선형 진행: 이미 지나온(같거나 낮은) 체크포인트는 무시
     if (NewCheckpointId == ECheckpointId::None || NewCheckpointId <= this->CurrentCheckpoint)
     {
@@ -65,6 +69,16 @@ void UCheckpointSubsystem::ActivateCheckpoint(ECheckpointId NewCheckpointId)
 
     this->CurrentCheckpoint = NewCheckpointId;
     this->OnCheckpointActivated.Broadcast(NewCheckpointId);
+    FTransform Transform;
+    if (Save && GetCheckpointTransform(Transform)) Save->SaveCheckpoint(NewCheckpointId, Transform);
+}
+
+bool UCheckpointSubsystem::GetCheckpointTransform(FTransform& OutTransform) const
+{
+    const ACheckpoint* Checkpoint = Checkpoints.FindRef(CurrentCheckpoint).Get();
+    if (!IsValid(Checkpoint)) return false;
+    OutTransform = Checkpoint->GetRespawnTransform();
+    return true;
 }
 
 void UCheckpointSubsystem::RespawnAtCheckpoint(APawn* PlayerPawn)

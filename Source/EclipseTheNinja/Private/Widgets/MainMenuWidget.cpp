@@ -1,6 +1,8 @@
 
 
 #include "Widgets/MainMenuWidget.h"
+#include "Save/GameSaveSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Widgets/SettingsWidget.h"
 
 #include "Blueprint/WidgetTree.h"
@@ -99,6 +101,11 @@ bool UMainMenuWidget::Initialize()
 void UMainMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+    if (ContinueButton) ContinueButton->SetIsEnabled(GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->CanContinue());
+    if (OverwritePanel) OverwritePanel->SetVisibility(ESlateVisibility::Collapsed);
+    if (SaveStatusText) SaveStatusText->SetVisibility(ESlateVisibility::Collapsed);
+    if (OverwriteConfirmButton) OverwriteConfirmButton->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleOverwriteConfirmed);
+    if (OverwriteCancelButton) OverwriteCancelButton->OnClicked.AddUniqueDynamic(this, &UMainMenuWidget::HandleOverwriteCancelled);
 
 	if (this->BackgroundImage && this->BackgroundTexture)
 	{
@@ -292,6 +299,19 @@ UButton* UMainMenuWidget::MakeMenuButton(UVerticalBox* InParent, const FText& In
 
 void UMainMenuWidget::HandleStartClicked()
 {
+    if (GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->HasSaveFile())
+    {
+        // Confirmation layout and warning text live in WBP_MainMenu.
+        if (!OverwritePanel || !OverwriteConfirmButton || !OverwriteCancelButton) { ShowSaveError(); return; }
+        OverwritePanel->SetVisibility(ESlateVisibility::Visible);
+        OverwriteCancelButton->SetKeyboardFocus();
+        return;
+    }
+    BeginNewGame();
+}
+
+void UMainMenuWidget::BeginNewGame()
+{
 	if (this->StartLevel.IsNull())
 	{
 		UE_LOG(
@@ -313,12 +333,38 @@ void UMainMenuWidget::HandleStartClicked()
 		PlayerController->SetInputMode(InputMode);
 		PlayerController->SetShowMouseCursor(true);
 	}
-	UGameplayStatics::OpenLevelBySoftObjectPtr(this, this->StartLevel);
+    if (!GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->StartNewGame(StartLevel)) ShowSaveError();
 }
 
 void UMainMenuWidget::HandleContinueClicked()
 {
-	// TODO: 세이브 시스템 구현 후 이어하기 기능 연결
+    if (!GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->ContinueGame())
+    {
+        if (ContinueButton) ContinueButton->SetIsEnabled(false);
+        ShowSaveError();
+    }
+}
+
+void UMainMenuWidget::HandleOverwriteConfirmed()
+{
+    if (!OverwritePanel || !OverwritePanel->IsVisible()) return;
+    BeginNewGame();
+}
+
+void UMainMenuWidget::HandleOverwriteCancelled()
+{
+    if (OverwritePanel) OverwritePanel->SetVisibility(ESlateVisibility::Collapsed);
+    if (StartButton) StartButton->SetKeyboardFocus();
+}
+
+void UMainMenuWidget::ShowSaveError()
+{
+    UE_LOG(LogTemp, Error, TEXT("[GameSave] Menu action failed. Check save file and WBP confirmation bindings."));
+    if (SaveStatusText)
+    {
+        SaveStatusText->SetText(NSLOCTEXT("GameSave", "SaveError", "저장 데이터를 처리하지 못했습니다. 저장 파일과 디스크 공간을 확인해 주세요."));
+        SaveStatusText->SetVisibility(ESlateVisibility::Visible);
+    }
 }
 
 void UMainMenuWidget::HandleSettingsClicked()
