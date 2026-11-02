@@ -102,6 +102,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Spawn")
 	FText	CannotSpawnText = FText::FromString(TEXT("분신을 소환할 수 없는 위치입니다."));
 
+	// 공중이거나 벽에 붙어 있거나 매달린 상태라 소환할 수 없을 때 표시 (타게팅 시작 시와 소환 직전에 확인)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Clone|Spawn")
+	FText	CannotSpawnStateText = FText::FromString(TEXT("지금은 분신을 소환할 수 없습니다."));
+
 private:
 	UFUNCTION()
 	void HandleTargetAccepted(const FCloneCommandType& Command);
@@ -111,6 +115,9 @@ private:
 
 	/** 플레이어 캐릭터에 분신술 타게팅 상태를 알린다. */
 	void SetAvatarCloneTargeting(bool bTargeting) const;
+
+	/** 공중이거나 벽에 붙어 있거나 매달린 상태라 분신을 소환할 수 없으면 true. */
+	static bool IsSpawnBlocked(const ACharacter* Character, const UAbilitySystemComponent* ASC);
 
 	/** 분신 소환/회수 이펙트를 InLocation에서 CloneEffectDuration 동안 재생한다. */
 	void PlayCloneEffect(const FVector& InLocation) const;
