@@ -76,7 +76,7 @@ void UAssassinateTargetComponent::RegisterBoundary()
 
 
 //암살가능 여부 확인 함수
-bool UAssassinateTargetComponent::CanAssassinate()
+bool UAssassinateTargetComponent::CanAssassinate(const ACharacter* Assassin)
 {
 	AEnemy* Enemy = Cast<AEnemy>(GetOwner());
 	if (!IsValid(Enemy)) return false;
@@ -86,9 +86,16 @@ bool UAssassinateTargetComponent::CanAssassinate()
 	// 이 컴포넌트를 대상으로 이미 암살이 진행되고 있으면 암살 불가
 	if (bAssassinationInProgress) return false;
 
-	// 이 컴포넌트를 소유한 적의 경계상태가 전투 상태이면 암살 불가
-	UEnemyDetectionComponent* EDC = Enemy->GetEneymDetectionComponent();
-	if (!EDC || EDC->GetCurrentAlertLevel() == EEnemyAlertLevel::Combat) return false;
+	const UEnemyDetectionComponent* EDC = Enemy->GetEneymDetectionComponent();
+	if (!IsValid(EDC)) return false;
+	if (EDC->GetCurrentAlertLevel() != EEnemyAlertLevel::Combat) return true;
+
+	if (!IsValid(Assassin)) return false;
+
+	// 전투 중에도 뒤를 잡으면 허용하되, 정면과 측면에서는 암살할 수 없다.
+	const FVector ToAssassin = (Assassin->GetActorLocation() - Enemy->GetActorLocation()).GetSafeNormal2D();
+	const FVector EnemyForward = Enemy->GetActorForwardVector().GetSafeNormal2D();
+	if (FVector::DotProduct(EnemyForward, ToAssassin) >= 0.f) return false;
 
 	return true;
 }

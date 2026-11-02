@@ -634,7 +634,7 @@ void APlayerCharacter::DoAssassinate()
 
 	UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
 	if (!IsValid(Target)) return;
-	if (!Target->CanAssassinate()) return;
+	if (!Target->CanAssassinate(this)) return;
 
 	// 타겟을 고를 때 정한 방식(땅: 등 뒤, 공중: 머리 위)에 맞는 어빌리티를 발동한다.
 	const EAssassinationType Type = AssassinateTargetingComponent->GetCurrentTargetType();
@@ -799,7 +799,7 @@ void APlayerCharacter::DoInteract()
 	if (IsValid(AssassinateTargetingComponent))
 	{
 		UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
-		if (IsValid(Target) && Target->CanAssassinate())
+		if (IsValid(Target) && Target->CanAssassinate(this))
 		{
 			DoAssassinate();
 			return;

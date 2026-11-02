@@ -27,9 +27,9 @@ public:
 	// Sets default values for this component's properties
 	UAssassinateTargetComponent();
 
-	// 현재 이 캐릭터(적)을 암살할 수 있는지
+	// 전투 중인 적은 지정한 암살자가 뒤쪽에 있을 때만 허용한다.
 	UFUNCTION(BlueprintCallable, Category = "Assassinate")
-	bool CanAssassinate();
+	bool CanAssassinate(const ACharacter* Assassin = nullptr);
 
 	// 현재 이 컴포넌트를 대상으로 암살이 진행중인지 세팅하는 함수
 	void SetAssassinationInProgress(bool bInProgress) { bAssassinationInProgress = bInProgress; }
