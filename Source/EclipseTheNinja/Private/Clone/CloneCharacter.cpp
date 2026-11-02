@@ -45,6 +45,11 @@ void ACloneCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 풀에서 재사용되어도 BeginPlay는 한 번뿐이므로 원래 메시 위치는 여기서 한 번만 저장한다
+	this->MeshBaseRelativeLocation = GetMesh()->GetRelativeLocation();
+	GetRootComponent()->TransformUpdated.AddUObject(this, &ACloneCharacter::OnRootTransformUpdated);
+	this->UpdateMeshWorldOffset();
+
 	InitializeWalkState();
 	this->bIsSpawned = true;
 	if (IsValid(this->InteractHighlight))
@@ -103,6 +108,18 @@ void ACloneCharacter::OnInteractPlayerMontageBlendingOut(UAnimMontage* Montage, 
 
 	this->LaunchTargetPlayer();
 	//this->ResetInteractionCooldown();
+}
+
+void ACloneCharacter::OnRootTransformUpdated(USceneComponent* UpdatedComponent, EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport)
+{
+	this->UpdateMeshWorldOffset();
+}
+
+void ACloneCharacter::UpdateMeshWorldOffset()
+{
+	// 액터 회전을 상쇄해서, 보는 방향과 관계없이 월드 Y로 MeshWorldOffsetY만큼 떨어지게 한다
+	const FVector	WorldOffset(0.f, this->MeshWorldOffsetY, 0.f);
+	GetMesh()->SetRelativeLocation(this->MeshBaseRelativeLocation + GetActorQuat().UnrotateVector(WorldOffset));
 }
 
 void ACloneCharacter::ResetMoveProgress()

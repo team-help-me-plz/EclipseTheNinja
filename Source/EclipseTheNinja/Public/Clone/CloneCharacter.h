@@ -66,6 +66,8 @@ public:
 	// 풀에 반환되어 대기 중이면 false. 풀링된 분신은 파괴되지 않으므로 유효성 검사만으로는 구분할 수 없다.
 	bool	IsSpawned() const { return (this->bIsSpawned); }
 
+	float	GetMeshWorldOffsetY() const { return (this->MeshWorldOffsetY); }
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Margin")
 	float	TargetLocationMargin = 49.f;
@@ -86,6 +88,10 @@ protected:
 
 	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage", meta = (ClampMin = "0.0"))
 	//float	InteractMontageBlendOutTime = 0.25f;
+
+	// 메시를 캡슐에서 월드 Y축으로 이만큼 옮긴다. 보는 방향과 관계없이 유지되며 충돌과 판정은 캡슐 기준 그대로다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mesh")
+	float	MeshWorldOffsetY = 0.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
@@ -125,6 +131,12 @@ private:
 	// 상호작용 중 막아 둔 TargetPlayer의 입력을 돌려주고 비운다. 여러 번 호출해도 한 번만 처리된다
 	void	ReleaseTargetPlayer();
 	void	StopTargetMontage(UAnimMontage* InMontage);
+
+	void	OnRootTransformUpdated(USceneComponent* UpdatedComponent, EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport);
+	void	UpdateMeshWorldOffset();
+
+	// 메시 오프셋을 적용하기 전의 원래 상대 위치
+	FVector	MeshBaseRelativeLocation = FVector::ZeroVector;
 
 	// 대상이 등 뒤에 있으면 대상 쪽으로 즉시 돌아선다
 	void	FaceToward(const AActor* InActor);
