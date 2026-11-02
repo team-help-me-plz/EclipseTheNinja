@@ -26,11 +26,32 @@
 #include "Character/Enemy.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
+#include "Engine/AssetManager.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStrike, "Ability.Attack.SwiftStrike");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStriking, "State.SwiftStriking");
 // 기본공격·쿠나이 등 공격 어빌리티의 공통 부모. 땅에서 질풍참이 이들을 끊고 들어간다.
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_AttackAbility, "Ability.Attack");
+
+// 잔상이 사라진 뒤 그 텍스처를 다시 쓰기까지 두는 여유 시간
+static constexpr double AfterimageReuseMargin = 0.1;
+// 돌진 시작 후 첫 잔상을 찍기까지의 시간
+static constexpr float AfterimageFirstDelay = 0.02f;
+// 직교 캡처라 크기에는 영향이 없고, 캡처 위치가 캐릭터를 가리지 않을 만큼 앞에 두기 위한 거리
+static constexpr float AfterimageCaptureDistance = 450.f;
+// 잔상이 캐릭터 몸을 뚫지 않도록 캡슐 뒤로 더 미는 여유 거리
+static constexpr float AfterimageDepthMargin = 5.f;
+// 가로 섬광을 켠 직후 미리 돌리는 틱 수와 한 틱의 시간. 생성 틱 + 크기 적용 틱이면 되고, 수명은 거의 줄지 않게 짧게 둔다.
+static constexpr int32 DashSlashPrimeTicks = 2;
+static constexpr float DashSlashPrimeTickDelta = 0.001f;
 
 UGASwiftStrike::UGASwiftStrike()
 {
@@ -54,6 +75,56 @@ UGASwiftStrike::UGASwiftStrike()
 
 	// 벽에 붙음·모서리 매달림·오르기 중에는 쓸 수 없다
 	ActivationBlockedTags.AddTag(UGAWallAttach::GetWallStateTag());
+
+	// VFX 에셋은 파생 블루프린트의 Class Defaults에서 지정한다.
+}
+
+void UGASwiftStrike::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	Super::OnGiveAbility(ActorInfo, Spec);
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+	// 시전할 때 쓰는 에셋을 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
+	TArray<FSoftObjectPath> Paths;
+	for (const FSoftObjectPath& Path : {
+		SwiftStrikeMontage.ToSoftObjectPath(), AirSwiftStrikeMontage.ToSoftObjectPath(),
+		DashSlashEffect.ToSoftObjectPath(), AfterimageEffect.ToSoftObjectPath(),
+		AfterimageMaterial.ToSoftObjectPath(), ImpactEffect.ToSoftObjectPath() })
+	{
+		if (!Path.IsNull()) Paths.AddUnique(Path);
+	}
+	if (Paths.IsEmpty()) return;
+
+	PreloadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+		Paths, FStreamableDelegate::CreateUObject(this, &UGASwiftStrike::OnAssetsPreloaded));
+}
+
+void UGASwiftStrike::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	if (PreloadHandle.IsValid())
+	{
+		PreloadHandle->CancelHandle();
+		PreloadHandle.Reset();
+	}
+	if (IsValid(AfterimageCapture))
+	{
+		AfterimageCapture->DestroyComponent();
+	}
+	AfterimageCapture = nullptr;
+
+	Super::OnRemoveAbility(ActorInfo, Spec);
+}
+
+void UGASwiftStrike::OnAssetsPreloaded()
+{
+	LoadedAfterimageEffect = AfterimageEffect.Get();
+	LoadedImpactEffect = ImpactEffect.Get();
+
+	// 잔상 텍스처도 미리 만들어 첫 돌진에서 생성 비용이 들지 않게 한다.
+	if (UMaterialInterface* Material = AfterimageMaterial.Get())
+	{
+		EnsureAfterimagePool(Material);
+	}
 }
 
 bool UGASwiftStrike::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -224,7 +295,264 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	DashForce->FinishVelocityParams.SetVelocity = DashDirection * DashEndSpeed;
 	DashRootMotionSourceID = DashMovement->ApplyRootMotionSource(DashForce);
 
+	StartDashEffects(Player, MoveDuration);
+
 	GetWorld()->GetTimerManager().SetTimer(DashTimerHandle, this, &UGASwiftStrike::OnSwiftStrikeFinished, MoveDuration, false);
+}
+
+void UGASwiftStrike::StartDashEffects(ACharacter* Player, float DashDuration)
+{
+	StopDashEffects();
+	if (!IsValid(Player)) return;
+	DashSlashStart = Player->GetActorLocation();
+
+	// 실제 이동 방향이 정해진 뒤 생성해 회전 중간 각도가 이펙트에 남지 않게 한다.
+	const FRotator FacingRotation = DashDirection.Rotation();
+	const FQuat WindRotation = FacingRotation.Quaternion() * DashWindRotation.Quaternion();
+	UNiagaraSystem* WindSystem = DashSlashEffect.LoadSynchronous();
+	if (IsValid(WindSystem))
+	{
+		// 캐릭터에 붙이지 않고 시작점과 현재 위치 사이의 중앙에 배치한다.
+		ActiveDashSlash = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			Player, WindSystem, DashSlashStart, WindRotation.Rotator(),
+			FVector::OneVector, true, false, ENCPoolMethod::None, false);
+		if (IsValid(ActiveDashSlash))
+		{
+			ActiveDashSlash->SetTickBehavior(ENiagaraTickBehavior::ForceTickLast);
+			ActiveDashSlash->SetVariableLinearColor(TEXT("User.Color"), DashWindColor);
+			ActiveDashSlash->SetVariableVec3(TEXT("User.TintScale"), FVector(DashWindColor.R, DashWindColor.G, DashWindColor.B));
+			ActiveDashSlash->SetVariableFloat(TEXT("User.Opacity"), DashWindColor.A);
+			ActiveDashSlash->SetVariableFloat(TEXT("User.Lifetime"), DashDuration);
+			ActiveDashSlash->SetVariableFloat(TEXT("User.Rotation"), 0.f);
+			UpdateDashSlash();
+			ActiveDashSlash->Activate(true);
+			// Stab 이미터는 생성한 틱에 업데이트 스크립트를 건너뛰어, User.MeshScale이 적용되기 전 원본 크기(약 12m)로 한 번 그려진다.
+			// 생성 틱과 크기를 적용하는 틱을 바로 돌려, 처음 그려지는 프레임부터 실제 돌진 길이로 보이게 한다.
+			ActiveDashSlash->AdvanceSimulation(DashSlashPrimeTicks, DashSlashPrimeTickDelta);
+
+			// 감속 재생 중에도 끝점이 뒤처지지 않도록 매 프레임 한 번만 갱신한다.
+			FTimerManagerTimerParameters UpdateParameters;
+			UpdateParameters.bLoop = true;
+			UpdateParameters.bMaxOncePerFrame = true;
+			GetWorld()->GetTimerManager().SetTimer(DashSlashTimerHandle, this, &UGASwiftStrike::UpdateDashSlash,
+				UE_KINDA_SMALL_NUMBER, UpdateParameters);
+		}
+	}
+
+	if (!IsValid(LoadedImpactEffect))
+	{
+		LoadedImpactEffect = ImpactEffect.LoadSynchronous();
+	}
+	StartAfterimages(Player);
+}
+
+void UGASwiftStrike::UpdateDashSlash()
+{
+	if (!IsValid(ActiveDashSlash)) return;
+
+	const AActor* Player = GetAvatarActorFromActorInfo();
+	if (!IsValid(Player)) return;
+
+	const FVector Current = Player->GetActorLocation();
+	const FVector Offset = DashDirection.Rotation().RotateVector(DashSlashOffset);
+	const FVector ForwardOffset = DashDirection.GetSafeNormal2D() * DashSlashForwardOffset;
+	const float Length = FVector::Distance(DashSlashStart, Current);
+
+	// 기존 길이와 높이를 유지하고, 선 전체를 돌진 방향 앞쪽으로만 이동한다.
+	ActiveDashSlash->SetWorldLocation((DashSlashStart + Current) * 0.5f + Offset + ForwardOffset);
+	ActiveDashSlash->SetVariableFloat(TEXT("User.PathLength"), Length);
+	// 원본 섬광의 기준 폭 1500cm에 대한 배율이며, 두께는 독립적으로 유지한다.
+	ActiveDashSlash->SetVariableVec2(TEXT("User.PathScale"), FVector2D(Length / 1500.f, DashWindScale));
+
+	// OneStab 메시의 원본 Y축 길이(600cm × 초기 배율 2)를 실제 경로 길이에 맞춘다.
+	ActiveDashSlash->SetVariableVec3(TEXT("User.MeshScale"), FVector(1.f, Length / 1200.f, DashWindScale));
+	ActiveDashSlash->SetVariableVec3(TEXT("User.LocalStart"), FVector(0.f, -Length * 0.5f, 0.f));
+	ActiveDashSlash->SetVariableVec3(TEXT("User.LocalEnd"), FVector(0.f, Length * 0.5f, 0.f));
+	ActiveDashSlash->SetVariableVec2(TEXT("User.SpriteScale"), FVector2D(DashWindScale, DashWindScale));
+	ActiveDashSlash->SetVariableFloat(TEXT("User.Thickness"), 25.f * DashWindScale);
+}
+
+int32 UGASwiftStrike::GetAfterimageSlotCount() const
+{
+	// 한 장은 수명 + 여유 시간 동안 다시 쓸 수 없으므로, 그동안 찍히는 장수에 한 장을 더 둔다.
+	const double Interval = FMath::Max(0.03f, AfterimageInterval);
+	return FMath::CeilToInt32((AfterimageLifetime + AfterimageReuseMargin) / Interval) + 1;
+}
+
+void UGASwiftStrike::EnsureAfterimagePool(UMaterialInterface* Material)
+{
+	if (!IsValid(Material)) return;
+
+	// 캡처 텍스처는 재사용하되, 아직 보이는 잔상은 덮어쓰지 않는다. 간격·수명이 바뀌어 더 필요해지면 모자란 만큼만 만든다.
+	const int32 SlotCount = GetAfterimageSlotCount();
+	while (AfterimageTextures.Num() < SlotCount)
+	{
+		UTextureRenderTarget2D* Texture = NewObject<UTextureRenderTarget2D>(this);
+		Texture->RenderTargetFormat = RTF_RGBA16f;
+		Texture->ClearColor = FLinearColor(0.f, 0.f, 0.f, 1.f);
+		Texture->InitAutoFormat(AfterimageResolution, AfterimageResolution);
+		Texture->UpdateResourceImmediate(true);
+		UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Material, this);
+		Instance->SetTextureParameterValue(TEXT("PoseTexture"), Texture);
+		AfterimageTextures.Add(Texture);
+		AfterimageMaterials.Add(Instance);
+		AfterimageReuseTimes.Add(0.0);
+	}
+}
+
+void UGASwiftStrike::EnsureAfterimageCapture(ACharacter* Player)
+{
+	if (IsValid(AfterimageCapture) && AfterimageCapture->GetOwner() == Player) return;
+	if (IsValid(AfterimageCapture))
+	{
+		AfterimageCapture->DestroyComponent();
+	}
+
+	AfterimageCapture = NewObject<USceneCaptureComponent2D>(Player);
+	AfterimageCapture->bCaptureEveryFrame = false;
+	AfterimageCapture->bCaptureOnMovement = false;
+	AfterimageCapture->ProjectionType = ECameraProjectionMode::Orthographic;
+	AfterimageCapture->OrthoWidth = AfterimageSize;
+	AfterimageCapture->CaptureSource = ESceneCaptureSource::SCS_SceneColorHDR;
+	AfterimageCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+
+	// 잔상은 색을 입힌 실루엣이라 그림자·안개·간접광·반사가 필요 없다. 캡처마다 렌더링하지 않도록 끈다.
+	FEngineShowFlags& Flags = AfterimageCapture->ShowFlags;
+	Flags.SetDynamicShadows(false);
+	Flags.SetFog(false);
+	Flags.SetVolumetricFog(false);
+	Flags.SetAtmosphere(false);
+	Flags.SetAmbientOcclusion(false);
+	Flags.SetScreenSpaceReflections(false);
+	Flags.SetLumenGlobalIllumination(false);
+	Flags.SetLumenReflections(false);
+	Flags.SetBloom(false);
+	Flags.SetMotionBlur(false);
+	Flags.SetEyeAdaptation(false);
+	Flags.SetDepthOfField(false);
+
+	AfterimageCapture->RegisterComponent();
+}
+
+void UGASwiftStrike::StartAfterimages(ACharacter* Player)
+{
+	// 미리 불러 두지 못했으면 여기서 불러온다.
+	if (!IsValid(LoadedAfterimageEffect))
+	{
+		LoadedAfterimageEffect = AfterimageEffect.LoadSynchronous();
+	}
+	if (!IsValid(LoadedAfterimageEffect)) return;
+	UMaterialInterface* Material = AfterimageMaterial.LoadSynchronous();
+	if (!IsValid(Material)) return;
+
+	EnsureAfterimagePool(Material);
+	EnsureAfterimageCapture(Player);
+
+	// 무기 교체 등으로 붙은 부품이 바뀔 수 있으므로 캡처 대상은 돌진마다 다시 정한다.
+	AfterimageCapture->ClearShowOnlyComponents();
+	AfterimageCapture->ShowOnlyComponent(Player->GetMesh());
+	// 무기처럼 캐릭터 메시 아래에 붙은 부품도 같은 자세로 캡처한다.
+	TArray<USceneComponent*> Children;
+	Player->GetMesh()->GetChildrenComponents(true, Children);
+	for (USceneComponent* Child : Children)
+	{
+		UMeshComponent* Part = Cast<UMeshComponent>(Child);
+		if (!IsValid(Part)) continue;
+		AfterimageCapture->ShowOnlyComponent(Part);
+	}
+	GetWorld()->GetTimerManager().SetTimer(AfterimageTimerHandle, this, &UGASwiftStrike::EmitAfterimage,
+		FMath::Max(0.03f, AfterimageInterval), true, AfterimageFirstDelay);
+}
+
+void UGASwiftStrike::EmitAfterimage()
+{
+	if (!IsValid(AfterimageCapture)) return;
+	if (!IsValid(LoadedAfterimageEffect)) return;
+	ACharacter* Player = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!IsValid(Player)) return;
+
+	// 이 캐릭터를 조종하는 플레이어의 카메라를 기준으로 찍는다.
+	const APlayerController* Controller = Cast<APlayerController>(Player->GetController());
+	const APlayerCameraManager* Camera = Controller ? Controller->PlayerCameraManager.Get() : nullptr;
+	if (!IsValid(Camera)) return;
+	const double Now = GetWorld()->GetTimeSeconds();
+	int32 Slot = INDEX_NONE;
+	for (int32 Index = 0; Index < AfterimageReuseTimes.Num(); ++Index)
+	{
+		if (AfterimageReuseTimes[Index] > Now) continue;
+		Slot = Index;
+		break;
+	}
+	if (Slot == INDEX_NONE) return;
+
+	const FVector Center = Player->GetActorLocation();
+	const FRotator Rotation = Camera->GetCameraRotation();
+	const FVector ViewDirection = Rotation.Vector();
+	AfterimageCapture->SetWorldLocationAndRotation(Center - ViewDirection * AfterimageCaptureDistance, Rotation);
+	AfterimageCapture->TextureTarget = AfterimageTextures[Slot];
+	AfterimageCapture->CaptureScene();
+
+	// 잔상 판이 몸을 뚫고 보이지 않도록 캡슐 뒤까지 민다.
+	// 원근 카메라에서 뒤로 밀면 작아지고 화면 중앙 쪽으로 어긋나므로, 카메라에서 캐릭터를 지나는 선 위에 두고 그만큼 키운다.
+	const float Depth = Player->GetCapsuleComponent()->GetScaledCapsuleRadius() + AfterimageDepthMargin;
+	FVector GhostLocation = Center + ViewDirection * Depth;
+	float GhostSize = AfterimageSize;
+	const FVector CameraLocation = Camera->GetCameraLocation();
+	const float CenterDistance = FVector::DotProduct(Center - CameraLocation, ViewDirection);
+	if (!Camera->IsOrthographic() && CenterDistance > KINDA_SMALL_NUMBER)
+	{
+		const float Scale = (CenterDistance + Depth) / CenterDistance;
+		GhostLocation = CameraLocation + (Center - CameraLocation) * Scale;
+		GhostSize *= Scale;
+	}
+
+	// 횡스크롤 카메라를 향한 자세 스프라이트를 캡처 당시의 월드 위치에 남긴다. 자주 생성하므로 풀에서 재사용한다.
+	UNiagaraComponent* Ghost = UNiagaraFunctionLibrary::SpawnSystemAtLocation(Player, LoadedAfterimageEffect,
+		GhostLocation, FRotator::ZeroRotator, FVector::OneVector, true, false, ENCPoolMethod::AutoRelease, false);
+	if (!IsValid(Ghost)) return;
+	Ghost->SetVariableMaterial(TEXT("User.AfterimageMaterial"), AfterimageMaterials[Slot]);
+	Ghost->SetVariableFloat(TEXT("User.SnapshotSize"), GhostSize);
+	Ghost->SetVariableFloat(TEXT("User.Lifetime"), AfterimageLifetime);
+	Ghost->SetVariableFloat(TEXT("User.Opacity"), AfterimageOpacity);
+	Ghost->SetVariableLinearColor(TEXT("User.TintColor"), AfterimageColor);
+	Ghost->Activate(true);
+	AfterimageReuseTimes[Slot] = Now + AfterimageLifetime + AfterimageReuseMargin;
+}
+
+void UGASwiftStrike::StopDashEffects()
+{
+	UWorld* World = GetWorld();
+	if (IsValid(World))
+	{
+		World->GetTimerManager().ClearTimer(AfterimageTimerHandle);
+		World->GetTimerManager().ClearTimer(DashSlashTimerHandle);
+	}
+	// 캡처 컴포넌트는 다음 돌진에서 재사용한다. 자동 캡처가 꺼져 있어 남겨 둬도 렌더링하지 않는다.
+
+	// 가로 섬광은 돌진이 끝나거나 취소된 순간에 제거한다. 잔상은 각자의 수명대로 사라진다.
+	if (IsValid(ActiveDashSlash))
+	{
+		ActiveDashSlash->DestroyComponent();
+	}
+	ActiveDashSlash = nullptr;
+}
+
+void UGASwiftStrike::PlayImpactEffect(const FVector& Location) const
+{
+	if (!IsValid(LoadedImpactEffect)) return;
+
+	UNiagaraComponent* Effect = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		GetAvatarActorFromActorInfo(), LoadedImpactEffect, Location, DashDirection.Rotation(),
+		FVector(ImpactScale), true, false, ENCPoolMethod::AutoRelease, false);
+	if (!IsValid(Effect)) return;
+
+	Effect->SetVariableLinearColor(TEXT("User.Color"), ImpactColor);
+	Effect->SetVariableFloat(TEXT("User.Lifetime"), ImpactLifetime);
+	Effect->SetVariableFloat(TEXT("User.Color_Hue_Start"), ImpactHueShiftStart);
+	Effect->SetVariableFloat(TEXT("User.Color_Hue_End"), ImpactHueShiftEnd);
+	Effect->SetVariableFloat(TEXT("User.Color_Hue_RandomMin"), FMath::Min(ImpactHueRandomMin, ImpactHueRandomMax));
+	Effect->SetVariableFloat(TEXT("User.Color_Hue_RandomMax"), FMath::Max(ImpactHueRandomMin, ImpactHueRandomMax));
+	Effect->Activate(true);
 }
 
 FVector UGASwiftStrike::ResolveDashEnd(const FVector& Start, const FVector& End, const FVector& Dir, const FCollisionShape& Shape,
@@ -333,6 +661,7 @@ void UGASwiftStrike::EndHitStop()
 
 void UGASwiftStrike::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	StopDashEffects();
 	StopDashRootMotion();
 	RestoreDashState();
 	AttackTargets.Reset();
@@ -346,6 +675,7 @@ void UGASwiftStrike::OnSwiftStrikeFinished()
 	if (bDashFinished) return;
 
 	bDashFinished = true;
+	StopDashEffects();
 	StopDashRootMotion();
 	RestoreDashState();
 
@@ -480,8 +810,16 @@ void UGASwiftStrike::ApplyHitToTargets()
 		FGameplayEffectSpecHandle Spec = SourceASC->MakeOutgoingSpec(DamageEffect, GetAbilityLevel(), Context);
 		if (Spec.IsValid())
 		{
+			// 피해 처리로 적이 제거되기 전에 이펙트 위치를 저장한다.
+			FVector ImpactLocation = Hit.ImpactPoint;
+			if (Hit.bStartPenetrating)
+			{
+				ImpactLocation = Hit.GetActor()->GetActorLocation();
+			}
+
 			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), Damage);
 			SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+			PlayImpactEffect(ImpactLocation);
 		}
 	}
 
