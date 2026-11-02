@@ -1,6 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Level/LevelClearTrigger.h"
+#include "Save/GameSaveSubsystem.h"
+#include "Engine/GameInstance.h"
 
 #include "Character/BossEnemy.h"
 #include "Components/BoxComponent.h"
@@ -100,6 +102,8 @@ void ALevelClearTrigger::ClearLevel()
         return;
     }
     this->bIsCleared = true;
+
+    GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->SaveStageClear(this->NextLevel, this->bQuitGameOnClear);
 
     UE_LOG(LogTemp, Log, TEXT("[ALevelClearTrigger::ClearLevel()] 레벨 클리어 : %s -> %s"),
         *UGameplayStatics::GetCurrentLevelName(this),
