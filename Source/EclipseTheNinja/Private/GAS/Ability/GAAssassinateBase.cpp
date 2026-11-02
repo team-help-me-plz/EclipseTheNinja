@@ -24,14 +24,20 @@
 #include "GAS/Ability/GAWallAttach.h"
 #include "GAS/StatAttributeSet.h"
 #include "NativeGameplayTags.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Assassinating, "State.Assassinating");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_AssassinateImpact, "Event.Assassinate.Impact");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_AssassinateVFX, "Event.Assassinate.VFX");
 
 UGAAssassinateBase::UGAAssassinateBase()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalOnly;
+	ImpactVFX = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
+		TEXT("/Game/VFX/Blood_VFX_Pack/Particles/Parts/P_E_BloodSplash_Decal_02.P_E_BloodSplash_Decal_02")));
 
 	// 암살 중일 때는 태그를 얻어서 중복 실행 방지
 	ActivationOwnedTags.AddTag(TAG_Assassinating);
@@ -50,6 +56,11 @@ FGameplayTag UGAAssassinateBase::GetAssassinatingTag()
 FGameplayTag UGAAssassinateBase::GetImpactEventTag()
 {
 	return TAG_AssassinateImpact;
+}
+
+FGameplayTag UGAAssassinateBase::GetVFXEventTag()
+{
+	return TAG_AssassinateVFX;
 }
 
 bool UGAAssassinateBase::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -97,6 +108,7 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	bIgnoringVictimCollision = false;
 	bLedgeWalkLocked = false;
 	bImpactTriggered = false;
+	bImpactVFXTriggered = false;
 	PausedBrain.Reset();
 
 	// 암살자 설정
@@ -122,6 +134,13 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	// 암살 모션과, 암살 피격 모션 동적으로 로딩
 	ExecutionMontage = AttackMontage.LoadSynchronous();
 	VictimExecutionMontage = VictimMontage.LoadSynchronous();
+
+	// 임팩트 프레임에서 에셋을 읽느라 연출이 멈추지 않도록 미리 준비한다.
+	LoadedImpactVFX = nullptr;
+	if (bUseImpactVFX)
+	{
+		LoadedImpactVFX = ImpactVFX.LoadSynchronous();
+	}
 	
 	if (!IsValid(ExecutionMontage) || !IsValid(VictimExecutionMontage))
 	{
@@ -187,6 +206,15 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	// 피격자 몽타주가 등 뒤 기준이므로 적과 같은 방향을 바라본다.ㄴ
 	ExecutionRotation = Enemy->GetActorRotation();
 	Player->SetAssassinationFacing(ExecutionRotation.Yaw);
+
+	// 몽타주 재생 전부터 VFX 전용 노티파이를 기다린다.
+	if (bUseImpactVFX)
+	{
+		UAbilityTask_WaitGameplayEvent* VFXTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+			this, TAG_AssassinateVFX, nullptr, true, true);
+		VFXTask->EventReceived.AddDynamic(this, &UGAAssassinateBase::OnVFXEvent);
+		VFXTask->ReadyForActivation();
+	}
 
 	StartApproach();
 }
@@ -399,9 +427,16 @@ UAbilityTask_ApplyRootMotionMoveToForce* UGAAssassinateBase::MoveAlongAttackRoot
 	return MoveTask;
 }
 
+void UGAAssassinateBase::OnVFXEvent(FGameplayEventData Payload)
+{
+	PlayImpactVFX();
+}
+
 void UGAAssassinateBase::WaitForImpact(float CurrentMontageTime)
 {
-	if (!bUseImpactTimeDilation || bEnding || !IsActive()) return;
+	if (bEnding) return;
+	if (!IsActive()) return;
+	if (!bUseImpactTimeDilation) return;
 
 	// 몽타주는 1배속으로 재생하므로, 지금 몽타주 위치부터 잰 게임 시간 대기가 몽타주 시간과 같다.
 	// 예비 동작 슬로모가 걸려도 대기 시간이 같이 늘어나 시점이 어긋나지 않는다.
@@ -444,12 +479,57 @@ void UGAAssassinateBase::WaitForImpact(float CurrentMontageTime)
 
 void UGAAssassinateBase::OnImpactEvent(FGameplayEventData Payload)
 {
-	StartImpactTimeDilation();
+	TriggerImpact();
 }
 
 void UGAAssassinateBase::OnImpactFallback()
 {
+	TriggerImpact();
+}
+
+void UGAAssassinateBase::TriggerImpact()
+{
+	if (bImpactTriggered) return;
+	if (bEnding) return;
+	if (!IsActive()) return;
+	bImpactTriggered = true;
+
+	if (!bUseImpactTimeDilation) return;
 	StartImpactTimeDilation();
+}
+
+void UGAAssassinateBase::PlayImpactVFX()
+{
+	if (bEnding) return;
+	if (!IsActive()) return;
+	if (bImpactVFXTriggered) return;
+	if (!bUseImpactVFX) return;
+	if (!IsValid(LoadedImpactVFX)) return;
+
+	const AEnemy* Enemy = Victim.Get();
+	if (!IsValid(Enemy)) return;
+
+	const USkeletalMeshComponent* Mesh = Enemy->GetMesh();
+	if (!IsValid(Mesh)) return;
+
+	FTransform Origin = Enemy->GetActorTransform();
+	if (Mesh->DoesSocketExist(ImpactVFXSocket))
+	{
+		Origin = Mesh->GetSocketTransform(ImpactVFXSocket);
+	}
+	const FTransform SpawnTransform = ImpactVFXOffset * Origin;
+
+	// 파라미터를 모두 설정한 뒤 활성화해야 첫 프레임부터 지정한 크기·수명으로 생성된다.
+	UNiagaraComponent* Effect = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		this, LoadedImpactVFX, SpawnTransform.GetLocation(), SpawnTransform.Rotator(),
+		SpawnTransform.GetScale3D(), true, false, ENCPoolMethod::AutoRelease);
+	if (!IsValid(Effect)) return;
+	bImpactVFXTriggered = true;
+
+	Effect->SetVariableFloat(TEXT("User.LifeTimeMult"), ImpactVFXLifeTime);
+	Effect->SetVariableFloat(TEXT("User.Scale"), ImpactVFXScale);
+	Effect->SetVariableFloat(TEXT("User.TextureScale"), ImpactVFXTextureScale);
+	Effect->Activate(true);
 }
 
 void UGAAssassinateBase::OnAnticipationStart()
@@ -521,9 +601,6 @@ void UGAAssassinateBase::SetTimeScale(float Scale)
 
 void UGAAssassinateBase::StartImpactTimeDilation()
 {
-	if (bImpactTriggered || bEnding || !IsActive()) return;
-	bImpactTriggered = true;
-
 	TimeDilationPhase = ETimeDilationPhase::Impact;
 	ImpactElapsed = 0.0f;
 	SetTimeScale(HitStopTimeScale);
