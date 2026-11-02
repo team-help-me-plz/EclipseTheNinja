@@ -1,6 +1,5 @@
 #include "Character/CeilingEnemy.h"
 
-#include "AIController.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
@@ -8,7 +7,6 @@
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/Skeleton.h"
-#include "BrainComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "CollisionQueryParams.h"
@@ -50,18 +48,30 @@ ACeilingEnemy::ACeilingEnemy()
 	AmbushInfo.InputID = EAbilityInputID::CeilingAmbush;
 }
 
+void ACeilingEnemy::PostInitializeComponents()
+{
+	// 배치된 적은 Super에서 AI 컨트롤러가 빙의하고 BT가 시작될 수 있다.
+	// 그 전에 단계를 정해 두어야 BT의 Is On Ceiling이 처음부터 천장 분기를 고른다.
+	Phase = bStartOnCeiling
+		? ECeilingEnemyPhase::Hanging
+		: ECeilingEnemyPhase::Grounded;
+
+	Super::PostInitializeComponents();
+}
+
 void ACeilingEnemy::BeginPlay()
 {
 	Super::BeginPlay();
-
-	Phase = ECeilingEnemyPhase::Grounded;
 
 	if (bStartOnCeiling && !IsDead())
 	{
 		// 기습 순간에 멈칫하지 않도록 하강 구간 분석을 미리 해 둔다.
 		EnsureAmbushProfile();
 		EnterHanging();
+		return;
 	}
+
+	Phase = ECeilingEnemyPhase::Grounded;
 }
 
 void ACeilingEnemy::Tick(float DeltaTime)
@@ -120,9 +130,6 @@ void ACeilingEnemy::Tick(float DeltaTime)
 		return;
 	}
 
-	// 컨트롤러가 늦게 빙의하거나 BT가 재시작돼도 착지 전에는 BT를 멈춰 둔다.
-	PauseAI();
-
 	if (Phase == ECeilingEnemyPhase::Hanging)
 	{
 		UpdateHangLoop(DeltaTime);
@@ -139,20 +146,7 @@ void ACeilingEnemy::Tick(float DeltaTime)
 			}
 		}
 
-		// 감지 구역 검사는 일정 간격으로만 한다.
-		AmbushCheckElapsed += DeltaTime;
-		if (AmbushCheckElapsed < AmbushCheckInterval)
-		{
-			return;
-		}
-
-		AmbushCheckElapsed = 0.0f;
-
-		if (APawn* Target = FindAmbushTarget())
-		{
-			StartAmbush(Target);
-		}
-
+		// 대상 감지와 기습 시작은 BT(Wait For Ambush Target → Ceiling Ambush)가 맡는다.
 		return;
 	}
 
@@ -192,7 +186,6 @@ void ACeilingEnemy::EnterHanging()
 	Phase = ECeilingEnemyPhase::Hanging;
 	AmbushTarget.Reset();
 	PendingCombatActor.Reset();
-	AmbushCheckElapsed = 0.0f;
 	bLandedDuringAmbush = false;
 	bUsingProfiledDescent = false;
 	bDescentReleased = false;
@@ -208,9 +201,8 @@ void ACeilingEnemy::EnterHanging()
 
 	SnapToCeiling();
 
-	// 매달린 동안에는 BT와 감지(발각 범위 UI 포함)를 멈춘다.
+	// 매달린 동안에는 감지(발각 범위 UI 포함)를 멈춘다. 이동은 BT의 천장 분기가 하지 않는다.
 	SetBehaviorState(EEnemyBehaviorState::Idle);
-	PauseAI();
 	EnemyDetectComponent->StopDetection();
 
 	// 포즈가 바뀌면 다시 높이를 맞춘다.
@@ -318,7 +310,7 @@ void ACeilingEnemy::AlignHangPoseToCeiling()
 	UE_LOG(LogTemp, Log, TEXT("%s: 매달림 포즈를 천장에 맞춤 (메시 보정 %s)"), *GetName(), *AutoHangMeshOffset.ToCompactString());
 }
 
-APawn* ACeilingEnemy::FindAmbushTarget() const
+APawn* ACeilingEnemy::FindAmbushTarget(float DebugDrawTime) const
 {
 	UWorld* World = GetWorld();
 
@@ -330,7 +322,7 @@ APawn* ACeilingEnemy::FindAmbushTarget() const
 
 	if (bDrawAmbushTriggerDebug)
 	{
-		DrawDebugBox(World, BoxCenter, BoxExtent, FColor::Purple, false, AmbushCheckInterval);
+		DrawDebugBox(World, BoxCenter, BoxExtent, FColor::Purple, false, DebugDrawTime);
 	}
 
 	FCollisionObjectQueryParams ObjectParams;
@@ -670,9 +662,9 @@ void ACeilingEnemy::FinishDescent()
 	AmbushTarget.Reset();
 	PendingCombatActor.Reset();
 
-	// 감지와 BT를 다시 켜고, 기습 대상(또는 공격자)과 바로 전투에 들어간다.
+	// 감지를 다시 켜고, 기습 대상(또는 공격자)과 바로 전투에 들어간다.
+	// BT의 Ceiling Ambush는 단계가 Grounded로 바뀐 것을 보고 끝나며, 이후 일반 전투 분기(BT_Enemy)로 넘어간다.
 	EnemyDetectComponent->ResetDetection();
-	ResumeAI();
 	EnemyDetectComponent->NotifyDamaged(CombatActor);
 
 	// 기습을 공격 1회로 계산해, 착지 직후 기본 공격이 바로 이어지지 않게 한다.
@@ -733,27 +725,6 @@ void ACeilingEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 	Super::OnHealthChanged(Data);
 }
 
-void ACeilingEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
-{
-	// 착지 전에는 하강 궤적을 유지해야 하므로 BT 이동을 무시한다.
-	if (Phase != ECeilingEnemyPhase::Grounded)
-	{
-		return;
-	}
-
-	Super::MoveAlongX(DestinationX, Speed, DeltaTime);
-}
-
-void ACeilingEnemy::UpdateCombatMovement(AActor* Target, float DeltaSeconds)
-{
-	if (Phase != ECeilingEnemyPhase::Grounded)
-	{
-		return;
-	}
-
-	Super::UpdateCombatMovement(Target, DeltaSeconds);
-}
-
 void ACeilingEnemy::ResetToInitial_Implementation()
 {
 	if (bRootMotionOverridden)
@@ -779,17 +750,6 @@ void ACeilingEnemy::ResetToInitial_Implementation()
 	if (bStartOnCeiling)
 	{
 		EnterHanging();
-	}
-}
-
-void ACeilingEnemy::OnAfterReset_Implementation()
-{
-	Super::OnAfterReset_Implementation();
-
-	// BT를 다시 시작한 직후 매달려 있다면 바로 멈춘다.
-	if (Phase != ECeilingEnemyPhase::Grounded)
-	{
-		PauseAI();
 	}
 }
 
@@ -1139,39 +1099,6 @@ void ACeilingEnemy::GetHangLoopRange(float& OutStart, float& OutEnd) const
 
 	OutStart = FMath::Clamp(static_cast<float>(FrameRate.AsSeconds(FFrameTime(StartFrame))), 0.0f, PlayLength);
 	OutEnd = FMath::Clamp(static_cast<float>(FrameRate.AsSeconds(FFrameTime(EndFrame))), OutStart, PlayLength);
-}
-
-void ACeilingEnemy::PauseAI()
-{
-	AAIController* AIController = Cast<AAIController>(GetController());
-	if (!AIController)
-	{
-		return;
-	}
-
-	UBrainComponent* Brain = AIController->GetBrainComponent();
-	if (!Brain || Brain->IsPaused())
-	{
-		return;
-	}
-
-	AIController->StopMovement();
-	Brain->PauseLogic(TEXT("CeilingHang"));
-}
-
-void ACeilingEnemy::ResumeAI()
-{
-	AAIController* AIController = Cast<AAIController>(GetController());
-	if (!AIController)
-	{
-		return;
-	}
-
-	UBrainComponent* Brain = AIController->GetBrainComponent();
-	if (Brain && Brain->IsPaused())
-	{
-		Brain->ResumeLogic(TEXT("CeilingLanded"));
-	}
 }
 
 void ACeilingEnemy::ApplyHangMeshOffset(float Alpha)

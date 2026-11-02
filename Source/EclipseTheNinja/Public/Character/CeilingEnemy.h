@@ -29,13 +29,15 @@ enum class ECeilingEnemyPhase : uint8
  * 배치: 일반 적처럼 천장 아래 바닥에 세워 둔다. 시작할 때 위로 캡슐을 쓸어 올려 천장에 붙고,
  * 매달린 자세의 가장 높은 뼈가 천장에 닿도록 메시 높이를 자동으로 맞춘다. 순찰 기준점은 배치한 위치다.
  *
- * 흐름: Hanging(중력 X, BT 일시정지, 감지 UI 숨김)
- *   -> 아래 감지 구역에 대상이 보이면 Ambushing(기습 애니메이션의 루트 하강 궤적을 실제 바닥 높이에 맞춰 따라 내려오고,
+ * 흐름: Hanging(중력 X, 감지 UI 숨김)
+ *   -> 아래 감지 구역에 대상이 보이면 Ambushing(기습 애니메이션의 몸 하강 궤적을 실제 바닥 높이에 맞춰 수직으로 따라 내려오고,
  *      애니메이션이 바닥에 닿는 순간 착지·타격)
  *   -> 기습 전에 맞으면 Dropping(공격 없이 낙하)
- *   -> 착지 후 Grounded(BT 재개, 대상을 전투 대상으로 지정해 기본 근접 적처럼 추적/공격).
+ *   -> 착지 후 Grounded(대상을 전투 대상으로 지정해 기본 근접 적처럼 추적/공격).
  *
- * 착지 후 행동은 AEnemy의 기본 근접 정책을 그대로 사용하므로 기존 BT_Enemy를 수정 없이 쓴다.
+ * 행동 순서는 BT_CeilingEnemy가 정한다. Is On Ceiling 분기에서 Wait For Ambush Target → Ceiling Ambush를 실행하고,
+ * 착지하면 같은 Selector의 Run Behavior(BT_Enemy) 분기로 넘어가 기본 근접 적과 같은 트리를 쓴다.
+ * 이 클래스는 단계 전환과 매달림·하강 연출, 착지 처리만 맡는다.
  * 기습은 공격 1회로 계산해 착지 후 AttackInterval 동안 기본 공격을 하지 않는다.
  */
 UCLASS()
@@ -66,26 +68,28 @@ public:
 	// 착지 순간 기습 타격 이벤트를 보내거나, 공격 없이 떨어진 경우 일반 상태로 돌아간다.
 	virtual void Landed(const FHitResult& Hit) override;
 
-	// 착지 전에는 BT가 이동 입력을 넣지 못하게 막는다.
-	virtual void MoveAlongX(float DestinationX, float Speed, float DeltaTime) override;
-
-	// 착지 전에는 BT가 전투 이동을 하지 못하게 막는다.
-	virtual void UpdateCombatMovement(AActor* Target, float DeltaSeconds) override;
-
 	// 체크포인트 리스폰 1단계: 기본 초기화 후 다시 천장에 매달린다.
 	virtual void ResetToInitial_Implementation() override;
 
-	// 체크포인트 리스폰 2단계: BT를 다시 시작하되 매달려 있으면 바로 일시정지한다.
-	virtual void OnAfterReset_Implementation() override;
+	/**
+	 * 아래 감지 구역에서 보이는 가장 가까운 대상을 찾는다. BT의 Wait For Ambush Target이 호출한다.
+	 * DebugDrawTime은 bDrawAmbushTriggerDebug가 켜져 있을 때 감지 구역을 그려 둘 시간(초)이다.
+	 */
+	APawn* FindAmbushTarget(float DebugDrawTime) const;
+
+	/** 대상을 향해 기습을 시작한다. BT의 Ceiling Ambush가 매달린 상태에서 호출한다. */
+	void StartAmbush(APawn* Target);
 
 protected:
+	// BT가 처음 단계를 읽기 전에 천장 단계로 시작하도록, 컨트롤러가 빙의하기 전에 단계를 정한다.
+	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
 	// 매달린 상태에서 피해를 받으면 공격 없이 떨어진다.
 	virtual void OnHealthChanged(const FOnAttributeChangeData& Data) override;
 
-	// 천장에 매달린다. 천장에 붙고, 중력·BT·감지를 끄고 매달림 루프를 재생한다.
+	// 천장에 매달린다. 천장에 붙고, 중력·감지를 끄고 매달림 루프를 재생한다.
 	void EnterHanging();
 
 	// 캡슐을 위로 쓸어 올려 천장 바로 아래에 붙인다. 천장을 찾으면 CeilingZ를 기록한다.
@@ -93,9 +97,6 @@ protected:
 
 	// 매달린 자세의 가장 높은 뼈가 천장에 닿도록 메시 높이를 맞춘다. 포즈가 갱신된 뒤에 호출한다.
 	void AlignHangPoseToCeiling();
-
-	// 대상을 향해 기습 애니메이션의 하강 궤적을 따라 내려오며 기습 어빌리티를 시작한다.
-	void StartAmbush(APawn* Target);
 
 	// 대상 쪽(DirectionX 부호)으로 AmbushTurnTime 동안 돌도록 회전량을 정한다. 반 바퀴면 카메라 쪽으로 돈다.
 	void StartAmbushTurn(float DirectionX);
@@ -109,14 +110,11 @@ protected:
 	// 기습하지 않고 떨어진다. 착지 후 공격자를 전투 대상으로 삼는다.
 	void StartDropWithoutAttack(AActor* DamageInstigator);
 
-	// 착지 후 일반 근접 적으로 전환한다. BT와 감지를 다시 켜고 전투 대상을 지정한다.
+	// 착지 후 일반 근접 적으로 전환한다. 감지를 다시 켜고 전투 대상을 지정한다. BT는 단계 변화를 보고 다음 분기로 넘어간다.
 	void FinishDescent();
 
 	// 매달린 자세(메시 오프셋, 루프 몽타주)를 푼다. 낙하나 사망 시 호출한다.
 	void ReleaseHangPose(float BlendOutTime);
-
-	// 아래 감지 구역에서 보이는 가장 가까운 대상을 찾는다.
-	APawn* FindAmbushTarget() const;
 
 	// 매달림 루프 몽타주를 재생한다.
 	void PlayHangLoop();
@@ -139,10 +137,6 @@ protected:
 	// 기습 애니메이션 Time초에서 캡슐이 시작 위치보다 내려가 있어야 할 거리(cm).
 	// 루트가 고정된 포즈에서 몸(골반)이 원본 애니메이션의 몸 궤적을 따르도록 계산한다.
 	float GetDescentDropAt(float Time) const;
-
-	// BT를 일시정지하거나 다시 재개한다.
-	void PauseAI();
-	void ResumeAI();
 
 	// 매달림 메시 오프셋을 Alpha(1 = 매달림, 0 = 기본 위치)만큼 적용한다.
 	void ApplyHangMeshOffset(float Alpha);
@@ -169,10 +163,6 @@ protected:
 	/** 감지 구역의 깊이(cm). 천장에 붙은 캡슐 중심에서 이 거리만큼 아래까지 본다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Ceiling|Detection", meta = (ClampMin = "1.0", Units = "cm"))
 	float AmbushTriggerDepth = 800.0f;
-
-	/** 감지 구역 검사 간격(초) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Ceiling|Detection", meta = (ClampMin = "0.02", Units = "s"))
-	float AmbushCheckInterval = 0.1f;
 
 	/** 감지 구역을 디버그로 그린다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Ceiling|Detection")
@@ -274,7 +264,6 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> AmbushDynamicMontage;
 
-	float AmbushCheckElapsed = 0.0f;
 	double DescentStartTime = 0.0;
 	bool bLandedDuringAmbush = false;
 
