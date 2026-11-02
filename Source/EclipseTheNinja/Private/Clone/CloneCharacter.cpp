@@ -5,7 +5,10 @@
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Component/InteractHighlightComponent.h"
 
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/TargetPoint.h"
 
@@ -55,6 +58,7 @@ void ACloneCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	// 풀을 거치지 않고 파괴되는 경우
 	NotifyDespawned();
+	this->ReleaseTargetPlayer();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -88,6 +92,19 @@ void ACloneCharacter::StopCloneMovement()
 	ConsumeMovementInputVector();
 }
 
+void ACloneCharacter::OnInteractPlayerMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (bInterrupted)
+	{
+		// 끊긴 경우에는 날리지 않고 입력만 돌려준다
+		this->ReleaseTargetPlayer();
+		return ;
+	}
+
+	this->LaunchTargetPlayer();
+	//this->ResetInteractionCooldown();
+}
+
 void ACloneCharacter::ResetMoveProgress()
 {
 	this->TurnPauseRemaining = 0.f;
@@ -111,10 +128,15 @@ void ACloneCharacter::OnReturnToPool_Implementation()
 	// 명령, 쿨다운, 안전 지점은 반환 시 정리한다
 	// (안전 지점은 스폰 시 콜리전이 켜지며 오버랩으로 다시 등록될 수 있으므로 OnSpawnFromPool에서 지우지 않는다)
 	this->bIsArrived = false;
+	this->bIsCommandLocked = false;
 	this->TargetActor = nullptr;
 	this->TargetLocation = FVector::ZeroVector;
 	this->CommandType = ECloneCommandType::Move;
 	this->ResetMoveProgress();
+	this->StopTargetMontage(this->InteractMontage);
+	this->StopTargetMontage(this->InteractPlayerMontage);
+	// 끊긴 몽타주의 콜백은 나중에 오거나 오지 않을 수 있으므로 여기서 바로 입력을 돌려준다
+	this->ReleaseTargetPlayer();
 
 	GetWorldTimerManager().ClearTimer(this->InteractionCooldownTimer);
 	this->bIsInteractCooldown = false;
@@ -158,7 +180,7 @@ void ACloneCharacter::Tick(float DeltaTime)
 					);
 					this->bIsTargetUnreachable = true;
 					this->TurnPauseRemaining = 0.f;
-					StopCloneMovement();
+					this->StopCloneMovement();
 					return ;
 				}
 			}
@@ -185,6 +207,7 @@ void ACloneCharacter::Tick(float DeltaTime)
 			case (ECloneCommandType::Interact):
 			{
 				IInteractable::Execute_Interact(this->TargetActor, this);
+				this->PlayInteractMontage();
 				break;
 			}
 			default:
@@ -205,7 +228,13 @@ void ACloneCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 
 void ACloneCharacter::SetCommand(const FCloneCommandType& InCommand)
 {
+	if (this->bIsCommandLocked)
+	{
+		return ;
+	}
 	this->ResetMoveProgress();
+	this->StopTargetMontage(this->InteractMontage);
+	this->StopTargetMontage(this->InteractPlayerMontage);
 	this->CommandType = InCommand.Type;
 	switch (InCommand.Type)
 	{
@@ -242,15 +271,39 @@ void ACloneCharacter::Interact_Implementation(AActor* InActor)
 	}
 	this->bIsInteractCooldown = true;
 	//this->bIsInteracted = true;
-	GetWorldTimerManager().SetTimer(
-		InteractionCooldownTimer,
-		this,
-		&ACloneCharacter::ResetInteractionCooldown,
-		this->InteractInterval,
-		false
-	);
-	this->RefreshInteractState();
-	InCharacter->LaunchCharacter(this->InteractVelocity, false, true);
+
+	// 플레이어와 상호작용한 분신은 하던 명령을 버리고 그 자리에 멈추며, 이후 명령을 받지 않는다
+	this->bIsCommandLocked = true;
+	this->StopCloneMovement();
+	GetCharacterMovement()->StopMovementImmediately();
+	this->TargetActor = nullptr;
+	this->CommandType = ECloneCommandType::Move;
+	this->ResetMoveProgress();
+	this->StopTargetMontage(this->InteractMontage);
+
+	this->FaceToward(InCharacter);
+	// 날아갈 때까지 플레이어는 제자리에서 입력을 받지 않는다
+	this->TargetPlayer = InCharacter;
+	if (APlayerController* PlayerController = Cast<APlayerController>(InCharacter->GetController()))
+	{
+		InCharacter->DisableInput(PlayerController);
+	}
+	InCharacter->GetCharacterMovement()->StopMovementImmediately();
+	this->PlayInteractPlayerMontage();
+	//this->RefreshInteractState();
+	//InCharacter->LaunchCharacter(this->InteractVelocity, false, true);
+}
+
+void ACloneCharacter::FaceToward(const AActor* InActor)
+{
+	// 사이드뷰이므로 X축 방향만 맞춘다
+	const float	ToActorX = InActor->GetActorLocation().X - GetActorLocation().X;
+	if (FMath::IsNearlyZero(ToActorX) || ToActorX * GetActorForwardVector().X > 0.f)
+	{
+		return ;
+	}
+	this->WalkDir = FVector(FMath::Sign(ToActorX), 0.f, 0.f);
+	SetActorRotation(this->WalkDir.Rotation());
 }
 
 void ACloneCharacter::ShowInteractionIndicator_Implementation()
@@ -311,6 +364,78 @@ void ACloneCharacter::ReturnToSafePoint_Implementation()
 	// 데미지 입는 애니메이션 끝나면 부활하는 애니메이션
 	this->SetActorLocation(this->SafePointLocation);
 	this->SetActorRotation(this->SafePointRotate);
+}
+
+void ACloneCharacter::PlayInteractMontage()
+{
+	if (!this->InteractMontage)
+	{
+		return ;
+	}
+	UAnimInstance*	AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (AnimInstance)
+	{
+		AnimInstance->Montage_Play(this->InteractMontage);
+	}
+}
+
+void ACloneCharacter::PlayInteractPlayerMontage()
+{
+	UAnimInstance*	AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (this->InteractPlayerMontage && AnimInstance
+		&& AnimInstance->Montage_Play(this->InteractPlayerMontage) > 0.f)
+	{
+		// 블렌드 아웃이 시작될 때 플레이어를 날린다
+		FOnMontageBlendingOutStarted	Delegate;
+		Delegate.BindUObject(this, &ACloneCharacter::OnInteractPlayerMontageBlendingOut);
+		AnimInstance->Montage_SetBlendingOutDelegate(Delegate, this->InteractPlayerMontage);
+		return ;
+	}
+	// 몽타주가 없거나 재생에 실패하면 바로 날린다
+	this->LaunchTargetPlayer();
+}
+
+void ACloneCharacter::LaunchTargetPlayer()
+{
+	if (this->TargetPlayer.IsValid())
+	{
+		this->TargetPlayer.Get()->LaunchCharacter(this->InteractVelocity, false, true);
+	}
+	this->ReleaseTargetPlayer();
+	GetWorldTimerManager().SetTimer(
+		InteractionCooldownTimer,
+		this,
+		&ACloneCharacter::ResetInteractionCooldown,
+		this->InteractInterval,
+		false
+	);
+}
+
+void ACloneCharacter::ReleaseTargetPlayer()
+{
+	ACharacter*	Player = this->TargetPlayer.Get();
+	this->TargetPlayer.Reset();
+	if (!Player)
+	{
+		return ;
+	}
+	if (APlayerController* PlayerController = Cast<APlayerController>(Player->GetController()))
+	{
+		Player->EnableInput(PlayerController);
+	}
+}
+
+void ACloneCharacter::StopTargetMontage(UAnimMontage* InMontage)
+{
+	if (!InMontage)
+	{
+		return ;
+	}
+	UAnimInstance*	AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (AnimInstance && AnimInstance->Montage_IsPlaying(InMontage))
+	{
+		AnimInstance->Montage_Stop(this->InteractMontageBlendOutTime, InMontage);
+	}
 }
 
 void	ACloneCharacter::ResetInteractionCooldown()

@@ -12,6 +12,7 @@
 #include "CloneCharacter.generated.h"
 
 class ACloneCharacter;
+class UAnimMontage;
 class UInteractHighlightComponent;
 class UWidgetComponent;
 
@@ -72,6 +73,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Margin")
 	FVector	InteractVelocity = FVector(0.f, 0.f, 500.f);
 
+	// 상호작용 명령으로 대상에 도착했을 때 재생하는 몽타주. 새 명령을 받거나 풀에 반환되면 중단된다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage")
+	TObjectPtr<UAnimMontage>	InteractMontage = nullptr;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage", meta = (ClampMin = "0.0"))
+	float	InteractMontageBlendOutTime = 0.25f;
+
+	// 상호작용 명령으로 대상에 도착했을 때 재생하는 몽타주. 새 명령을 받거나 풀에 반환되면 중단된다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage")
+	TObjectPtr<UAnimMontage>	InteractPlayerMontage = nullptr;
+
+	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage", meta = (ClampMin = "0.0"))
+	//float	InteractMontageBlendOutTime = 0.25f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
 
@@ -86,6 +101,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Move", meta = (ClampMin = "0.0"))
 	float	UnreachableOscillationTime = 0.5f;
 
+	void	OnInteractPlayerMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted);
 public:
 	// 마지막 명령의 목표 지점이 도달 불가로 판정되었는지
 	bool	IsTargetUnreachable() const { return (this->bIsTargetUnreachable); }
@@ -101,6 +117,18 @@ private:
 	void	ResetMoveProgress();
 	void	ResetInteractionCooldown();
 
+	void	PlayInteractMontage();
+	// 몽타주의 블렌드 아웃이 시작될 때 TargetPlayer를 날린다. 몽타주가 없거나 재생에 실패하면 즉시 날린다
+	void	PlayInteractPlayerMontage();
+	// TargetPlayer를 날리고 상호작용 쿨다운 타이머를 시작한다
+	void	LaunchTargetPlayer();
+	// 상호작용 중 막아 둔 TargetPlayer의 입력을 돌려주고 비운다. 여러 번 호출해도 한 번만 처리된다
+	void	ReleaseTargetPlayer();
+	void	StopTargetMontage(UAnimMontage* InMontage);
+
+	// 대상이 등 뒤에 있으면 대상 쪽으로 즉시 돌아선다
+	void	FaceToward(const AActor* InActor);
+
 	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신
 	void	RefreshInteractState();
 	void	RefreshHighlight();
@@ -114,6 +142,8 @@ private:
 	bool	bIsSpawned = false;
 
 	bool	bIsArrived = false;
+	// 플레이어와 상호작용한 뒤에는 true. 풀에 반환될 때까지 SetCommand를 무시한다
+	bool	bIsCommandLocked = false;
 	FVector	WalkDir = FVector::ZeroVector;
 
 	TObjectPtr<AActor>	TargetActor = nullptr;
@@ -130,4 +160,6 @@ private:
 
 	FVector	SafePointLocation = FVector::ZeroVector;
 	FRotator	SafePointRotate = FRotator::ZeroRotator;
+
+	TWeakObjectPtr<ACharacter>	TargetPlayer = nullptr;
 };
