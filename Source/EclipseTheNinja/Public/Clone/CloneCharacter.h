@@ -86,6 +86,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage")
 	TObjectPtr<UAnimMontage>	InteractPlayerMontage = nullptr;
 
+	// 플레이어가 공중이거나 벽에 붙어 있거나 매달린 상태라 협동 점프를 할 수 없을 때 표시
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Message")
+	FText	CannotCoopJumpText = FText::FromString(TEXT("지금은 분신과 협동 점프를 할 수 없습니다."));
+
 	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage", meta = (ClampMin = "0.0"))
 	//float	InteractMontageBlendOutTime = 0.25f;
 

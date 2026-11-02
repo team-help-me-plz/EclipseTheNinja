@@ -3,6 +3,7 @@
 #include "ProjComponent/AbilityTask_WaitCloneTargeting.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Character/PlayerCharacter.h"
+#include "GAS/Ability/GAWallAttach.h"
 #include "Interface/Interactable.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Subsystem/UIMessageSubsystem.h"
@@ -12,6 +13,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
 #include "AbilitySystemComponent.h"
@@ -98,6 +100,14 @@ void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 			Warning,
 			TEXT("[UGACloneTech::ActivateAbility] Input 설정이 완료되지 않았습니다")
 		);
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return ;
+	}
+
+	// 쿨다운은 소환할 때 Commit되므로 여기서 끝내면 쿨다운 없이 취소된다
+	if (IsSpawnBlocked(Cast<ACharacter>(ActorInfo->AvatarActor.Get()), ActorInfo->AbilitySystemComponent.Get()))
+	{
+		UUIMessageSubsystem::ShowMessage(ActorInfo->PlayerController.Get(), this->CannotSpawnStateText);
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return ;
 	}
@@ -196,6 +206,13 @@ void UGACloneTech::HandleTargetAccepted(const FCloneCommandType& InCommand)
 		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, true);
 		return ;
 	}
+	// 타게팅 중에 떨어지거나 벽에 붙었을 수 있으므로 소환 직전에 다시 확인한다
+	if (IsSpawnBlocked(Character, GetAbilitySystemComponentFromActorInfo()))
+	{
+		UUIMessageSubsystem::ShowMessage(GetCurrentActorInfo()->PlayerController.Get(), this->CannotSpawnStateText);
+		EndAbility(this->CurrentSpecHandle, this->CurrentActorInfo, this->CurrentActivationInfo, true, true);
+		return ;
+	}
 	const bool		bIsRightDir = InCommand.TargetLocation.X - Character->GetActorLocation().X > 0.0f;
 	const FVector	CloneDir = bIsRightDir ? FVector::XAxisVector : -FVector::XAxisVector;
 	const FVector	ClonePos = Character->GetActorLocation() + this->CloneDist * CloneDir;
@@ -289,6 +306,16 @@ void UGACloneTech::PlayCloneEffect(const FVector& InLocation) const
 	);
 }
 
+bool UGACloneTech::IsSpawnBlocked(const ACharacter* Character, const UAbilitySystemComponent* ASC)
+{
+	// 공중이거나 벽에 붙어 있거나 매달린 상태에서는 소환할 수 없다
+	if (!Character->GetCharacterMovement()->IsMovingOnGround())
+	{
+		return (true);
+	}
+	return (ASC && ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag()));
+}
+
 bool UGACloneTech::CheckCost(const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const
 {
@@ -328,6 +355,13 @@ void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle,
 	if (!this->SpawnedClone.IsValid())
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return ;
+	}
+	// 벽에 붙어 있거나 매달린 상태에서는 교환할 수 없다
+	const UAbilitySystemComponent*	ASC = ActorInfo->AbilitySystemComponent.Get();
+	if (ASC && ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag()))
+	{
+		UUIMessageSubsystem::ShowMessage(ActorInfo->PlayerController.Get(), this->CannotSwapText);
 		return ;
 	}
 	const FVector	PlayerLocation = Character->GetActorLocation();

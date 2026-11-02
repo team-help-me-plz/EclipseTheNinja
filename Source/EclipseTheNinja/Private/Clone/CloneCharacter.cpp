@@ -4,7 +4,11 @@
 #include "Clone/CloneCharacter.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Component/InteractHighlightComponent.h"
+#include "GAS/Ability/GAWallAttach.h"
+#include "Subsystem/UIMessageSubsystem.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -285,6 +289,14 @@ void ACloneCharacter::Interact_Implementation(AActor* InActor)
 	if (bIsInteractCooldown)
 	{
 		return;
+	}
+	// 공중이거나 벽에 붙어 있거나 매달린 플레이어와는 협동 점프를 하지 않는다
+	const UAbilitySystemComponent*	PlayerASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(InCharacter);
+	if (!InCharacter->GetCharacterMovement()->IsMovingOnGround()
+		|| (PlayerASC && PlayerASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag())))
+	{
+		UUIMessageSubsystem::ShowMessage(Cast<APlayerController>(InCharacter->GetController()), this->CannotCoopJumpText);
+		return ;
 	}
 	this->bIsInteractCooldown = true;
 	//this->bIsInteracted = true;
