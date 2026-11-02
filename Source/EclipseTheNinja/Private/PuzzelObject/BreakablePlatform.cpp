@@ -35,7 +35,7 @@ ABreakablePlatform::ABreakablePlatform()
 	this->BreakEffect->bAutoActivate = false;
 
 	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> BreakSystem(
-		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/SandFalling/Looped/NS_Sand_Ceiling_04_Looped.NS_Sand_Ceiling_04_Looped"));
+		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/SandFalling/Looped/NS_Sand_Ceiling_04_Looped_Platform.NS_Sand_Ceiling_04_Looped_Platform"));
 
 	if (BreakSystem.Succeeded())
 	{
@@ -48,6 +48,7 @@ void ABreakablePlatform::ResetToInitial_Implementation()
 	GetWorldTimerManager().ClearTimer(this->PlatformBreakTimer);
 	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTimer);
 	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTryTimer);
+	GetWorldTimerManager().ClearTimer(this->BreakEffectTimer);
 	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다.
 	this->BreakEffect->DeactivateImmediate();
 	this->RestorePlatform();
@@ -57,7 +58,11 @@ void ABreakablePlatform::ResetToInitial_Implementation()
 void ABreakablePlatform::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	// 기본 이미터는 컴포넌트 X축을 향하는 판이라 사이드뷰 카메라에서는 옆면만 보인다. 카메라를 향하는 이미터를 쓴다.
+	this->BreakEffect->SetVariableBool(TEXT("User.FaceCamera"), true);
+	this->BreakEffect->SetVariableVec2(TEXT("User.ScaleXY"), this->BreakEffectScale);
+
 	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
 	if (!IsValid(AssemblyActor))
 	{
@@ -110,6 +115,15 @@ void ABreakablePlatform::OnCollisionBeginOverlap(UPrimitiveComponent* Overlapped
 		return ;
 	}
 	this->State = EBreakablePlatformState::Breaking;
+	// 플레이어를 감지한 순간 무너질 것을 알리는 이펙트를 짧게 재생한다.
+	this->BreakEffect->Activate(true);
+	GetWorldTimerManager().SetTimer(
+		this->BreakEffectTimer,
+		this,
+		&ABreakablePlatform::StopBreakEffect,
+		this->BreakEffectDuration,
+		false
+	);
 	GetWorldTimerManager().SetTimer(
 		this->PlatformBreakTimer,
 		this,
@@ -132,7 +146,6 @@ void ABreakablePlatform::BreakPlatform()
 {
 	this->State = EBreakablePlatformState::Broken;
 	this->MeshAssembly->SetVisibility(false);
-	this->BreakEffect->Activate(true);
 
 	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
 	if (!IsValid(AssemblyActor))
@@ -156,6 +169,12 @@ void ABreakablePlatform::BreakPlatform()
 	);
 }
 
+void ABreakablePlatform::StopBreakEffect()
+{
+	// 짧게 보여주고 끝내야 하므로 남은 파티클까지 바로 지운다.
+	this->BreakEffect->DeactivateImmediate();
+}
+
 void ABreakablePlatform::TryRestore()
 {
 	if (this->OverlapCount)
@@ -176,8 +195,6 @@ void ABreakablePlatform::RestorePlatform()
 {
 	this->State = EBreakablePlatformState::Ready;
 	this->MeshAssembly->SetVisibility(true);
-	// 새 파티클 생성만 멈추고, 남은 모래는 수명대로 자연스럽게 사라지게 한다.
-	this->BreakEffect->Deactivate();
 
 	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
 	if (!IsValid(AssemblyActor))

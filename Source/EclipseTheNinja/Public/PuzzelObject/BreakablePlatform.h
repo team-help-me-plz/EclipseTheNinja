@@ -62,6 +62,7 @@ protected:
 	void	BreakPlatform();
 	void	TryRestore();
 	void	RestorePlatform();
+	void	StopBreakEffect();
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	TObjectPtr<USceneComponent>	RootScene = nullptr;
@@ -75,9 +76,17 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
 
-	// 무너져 있는 동안 재생할 이펙트. 플랫폼이 복구되면 멈춘다.
+	// 플레이어를 감지한 순간 BreakEffectDuration 동안 재생할 이펙트
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UNiagaraComponent>	BreakEffect = nullptr;
+
+	// BreakEffect 스프라이트 크기 배율 (User.ScaleXY, X = 가로, Y = 세로). 이 이펙트는 컴포넌트 Transform Scale이 반영되지 않으므로 이 값으로 조절한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Break|Effect")
+	FVector2D	BreakEffectScale = FVector2D(3.f, 3.f);
+
+	// BreakEffect 재생 시간. 이 시간이 지나면 남은 파티클까지 즉시 지운다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Break|Effect", meta = (ClampMin = "0.01"))
+	float	BreakEffectDuration = 0.2f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Break|Timer")
 	float	BreakTime = 0.5f;
@@ -92,6 +101,7 @@ private:
 	FTimerHandle	PlatformBreakTimer;
 	FTimerHandle	PlatformRestoreTryTimer;
 	FTimerHandle	PlatformRestoreTimer;
+	FTimerHandle	BreakEffectTimer;
 
 	EBreakablePlatformState	State = EBreakablePlatformState::Ready;
 
