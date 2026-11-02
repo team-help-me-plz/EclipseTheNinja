@@ -388,6 +388,7 @@ void AEnemy::ResetToInitial_Implementation()
 	BehaviorState = EEnemyBehaviorState::Patrol;
 	CombatTarget.Reset();
 	bPatrolTowardsMax = true;
+	ParryStunEndTime = 0.0;
 	NextAttackTime = 0.0;
 	MonategeDuration = 0.0f;
 
@@ -578,6 +579,7 @@ bool AEnemy::IsAttackActive() const
 
 bool AEnemy::IsPlayingHitReaction() const
 {
+	if (GetWorld()->GetTimeSeconds() < ParryStunEndTime) return true;
 	const UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	return HitReactionMontage && AnimInstance && AnimInstance->Montage_IsPlaying(HitReactionMontage);
 }
@@ -602,6 +604,11 @@ void AEnemy::FaceDirection(float DirectionX)
 
 void AEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 {
+	if (GetWorld()->GetTimeSeconds() < ParryStunEndTime)
+	{
+		StopHorizontalMovement();
+		return;
+	}
 	const float DistanceX = DestinationX - GetActorLocation().X;
 	if (FMath::Abs(DistanceX) <= 5.0f || DeltaTime <= 0.0f)
 	{
@@ -774,3 +781,19 @@ void AEnemy::UpdateOverheadWidgetRotation()
 	}
 }
 
+
+void AEnemy::ReceiveParryStun(float Duration)
+{
+	if (bIsDead) return;
+
+	ParryStunEndTime = FMath::Max(ParryStunEndTime, GetWorld()->GetTimeSeconds() + FMath::Max(0.01f, Duration));
+
+	// 공격 패턴과 루트 모션을 중단하고 다른 유지형 어빌리티는 보존한다.
+	if (ASC)
+	{
+		FGameplayTagContainer AttackTags(EclipseGameplayTags::Ability_Attack);
+		ASC->CancelAbilities(&AttackTags);
+	}
+
+	StopHorizontalMovement();
+}

@@ -55,6 +55,9 @@ class ECLIPSETHENINJA_API AEnemy : public ABaseCharacter, public ICheckpointRese
 {
 	GENERATED_BODY()
 
+private:
+	double ParryStunEndTime = 0.0;
+
 public:
 	// Sets default values for this character's properties
 	AEnemy();
@@ -255,6 +258,7 @@ public:
 	// 피격 몽타주가 현재 재생 중인지 확인하는 함수
 	UFUNCTION(BlueprintPure, Category = "Combat|Hit Reaction")
 	bool IsPlayingHitReaction() const;
+	void ReceiveParryStun(float Duration);
 
 	// 수평 움직임을 종료하는 함수
 	UFUNCTION(BlueprintCallable, Category = "Movement")

@@ -2,6 +2,12 @@
 
 namespace EclipseGameplayTags
 {
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Attack, "Ability.Attack");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Parry, "Ability.Parry");
+	UE_DEFINE_GAMEPLAY_TAG(State_Parrying, "State.Parrying");
+	UE_DEFINE_GAMEPLAY_TAG(State_ParryWindow, "State.ParryWindow");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Parry_Success, "Event.Parry.Success");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Parry_Success, "GameplayCue.Parry.Success");
 	// ---------- 불속성 ----------
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Element_Fire, "Ability.Element.Fire", "불속성 어빌리티");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(State_Weapon_Element_Fire, "State.Weapon.Element.Fire", "불속성이 켜져 있는 상태");
