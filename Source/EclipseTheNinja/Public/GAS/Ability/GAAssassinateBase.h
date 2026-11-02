@@ -12,6 +12,7 @@ class UAssassinateTargetComponent;
 class UBrainComponent;
 class UAnimMontage;
 class UCurveVector;
+class UNiagaraSystem;
 class UAbilityTask_ApplyRootMotionMoveToForce;
 
 /**
@@ -28,6 +29,7 @@ public:
 	UGAAssassinateBase();
 	static FGameplayTag GetAssassinatingTag();
 	static FGameplayTag GetImpactEventTag();
+	static FGameplayTag GetVFXEventTag();
 
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr,
@@ -91,17 +93,41 @@ protected:
 	// 실제 거리·높이에 맞춰 늘리거나 줄이므로 발판 높이가 애니메이션과 달라도 움직임의 모양은 유지된다.
 	UAbilityTask_ApplyRootMotionMoveToForce* MoveAlongAttackRootMotion(float StartTime, float Duration, const FVector& End);
 
-	// 칼이 박히는 순간을 기다렸다가 히트스톱·슬로모션을 건다. 암살자 몽타주를 재생하기 직전에 호출한다.
-	// 암살자 몽타주에 AnimNotify_AssassinateImpact가 있으면 그 프레임을, 없으면 ImpactFallbackTime을 쓴다.
+	// 히트스톱을 예약한다. 암살자 몽타주를 재생하기 직전에 호출한다.
+	// 히트스톱은 AnimNotify_AssassinateImpact가 있으면 그 프레임을, 없으면 ImpactFallbackTime을 쓴다.
 	// 몽타주를 중간부터 다시 재생할 때는 그 시작 위치를 CurrentMontageTime으로 넘긴다.
 	void WaitForImpact(float CurrentMontageTime = 0.0f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|VFX")
+	bool bUseImpactVFX = true;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|VFX", meta = (EditCondition = "bUseImpactVFX"))
+	TSoftObjectPtr<UNiagaraSystem> ImpactVFX;
+
+	/** 피격자 메시의 소켓/본. 없으면 피격자 액터 위치를 사용한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|VFX", meta = (EditCondition = "bUseImpactVFX"))
+	FName ImpactVFXSocket = TEXT("spine_03");
+
+	/** 피격자 소켓 기준 위치·회전 보정. 생성 후에는 월드에 남아 데칼이 함께 움직이지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|VFX", meta = (EditCondition = "bUseImpactVFX"))
+	FTransform ImpactVFXOffset = FTransform::Identity;
+
+	/** 에셋의 User.LifeTimeMult 값(수명 배율). */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|VFX", meta = (EditCondition = "bUseImpactVFX", ClampMin = "0.01"))
+	float ImpactVFXLifeTime = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|VFX", meta = (EditCondition = "bUseImpactVFX", ClampMin = "0.01"))
+	float ImpactVFXScale = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|VFX", meta = (EditCondition = "bUseImpactVFX", ClampMin = "0.01"))
+	float ImpactVFXTextureScale = 1.2f;
 
 	/** 임팩트 순간에 게임 속도를 늦출지 여부 */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact")
 	bool bUseImpactTimeDilation = true;
 
 	/** 몽타주에 Assassinate Impact 노티파이가 없을 때 쓰는 임팩트 시점(몽타주 시작 기준). 음수면 노티파이만 기다린다. */
-	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", Units = "s"))
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (Units = "s"))
 	float ImpactFallbackTime = 0.4f;
 
 	/** 히트스톱 동안의 게임 속도 배율 */
@@ -187,6 +213,13 @@ protected:
 
 private:
 	bool StartAttackMontageTask(float StartTime);
+	void TriggerImpact();
+	void PlayImpactVFX();
+	UFUNCTION()
+	void OnVFXEvent(FGameplayEventData Payload);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraSystem> LoadedImpactVFX;
 
 	UFUNCTION()
 	void OnImpactEvent(FGameplayEventData Payload);
@@ -215,6 +248,7 @@ private:
 	float ImpactElapsed = 0.0f;
 	float SavedTimeDilation = 1.0f;
 	bool bImpactTriggered = false;
+	bool bImpactVFXTriggered = false;
 	bool bTimeDilationApplied = false;
 
 protected:
