@@ -4,14 +4,18 @@
 #include "Abilities/GameplayAbility.h"
 #include "GABossPatternBase.generated.h"
 
+class ABossAttackTelegraph;
+class AEnemy;
 class UAnimMontage;
 struct FBossAttackHitArea;
+struct FBossTelegraphArea;
 
 /**
  * 보스 공격 패턴 어빌리티의 공통 부모.
  * 패턴 하나 = 몽타주 1개 + 몽타주의 Boss Attack Hit 노티파이마다 OnPatternHit 호출.
  * 타격 시점에 무엇을 할지(근접 판정, 투사체 발사 등)는 파생 클래스가 정한다. 다단히트 패턴은 노티파이를 여러 개 둔다.
  * 시전 전 준비 구간(몽타주 앞부분)은 끝 자세에서 멈추거나 슬로우로 재생해 플레이어가 대비할 틈을 준다.
+ * 시전을 시작하는 순간 피격 범위를 반투명 사각형(ABossAttackTelegraph)으로 보여 주고, 마지막 타격이 나가면 지운다.
  *
  * 보스는 다음 패턴을 고를 때 사용 거리 밖의 패턴을 후보에서 뺀다. 패턴 쿨타임은 DT_BossPatterns 행의 Cooldown으로 보스가 센다.
  */
@@ -36,6 +40,14 @@ public:
 		const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData
+	) override;
+
+	virtual void EndAbility(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo,
+		bool bReplicateEndAbility,
+		bool bWasCancelled
 	) override;
 
 	/** 이 패턴을 고를 수 있는 대상과의 최소 거리(cm). */
@@ -113,4 +125,43 @@ protected:
 
 	// 준비 구간이 끝나는 몽타주 위치. WindupEndPosition이 0이면 첫 타격 노티파이로 정한다.
 	float GetWindupEndPosition() const;
+
+	/** 시전 시작 순간 피격 범위를 화면에 보여 줄지 여부. */
+	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Telegraph")
+	bool bShowTelegraph = true;
+
+	/** 피격 범위 표시에 쓰는 액터. 색이나 투명도를 바꾸려면 BP 자식 클래스를 만들어 지정한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Telegraph", meta = (EditCondition = "bShowTelegraph"))
+	TSubclassOf<ABossAttackTelegraph> TelegraphClass;
+
+	/**
+	 * 이 패턴의 피격 범위를 보스 기준 사각형 하나로 만든다. 표시할 범위가 없으면 false.
+	 * 기본은 몽타주의 모든 Boss Attack Hit 노티파이 판정 상자를 덮는 사각형이다.
+	 */
+	virtual bool GetTelegraphArea(const AEnemy* Enemy, FBossTelegraphArea& OutArea) const;
+
+	/** 표시한 범위가 보스를 따라 움직일지 여부. false면 시전 시작 위치에 고정된다. */
+	virtual bool ShouldTelegraphFollowBoss() const { return true; }
+
+	// 몽타주에서 가장 먼저 울리는 Boss Attack Hit 노티파이의 판정 영역. 노티파이가 없으면 false.
+	bool FindFirstHitArea(FBossAttackHitArea& OutHitArea) const;
+
+	// 피격 범위 표시를 띄운다.
+	void ShowTelegraph();
+
+	// 피격 범위 표시를 서서히 지운다.
+	void HideTelegraph();
+
+	/**
+	 * 마지막 타격 노티파이가 울리면 범위 표시를 지운다.
+	 * 타격 노티파이 뒤에 실제 판정이 따로 나는 패턴(질풍참 등)은 false로 두고 판정 시점에 직접 HideTelegraph를 부른다.
+	 */
+	bool bHideTelegraphOnLastHit = true;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ABossAttackTelegraph> ActiveTelegraph;
+
+	// 이번 시전에서 울린 타격 노티파이 수와 몽타주의 전체 타격 노티파이 수
+	int32 HitEventCount = 0;
+	int32 TotalHitCount = 0;
 };

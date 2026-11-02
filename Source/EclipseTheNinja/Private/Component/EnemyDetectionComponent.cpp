@@ -158,6 +158,26 @@ void UEnemyDetectionComponent::ResetDetection()
     OnAwarenessChanged.Broadcast(AlertGauge, AlertLevel);
 }
 
+void UEnemyDetectionComponent::ForgetTarget()
+{
+    const EEnemyAlertLevel PreviousLevel = AlertLevel;
+    const float PreviousGauge = AlertGauge;
+
+    AlertLevel = EEnemyAlertLevel::Normal;
+    AlertGauge = 0.0f;
+    bHasLineOfSight = false;
+    CurrentTarget.Reset();
+    LastKnownLocation = FVector::ZeroVector;
+    bHasLastKnownLocation = false;
+    TimeWithoutSight = 0.0f;
+    SyncPlayerEngagement();
+
+    // BT가 바로 순찰 분기로 넘어가도록 Blackboard를 즉시 갱신한다.
+    UpdateBlackboard();
+    if (PreviousLevel != AlertLevel || !FMath::IsNearlyEqual(PreviousGauge, AlertGauge))
+        OnAwarenessChanged.Broadcast(AlertGauge, AlertLevel);
+}
+
 void UEnemyDetectionComponent::StopDetection()
 {
     if (UWorld* World = GetWorld())
@@ -409,7 +429,8 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
 
         // 마지막 실제 관측 이후의 시간만 센다. 장애물 뒤나 시야 밖의 현재 위치는 갱신하지 않는다.
         // 설정한 초기화 기간을 넘으면 감지와 관련된 값 초기화 (일반 상태로 복귀)
-        if (TimeWithoutSight >= FMath::Max(0.0f, ForgetDelay))
+        // 적이 놓친 대상을 직접 찾는 중(보스의 포효·난사 등)이면 그 적이 ForgetTarget을 부를 때까지 기억을 유지한다.
+        if (TimeWithoutSight >= FMath::Max(0.0f, ForgetDelay) && !OwnerEnemy->ShouldHoldCombatMemory())
         {
             AlertLevel = EEnemyAlertLevel::Normal;
             AlertGauge = 0.0f;

@@ -65,6 +65,7 @@ public:
 
 	/** 암살 성공 시 호출된다. 기본 적은 즉시 사망하고, 보스처럼 규칙이 다른 적은 재정의한다. */
 	virtual void ReceiveAssassination(UAnimMontage* Montage);
+	virtual void ReceiveAssassination(UAnimMontage* Montage, float InDamage);
 
 	/** 지금 암살 대상으로 지정될 수 있는지. 경계 단계 검사와 별도로 적 종류별 조건(보스 실드 등)을 추가한다. */
 	virtual bool CanBeAssassinated() const { return true; }
@@ -129,6 +130,12 @@ public:
 	 * 공격을 새로 시작하는 함수는 아니며 피격·사망·타임아웃에 의한 중단까지 막지는 않는다.
 	 */
 	virtual bool ShouldLockMovementDuringAttack() const { return false; }
+
+	/**
+	 * 전투 중 대상을 놓친 뒤 ForgetDelay가 지나도 기억을 유지할지. 기본 적은 false라 ForgetDelay 뒤 일반 상태로 돌아간다.
+	 * true를 반환하는 적은 놓친 대상을 직접 찾다가, 끝나면 감지 컴포넌트의 ForgetTarget으로 일반 상태로 돌아가야 한다.
+	 */
+	virtual bool ShouldHoldCombatMemory() const { return false; }
 
 	UFUNCTION(BlueprintPure, Category = "AI|Movement")
 	float GetAIChaseSpeed() const { return ChaseSpeed; }

@@ -155,6 +155,13 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 
 	// 암살자의 움직임 멈춤
 	UCharacterMovementComponent* PlayerMovement = Player->GetCharacterMovement();
+
+	// 앉은 상태에서 시작하면 일어서서 암살한다. 접근 위치가 서 있는 높이로 계산되도록 바로 일어선다.
+	if (Player->bIsCrouched)
+	{
+		Player->UnCrouch();
+		PlayerMovement->UnCrouch(false);
+	}
 	PlayerMovementMode = PlayerMovement->MovementMode;
 	PlayerCustomMode = PlayerMovement->CustomMovementMode;
 	PlayerMovement->StopMovementImmediately();
@@ -279,9 +286,14 @@ void UGAAssassinateBase::ExecuteVictim()
 	// 암살 피격 애니메이션 수신
 	Enemy->ReceiveAssassination(VictimExecutionMontage);
 
+	// 실제 재생 중인 몽타주를 불러옴
+	UAnimInstance* VictimAnimInstance = Enemy->GetMesh()->GetAnimInstance();
+	UAnimMontage* PlayedMontage = VictimAnimInstance ? VictimAnimInstance->GetCurrentActiveMontage() : nullptr;
+	if (!PlayedMontage) return;
+
 	// 피격자는 이동이 꺼져 있으므로 끌려가거나 쓰러지며 움직이는 루트 이동을 메시로 보여주고, 쓰러진 자리에 둔다.
 	UAbilityTask_MontageRootOffset* OffsetTask = UAbilityTask_MontageRootOffset::FollowMontageRoot(
-		this, Enemy, VictimExecutionMontage, false, true);
+		this, Enemy, PlayedMontage, false, true);
 	OffsetTask->ReadyForActivation();
 }
 

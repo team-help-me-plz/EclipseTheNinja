@@ -51,7 +51,15 @@ void UStatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
         SetDamage(0.0f);	// [가장 중요] : 메타어트리뷰트는 사용했으면 비워야 한다.
 
         // 무적 중에 들어온 피해는 소비하고 체력 감소와 피격 알림을 건너뛴다.
-        if (Data.Target.HasMatchingGameplayTag(EclipseGameplayTags::State_Invincible)) return;
+        // 공격받은 사실만은 따로 알려, 무적인 적도 공격자를 알아채게 한다.
+        if (Data.Target.HasMatchingGameplayTag(EclipseGameplayTags::State_Invincible))
+        {
+            if (LocalDamage > 0)
+            {
+                OnDamageBlocked.Broadcast(Data.EffectSpec.GetContext());
+            }
+            return;
+        }
 
         if (LocalDamage > 0)
         {

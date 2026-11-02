@@ -5,8 +5,10 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Character/BossAttackTelegraph.h"
 #include "Character/Enemy.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "GAS/Animation/AnimNotify_BossAttackHit.h"
 
@@ -18,6 +20,8 @@ UGABossPatternBase::UGABossPatternBase()
 	// 기본 공격과 같은 공격 중 태그를 사용해 패턴끼리 겹쳐 실행되지 않게 한다.
 	ActivationOwnedTags.AddTag(UGABaseAttack::GetAttackingTag());
 	ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
+
+	TelegraphClass = ABossAttackTelegraph::StaticClass();
 }
 
 bool UGABossPatternBase::CanActivateAbility(
@@ -98,6 +102,12 @@ void UGABossPatternBase::ActivateAbility(
 	MontageTask->OnInterrupted.AddDynamic(this, &UGABossPatternBase::OnMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &UGABossPatternBase::OnMontageInterrupted);
 	MontageTask->ReadyForActivation();
+
+	// 시전을 시작하는 순간 피격 범위를 보여 준다. 준비 구간 동안 플레이어가 피할 곳을 판단할 수 있다.
+	if (IsActive())
+	{
+		ShowTelegraph();
+	}
 
 	if (bHoldWindup)
 	{
@@ -215,5 +225,151 @@ void UGABossPatternBase::OnHitEvent(FGameplayEventData Payload)
 		return;
 	}
 
+	HitEventCount++;
 	OnPatternHit(HitNotify->GetHitArea());
+
+	// 마지막 타격이 나가면 범위 표시를 지운다.
+	if (bHideTelegraphOnLastHit && HitEventCount >= TotalHitCount)
+	{
+		HideTelegraph();
+	}
+}
+
+void UGABossPatternBase::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	bool bReplicateEndAbility,
+	bool bWasCancelled
+)
+{
+	// 패턴이 끊기거나 끝나면 남아 있는 범위 표시를 지운다.
+	HideTelegraph();
+	HitEventCount = 0;
+	TotalHitCount = 0;
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+bool UGABossPatternBase::FindFirstHitArea(FBossAttackHitArea& OutHitArea) const
+{
+	if (!PatternMontage)
+	{
+		return false;
+	}
+
+	const UAnimNotify_BossAttackHit* FirstNotify = nullptr;
+	float FirstTime = TNumericLimits<float>::Max();
+	for (const FAnimNotifyEvent& NotifyEvent : PatternMontage->Notifies)
+	{
+		const UAnimNotify_BossAttackHit* HitNotify = Cast<UAnimNotify_BossAttackHit>(NotifyEvent.Notify);
+		if (HitNotify && NotifyEvent.GetTriggerTime() < FirstTime)
+		{
+			FirstNotify = HitNotify;
+			FirstTime = NotifyEvent.GetTriggerTime();
+		}
+	}
+
+	if (!FirstNotify)
+	{
+		return false;
+	}
+
+	OutHitArea = FirstNotify->GetHitArea();
+	return true;
+}
+
+bool UGABossPatternBase::GetTelegraphArea(const AEnemy* Enemy, FBossTelegraphArea& OutArea) const
+{
+	if (!PatternMontage)
+	{
+		return false;
+	}
+
+	// 타격마다 범위가 달라도 하나로 단순화해 보여 준다. 모든 판정 상자를 덮는 X-Z 사각형을 만든다.
+	FBox2D Bounds(ForceInit);
+	float CenterY = 0.0f;
+	for (const FAnimNotifyEvent& NotifyEvent : PatternMontage->Notifies)
+	{
+		const UAnimNotify_BossAttackHit* HitNotify = Cast<UAnimNotify_BossAttackHit>(NotifyEvent.Notify);
+		if (!HitNotify)
+		{
+			continue;
+		}
+
+		const FBossAttackHitArea& HitArea = HitNotify->GetHitArea();
+		const FVector2D Center(HitArea.Offset.X, HitArea.Offset.Z);
+		const FVector2D HalfSize(HitArea.HalfExtent.X, HitArea.HalfExtent.Z);
+
+		Bounds += Center - HalfSize;
+		Bounds += Center + HalfSize;
+		CenterY = HitArea.Offset.Y;
+	}
+
+	if (!Bounds.bIsValid)
+	{
+		return false;
+	}
+
+	const FVector2D Center = Bounds.GetCenter();
+	OutArea.Center = FVector(Center.X, CenterY, Center.Y);
+	OutArea.HalfSize = Bounds.GetExtent();
+	OutArea.PitchDegrees = 0.0f;
+	return true;
+}
+
+void UGABossPatternBase::ShowTelegraph()
+{
+	// 몽타주의 전체 타격 수를 세어 두어 마지막 타격에서 표시를 지울 수 있게 한다.
+	HitEventCount = 0;
+	TotalHitCount = 0;
+	if (PatternMontage)
+	{
+		for (const FAnimNotifyEvent& NotifyEvent : PatternMontage->Notifies)
+		{
+			if (Cast<UAnimNotify_BossAttackHit>(NotifyEvent.Notify))
+			{
+				TotalHitCount++;
+			}
+		}
+	}
+
+	HideTelegraph();
+
+	AEnemy* Enemy = Cast<AEnemy>(GetAvatarActorFromActorInfo());
+	if (!bShowTelegraph || !TelegraphClass || !Enemy)
+	{
+		return;
+	}
+
+	FBossTelegraphArea Area;
+	if (!GetTelegraphArea(Enemy, Area))
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = Enemy;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	ActiveTelegraph = Enemy->GetWorld()->SpawnActor<ABossAttackTelegraph>(
+		TelegraphClass,
+		Enemy->GetActorTransform(),
+		SpawnParams
+	);
+
+	if (ActiveTelegraph)
+	{
+		ActiveTelegraph->Show(Enemy, Area, ShouldTelegraphFollowBoss());
+	}
+}
+
+void UGABossPatternBase::HideTelegraph()
+{
+	if (IsValid(ActiveTelegraph))
+	{
+		ActiveTelegraph->Hide();
+	}
+
+	ActiveTelegraph = nullptr;
 }

@@ -34,9 +34,9 @@ void UBossAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	bIsRunning = bIsMoving && bInCombat;
 	bIsWalking = bIsMoving && !bInCombat;
 
-	// 보스가 달리기 페이즈 전이면 전투 이동을 자세 걷기로 덮는다.
+	// 보스가 달리지 않는 상태(달리기 페이즈 전, 마지막 목격 위치로 가는 중 제외)면 전투 이동을 자세 걷기로 덮는다.
 	const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy);
-	const bool bStanceWalking = bIsRunning && Boss && !Boss->IsRunPhase();
+	const bool bStanceWalking = bIsRunning && Boss && !Boss->ShouldRun();
 	StanceWalkAlpha = BlendAlphaTo(StanceWalkAlpha, bStanceWalking ? 1.0f : 0.0f, DeltaSeconds);
 
 	// 바라보는 방향과 반대로 움직이면 뒷걸음질. 멈춰 있을 때는 마지막 방향을 유지한다.

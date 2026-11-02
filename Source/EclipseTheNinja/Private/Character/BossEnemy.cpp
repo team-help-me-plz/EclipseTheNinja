@@ -4,6 +4,9 @@
 #include "AbilitySystemComponent.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/AssassinationDropComponent.h"
+#include "Component/BossEnemyGimmickComponent.h"
+#include "Component/BossEnemyVFXComponent.h"
+#include "Component/BossLostTargetComponent.h"
 #include "Component/EnemyDetectionComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
@@ -31,6 +34,15 @@ ABossEnemy::ABossEnemy()
 
 	// 보스는 암살로 처치되어도 회복 아이템을 떨어뜨리지 않는다.
 	AssassinationDropComp->SetDropActorClass(nullptr);
+
+	// 대상을 놓치면 일반 적의 수색 대신 포효와 난사를 한다.
+	LostTargetComp = CreateDefaultSubobject<UBossLostTargetComponent>(TEXT("LostTargetComp"));
+
+	// 에너지 링크 기믹의 해제 순서와 레이저 연출
+	GimmickComp = CreateDefaultSubobject<UBossEnemyGimmickComponent>(TEXT("GimmickComp"));
+
+	// 실드·피격·공격 VFX
+	VFXComp = CreateDefaultSubobject<UBossEnemyVFXComponent>(TEXT("VFXComp"));
 
 	// 기믹 실패 시 처형 연출. 플레이어 피격 모션은 일반 암살의 피격자 몽타주를 그대로 쓴다.
 	ExecutionAbilityClass = UGABossExecution::StaticClass();
@@ -177,7 +189,7 @@ void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 		return;
 	}
 
-	const float ThresholdHealth = EnergyLinkThresholds[NextEnergyLinkIndex] * StatAttributeSet->GetMaxHealth();
+	const float ThresholdHealth = GetEnergyLinkThresholdHealth(NextEnergyLinkIndex);
 	if (Data.NewValue > ThresholdHealth)
 	{
 		Super::OnHealthChanged(Data);
@@ -198,6 +210,17 @@ void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 	FOnAttributeChangeData ClampedData = Data;
 	ClampedData.NewValue = ThresholdHealth;
 	Super::OnHealthChanged(ClampedData);
+}
+
+float ABossEnemy::GetEnergyLinkThresholdHealth(int32 LinkIndex) const
+{
+	if (!EnergyLinkThresholds.IsValidIndex(LinkIndex) || !StatAttributeSet)
+	{
+		return 0.0f;
+	}
+
+	// 0.3 * 200이 60.000002가 되는 식의 오차가 남으면, 남은 체력만큼 피해를 줘도 0.000002가 남아 죽지 않는다.
+	return FMath::RoundToFloat(EnergyLinkThresholds[LinkIndex] * StatAttributeSet->GetMaxHealth());
 }
 
 void ABossEnemy::ActivateEnergyLink(int32 LinkIndex)
@@ -362,28 +385,27 @@ void ABossEnemy::ReceiveAssassination(UAnimMontage* Montage)
 		return;
 	}
 
-	// 체력이 충분히 낮으면 일반 적처럼 즉시 처치한다.
-	const float Ratio = GetHealthRatio();
-	if (Ratio <= AssassinationKillRatio + KINDA_SMALL_NUMBER)
+	// 암살 피해는 최대 체력의 AssassinationDamageRatio만큼이다.
+	const float Health = StatAttributeSet->GetHealth();
+	const float Damage = AssassinationDamageRatio * StatAttributeSet->GetMaxHealth();
+
+	// 피해 중간에 남은 에너지 링크 체력이 있으면 OnHealthChanged가 그 체력에서 멈추므로 죽지 않는다.
+	bool bStoppedByEnergyLink = false;
+	if (EnergyLinkThresholds.IsValidIndex(NextEnergyLinkIndex))
+	{
+		const float ThresholdHealth = GetEnergyLinkThresholdHealth(NextEnergyLinkIndex);
+		bStoppedByEnergyLink = ThresholdHealth > 0.0f && ThresholdHealth < Health;
+	}
+
+	// 피해로 죽는 체력이면 일반 적처럼 암살 몽타주로 즉시 처치한다.
+	if (!bStoppedByEnergyLink && Health <= Damage + KINDA_SMALL_NUMBER)
 	{
 		Super::ReceiveAssassination(Montage);
 		return;
 	}
 
-	// 현재 체력보다 낮은 가장 가까운 에너지 링크 체력까지 깎는다.
-	// 남은 에너지 링크가 없으면 즉시 처치 체력까지 깎아, 다음 암살로 처치할 수 있게 한다.
-	float TargetRatio = AssassinationKillRatio;
-	for (int32 Index = NextEnergyLinkIndex; Index < EnergyLinkThresholds.Num(); ++Index)
-	{
-		if (EnergyLinkThresholds[Index] < Ratio)
-		{
-			TargetRatio = FMath::Max(EnergyLinkThresholds[Index], AssassinationKillRatio);
-			break;
-		}
-	}
-
-	// 체력 변경 델리게이트가 OnHealthChanged를 호출해 에너지 링크 발동까지 처리한다.
-	ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), TargetRatio * StatAttributeSet->GetMaxHealth());
+	// 살아남는 체력이면 피해를 적용하고 암살 리액션을 재생한다. 경계 고정과 에너지 링크는 OnHealthChanged()에서 처리한다.
+	Super::ReceiveAssassination(AssassinationReactionMontage, Damage);
 }
 
 void ABossEnemy::ToggleActivate_Implementation()
@@ -397,6 +419,17 @@ void ABossEnemy::ResetToInitial_Implementation()
 	ClearEnergyLinkState();
 	NextEnergyLinkIndex = 0;
 
+	// 링크 레이저를 끄고 기믹 포탈도 닫는다.
+	if (GimmickComp)
+	{
+		GimmickComp->ResetGimmick();
+	}
+
+	if (VFXComp)
+	{
+		VFXComp->ResetVFX();
+	}
+
 	// 리스폰한 보스는 모든 패턴을 바로 쓸 수 있게 패턴 쿨타임을 지운다.
 	PatternReadyTimes.Reset();
 
@@ -409,6 +442,21 @@ void ABossEnemy::ResetToInitial_Implementation()
 		BrokenEnergyLinkCount = 0;
 		OnPhaseChanged.Broadcast(GetPhase());
 	}
+}
+
+bool ABossEnemy::ShouldLockMovementDuringAttack() const
+{
+	return !LostTargetComp || !LostTargetComp->IsHandlingLostTarget();
+}
+
+bool ABossEnemy::ShouldHoldCombatMemory() const
+{
+	return LostTargetComp && LostTargetComp->IsHandlingLostTarget();
+}
+
+bool ABossEnemy::ShouldRun() const
+{
+	return IsRunPhase() || (LostTargetComp && LostTargetComp->IsApproaching());
 }
 
 void ABossEnemy::FaceDirection(float DirectionX)
@@ -450,7 +498,8 @@ void ABossEnemy::UpdateTurning(float DeltaTime)
 void ABossEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 {
 	// 달리기 전 페이즈에서는 자세를 잡고 천천히 다가간다. 순찰·수색처럼 원래 느린 이동은 그대로다.
-	const float LimitedSpeed = IsRunPhase()
+	// 놓친 대상의 마지막 목격 위치로 갈 때는 페이즈와 무관하게 달린다.
+	const float LimitedSpeed = ShouldRun()
 		? Speed
 		: FMath::Min(Speed, StanceWalkSpeed);
 
@@ -490,6 +539,14 @@ bool ABossEnemy::IsRestingBetweenPatterns() const
 
 void ABossEnemy::UpdateCombatMovement(AActor* Target, float DeltaSeconds)
 {
+	// 패턴 재생 중에는 이동·방향 전환 입력을 넣지 않는다.
+	// 난사 중 시작한 패턴은 BT 공격 태스크가 붙잡지 않아, 그 도중 대상을 발견하면 추격 태스크가 이 함수를 부른다.
+	// 속도는 건드리지 않으므로 돌진 패턴의 이동은 그대로 진행된다.
+	if (IsAttackActive())
+	{
+		return;
+	}
+
 	if (!IsRestingBetweenPatterns())
 	{
 		Super::UpdateCombatMovement(Target, DeltaSeconds);
@@ -549,21 +606,7 @@ bool ABossEnemy::ActivateAIAttack()
 		return false;
 	}
 
-	// 처음 고른 어빌리티는 그때 부여한다. 같은 어빌리티를 쓰는 패턴끼리는 스펙을 공유한다.
-	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Pattern->AbilityClass);
-	if (!Spec && HasAuthority())
-	{
-		const FGameplayAbilitySpecHandle NewHandle = ASC->GiveAbility(FGameplayAbilitySpec(Pattern->AbilityClass, 1));
-		Spec = ASC->FindAbilitySpecFromHandle(NewHandle);
-	}
-
-	if (!Spec)
-	{
-		return false;
-	}
-
-	CurrentPatternHandle = Spec->Handle;
-	const bool bActivated = ASC->TryActivateAbility(CurrentPatternHandle);
+	const bool bActivated = ActivatePatternAbility(*Pattern);
 	if (bActivated)
 	{
 		// 쿨타임은 패턴을 시작한 시점부터 센다.
@@ -576,6 +619,43 @@ bool ABossEnemy::ActivateAIAttack()
 	}
 
 	return bActivated;
+}
+
+bool ABossEnemy::ActivatePatternAgainst(const FBossPatternRow& Row, APawn* Target)
+{
+	if (!IsValidAITarget(Target))
+	{
+		return false;
+	}
+
+	// 패턴 어빌리티는 공격 대상과 공격 상태를 요구한다. 근접 판정도 이 대상에게만 들어간다.
+	CombatTarget = Target;
+	SetBehaviorState(EEnemyBehaviorState::Attack);
+	return ActivatePatternAbility(Row);
+}
+
+bool ABossEnemy::ActivatePatternAbility(const FBossPatternRow& Row)
+{
+	if (!ASC || !Row.AbilityClass)
+	{
+		return false;
+	}
+
+	// 처음 고른 어빌리티는 그때 부여한다. 같은 어빌리티를 쓰는 패턴끼리는 스펙을 공유한다.
+	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Row.AbilityClass);
+	if (!Spec && HasAuthority())
+	{
+		const FGameplayAbilitySpecHandle NewHandle = ASC->GiveAbility(FGameplayAbilitySpec(Row.AbilityClass, 1));
+		Spec = ASC->FindAbilitySpecFromHandle(NewHandle);
+	}
+
+	if (!Spec)
+	{
+		return false;
+	}
+
+	CurrentPatternHandle = Spec->Handle;
+	return ASC->TryActivateAbility(CurrentPatternHandle);
 }
 
 void ABossEnemy::GatherUsablePatterns(
@@ -625,15 +705,13 @@ bool ABossEnemy::IsPatternUsable(
 		return false;
 	}
 
-	// 어빌리티 자체에 GAS 쿨타임이 걸려 있으면 어차피 활성화되지 않으므로 뺀다.
-	const UGameplayAbility* AbilityCDO = Row.AbilityClass->GetDefaultObject<UGameplayAbility>();
-	const FGameplayTagContainer* CooldownTags = AbilityCDO ? AbilityCDO->GetCooldownTags() : nullptr;
-	if (CooldownTags && !CooldownTags->IsEmpty() && ASC->HasAnyMatchingGameplayTags(*CooldownTags))
+	if (IsPatternAbilityOnCooldown(Row))
 	{
 		return false;
 	}
 
 	// 사용 거리는 어빌리티 CDO의 설정을 읽는다. 보스 패턴 계열이 아니면 기본 공격 거리를 쓴다.
+	const UGameplayAbility* AbilityCDO = Row.AbilityClass->GetDefaultObject<UGameplayAbility>();
 	const UGABossPatternBase* PatternCDO = Cast<UGABossPatternBase>(AbilityCDO);
 	const float MinDistance = PatternCDO ? PatternCDO->GetMinUseDistance() : 0.0f;
 	const float MaxDistance = PatternCDO && PatternCDO->GetMaxUseDistance() > 0.0f
@@ -652,6 +730,14 @@ bool ABossEnemy::IsPatternUsable(
 
 	// 달아나는 대상을 쫓는 중이면 공격 거리에 들어온 것으로 보고 다시 검사한다.
 	return bAssumeInAttackDistance && IsInRange(AttackDistance);
+}
+
+bool ABossEnemy::IsPatternAbilityOnCooldown(const FBossPatternRow& Row) const
+{
+	// 어빌리티 자체에 GAS 쿨타임이 걸려 있으면 어차피 활성화되지 않으므로 뺀다.
+	const UGameplayAbility* AbilityCDO = Row.AbilityClass ? Row.AbilityClass->GetDefaultObject<UGameplayAbility>() : nullptr;
+	const FGameplayTagContainer* CooldownTags = AbilityCDO ? AbilityCDO->GetCooldownTags() : nullptr;
+	return ASC && CooldownTags && !CooldownTags->IsEmpty() && ASC->HasAnyMatchingGameplayTags(*CooldownTags);
 }
 
 bool ABossEnemy::IsPatternOnCooldown(FName RowName) const

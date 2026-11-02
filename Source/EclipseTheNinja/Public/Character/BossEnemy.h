@@ -9,6 +9,9 @@
 
 class UGameplayAbility;
 class UBossHealthBarWidget;
+class UBossLostTargetComponent;
+class UBossEnemyGimmickComponent;
+class UBossEnemyVFXComponent;
 struct FAbilityEndedData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossEnergyLinkActivated, int32, LinkIndex);
@@ -24,10 +27,14 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossPhaseChanged, int32, NewPhase
  *   패턴은 각각 UGABossPatternBase 계열 어빌리티이며, 테이블이 없으면 공격하지 않는다.
  * - 에너지 링크: 체력이 EnergyLinkThresholds 비율에 닿으면 그 값에서 체력을 멈추고 무적 실드를 켠다.
  *   실드는 레버(IActivatable) 또는 BreakEnergyLink 호출로 해제되고, 제한시간이 지나면 보스가 플레이어를 처형(암살)한다.
- * - 암살: 가장 가까운 아래쪽 에너지 링크 체력까지 즉시 깎는다. 체력이 AssassinationKillRatio 이하면 즉시 처치한다.
+ *   링크마다 풀어야 하는 기믹(기믹 스테이지 포탈·레버)의 순서와 레이저 연출은 UBossEnemyGimmickComponent가 맡는다.
+ * - 암살: 최대 체력의 AssassinationDamageRatio만큼 깎고, 도중에 에너지 링크 체력이 있으면 그 체력에서 멈춘다. 이 피해로 체력이 0이 되면 즉시 처치한다.
  * - 페이즈: 1페이즈에서 시작해 에너지 링크를 파훼할 때마다 1씩 오른다. 체력 구간이 아니라 파훼 횟수로 정한다.
  *   RunPhase 전에는 StanceWalkSpeed로 자세를 잡고 걷고, RunPhase부터 ChaseSpeed로 달린다.
  *   패턴 테이블의 PhaseWeights에서 지금 페이즈의 가중치로 패턴을 고르며, 가중치가 0인 페이즈에서는 그 패턴을 고르지 않는다.
+ * - 놓침: 전투 중 대상을 놓쳤을 때의 포효·난사·순찰 복귀는 BT의 UBTTask_BossLostTarget이 UBossLostTargetComponent로 진행한다.
+ *   보스는 컴포넌트가 쓸 패턴 시전 함수만 제공한다.
+ * - VFX: 실드 이펙트, 피격 시 피·실드 튕김, 패턴의 칼 궤적과 질풍참 이펙트는 UBossEnemyVFXComponent가 맡는다.
  */
 UCLASS()
 class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
@@ -67,6 +74,10 @@ public:
 	/** 지금 페이즈에서 전투 이동을 달리기로 하는지. false면 자세를 잡고 걷는다. */
 	UFUNCTION(BlueprintPure, Category = "Boss|Phase")
 	bool IsRunPhase() const { return GetPhase() >= RunPhase; }
+
+	/** 지금 전투 이동을 달리기로 하는지. 달리기 페이즈이거나, 놓친 대상의 마지막 목격 위치로 가는 중이면 달린다. */
+	UFUNCTION(BlueprintPure, Category = "Boss|Phase")
+	bool ShouldRun() const;
 
 	/** 에너지 링크 파훼로 페이즈가 오르거나, 체크포인트 리셋으로 1페이즈로 돌아갈 때 호출된다. */
 	UPROPERTY(BlueprintAssignable, Category = "Boss|Phase")
@@ -117,6 +128,7 @@ public:
 	virtual bool CanStartAIAttack(AActor* Target) const override;
 
 	// 패턴 사이 휴식 중에는 대상을 바라보며 PatternRestKeepDistance까지만 다가간다. 휴식이 아니면 일반 추격을 한다.
+	// 패턴이 재생 중이면 움직이지 않는다.
 	virtual void UpdateCombatMovement(AActor* Target, float DeltaSeconds) override;
 
 	// 패턴이 끝난 뒤의 휴식 시간(또는 활성화 실패 후 재시도 대기)이 남아 있는지.
@@ -138,7 +150,23 @@ public:
 	bool IsTurning() const { return bTurning; }
 
 	// 보스는 발도 준비 동작 중 대상이 움직여도 공격을 끝까지 수행한다.
-	virtual bool ShouldLockMovementDuringAttack() const override { return true; }
+	// 놓침 처리 중에는 컴포넌트가 직접 패턴을 쓰므로, 전투 분기 키를 유지하지 않아 BT가 공격 분기로 넘어가지 않게 한다.
+	virtual bool ShouldLockMovementDuringAttack() const override;
+
+	// 놓침 처리(포효·난사)가 끝날 때까지 놓친 대상을 잊지 않는다.
+	virtual bool ShouldHoldCombatMemory() const override;
+
+	/** 공격 패턴 테이블. */
+	const UDataTable* GetPatternTable() const { return PatternTable; }
+
+	/** 패턴 행의 어빌리티에 GAS 쿨타임 태그가 걸려 있는지. */
+	bool IsPatternAbilityOnCooldown(const FBossPatternRow& Row) const;
+
+	/**
+	 * Target을 공격 대상으로 두고 패턴 행의 어빌리티를 바로 시전한다. 거리·페이즈·행 쿨타임은 검사하지 않는다.
+	 * 놓침 처리 컴포넌트의 난사처럼 BT 공격 분기 밖에서 패턴을 쓸 때 사용한다.
+	 */
+	bool ActivatePatternAgainst(const FBossPatternRow& Row, APawn* Target);
 
 	// 공격 도중 대상이 죽거나 사라져도 패턴 몽타주를 끝까지 재생한다.
 	virtual bool ShouldFinishAttackWithoutTarget() const override { return true; }
@@ -207,6 +235,21 @@ protected:
 	// 고른 패턴을 화면과 출력 로그에 남긴다.
 	void LogPatternChoice(FName RowName, const FBossPatternRow& Row, float TotalWeight) const;
 
+	// 패턴 행의 어빌리티를 (처음이면 부여한 뒤) 활성화한다. CurrentPatternHandle을 그 어빌리티로 둔다.
+	bool ActivatePatternAbility(const FBossPatternRow& Row);
+
+	/** 전투 중 대상을 놓쳤을 때의 포효·난사·순찰 복귀를 맡는다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UBossLostTargetComponent> LostTargetComp;
+
+	/** 에너지 링크마다 풀어야 하는 기믹의 순서와 레이저 연출을 맡는다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UBossEnemyGimmickComponent> GimmickComp;
+
+	/** 실드·피격·공격 VFX를 맡는다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UBossEnemyVFXComponent> VFXComp;
+
 	// 패턴 어빌리티가 끝나거나 취소되면 PatternRestTimeMin~Max 사이의 휴식 시간 뒤에 다음 패턴을 시작하게 한다.
 	void OnPatternAbilityEnded(const FAbilityEndedData& EndedData);
 
@@ -258,6 +301,9 @@ protected:
 	// 패턴 행 이름별로 다시 쓸 수 있게 되는 월드 시간(초).
 	TMap<FName, double> PatternReadyTimes;
 
+	// LinkIndex 링크가 발동하는 체력. 비율 곱셈의 부동소수점 오차가 남지 않도록 정수로 반올림한다.
+	float GetEnergyLinkThresholdHealth(int32 LinkIndex) const;
+
 	// 실드를 켜고 제한시간 타이머를 시작한다.
 	void ActivateEnergyLink(int32 LinkIndex);
 
@@ -304,6 +350,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
 	TSoftObjectPtr<UAnimMontage> ExecutionVictimMontage;
 
+	/** 암살을 당하고 체력이 남아 있을 경우 재생하는 몽타주 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
+	TObjectPtr<UAnimMontage> AssassinationReactionMontage;
+
 	/** 보스가 플레이어 등 뒤 몇 cm에 서서 처형할지. 두 캡슐이 겹치는 거리보다 가까워지지는 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution", meta = (ClampMin = "0.0", Units = "cm"))
 	float ExecutionBehindDistance = 150.0f;
@@ -316,13 +366,13 @@ protected:
 	double ExecutionWaitStartTime = 0.0;
 	FTimerHandle ExecutionWaitTimer;
 
-	/** 이 체력 비율 이하에서 암살에 성공하면 보스를 즉시 처치한다. 기획: 20%. */
+	/** 암살 한 번에 깎는 최대 체력 비율. 남은 체력이 이 값 이하면 즉시 처치한다. 기획: 20%. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float AssassinationKillRatio = 0.2f;
+	float AssassinationDamageRatio = 0.2f;
 
-	/** 실드가 켜져 있는 동안 보스 주위에 디버그 구를 그린다. 실드 이펙트가 생기기 전 테스트용. */
+	/** 실드가 켜져 있는 동안 보스 주위에 디버그 구를 그린다. 실드 이펙트(VFXComp)가 생겨 기본은 끈다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Debug")
-	bool bDrawDebugShield = true;
+	bool bDrawDebugShield = false;
 
 	/**
 	 * 공격 판정을 디버그로 그린다. BP에서는 SetDrawDebugAttack으로 켜고 끈다.

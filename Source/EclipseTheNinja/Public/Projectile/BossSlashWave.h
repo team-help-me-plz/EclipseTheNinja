@@ -93,6 +93,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Slash Wave")
 	bool bPierceTargets = false;
 
+	/**
+	 * Effect 에셋이 스스로 날아가는 속도(cm/s). 0이면 보정하지 않는다.
+	 * NS_CrescentSlice처럼 입자가 자체 속도로 월드 공간을 날아가는 이펙트는 투사체에 붙여도 따라오지 않는다.
+	 * 그래서 이펙트 재생 속도를 (투사체 속도 / 이 값)배로 바꿔, 이펙트와 HitBox가 같은 속도로 움직이게 한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Slash Wave", meta = (ClampMin = "0.0", Units = "cm/s"))
+	float EffectFlightSpeed = 0.0f;
+
 	/** 벽에 막히거나 대상을 맞혀 사라질 때 그 자리에 재생할 이펙트. 비워 두면 재생하지 않는다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Slash Wave")
 	TObjectPtr<UNiagaraSystem> DissipateEffect;

@@ -143,7 +143,8 @@ void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (IsAssassinating() || IsHiding()) return;
+	// 사망 연출과 공격(콤보, 표창, 질풍참 등) 중에는 커서·이동 방향으로 몸을 돌리지 않는다.
+	if (bIsDead || IsAssassinating() || IsHiding() || IsAttacking()) return;
 
 	UpdateCursorTarget();
 	UpdateCursorFacing(DeltaSeconds);
@@ -479,6 +480,8 @@ void APlayerCharacter::UnPossessed()
 
 void APlayerCharacter::Move(const FInputActionValue& Value)
 {
+	if (bIsDead) return;
+
 	FVector2D MoveVector = Value.Get<FVector2D>();
 	if (IsWallAttached())
 	{
@@ -597,14 +600,21 @@ void APlayerCharacter::DoBasicAttack()
 	if (bIsDead) return;
 	if (!ASC) return;
 	if (IsAssassinating()) return;
+
+	if (!FindAbilitySpecByInputID(EAbilityInputID::BasicAttack)) return;
+	if (!BasicAttackMontage) return;
+
+	// 근접 공격은 땅에 서 있을 때만 나간다. 점프·낙하 중에는 공격하지 않는다.
+	if (!GetCharacterMovement()->IsMovingOnGround()) return;
+
+	// 공격 몽타주는 선 자세라서, 앉은 채 위가 막혀 있으면 벽을 뚫고 일어서 보이므로 공격하지 않는다.
+	if (!HasRoomToStand()) return;
+
 	if (bIsExploring)
 	{
 		DoThrowKunai();
 		return;
 	}
-
-	if (!FindAbilitySpecByInputID(EAbilityInputID::BasicAttack)) return;
-	if (!BasicAttackMontage) return;
 
 	// 첫 공격 전에만 방향을 확정하고, 콤보 추가 입력은 기존 공격 방향을 유지한다.
 	if (!ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
@@ -659,6 +669,39 @@ bool APlayerCharacter::IsWallAttached() const
 	return ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallAttachingTag());
 }
 
+bool APlayerCharacter::IsAttacking() const
+{
+	if (!IsValid(ASC)) return false;
+	return ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag());
+}
+
+bool APlayerCharacter::IsOnWall() const
+{
+	if (!IsValid(ASC)) return false;
+	return ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag())
+		|| ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag());
+}
+
+bool APlayerCharacter::HasRoomToStand() const
+{
+	if (!bIsCrouched) return true;
+
+	// 캡슐 바닥은 그대로 두고 서 있는 높이로 늘렸을 때 막히는지 본다. 바닥에 닿은 부분이 걸리지 않도록 아래를 조금 띄운다.
+	const UCapsuleComponent* Capsule = GetCapsuleComponent();
+	const float CrouchedHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+	const float StandHalfHeight = GetDefaultHalfHeight();
+	constexpr float FloorClearance = 2.0f;
+	const FVector StandLocation = GetActorLocation() + FVector(0.0f, 0.0f, StandHalfHeight - CrouchedHalfHeight + FloorClearance);
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(
+		Capsule->GetScaledCapsuleRadius(), FMath::Max(1.0f, StandHalfHeight - FloorClearance));
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CrouchStandCheck), false, this);
+	FCollisionResponseParams ResponseParams;
+	GetCharacterMovement()->InitCollisionParams(Params, ResponseParams);
+	return !GetWorld()->OverlapBlockingTestByChannel(StandLocation, FQuat::Identity,
+		Capsule->GetCollisionObjectType(), Shape, Params, ResponseParams);
+}
+
 void APlayerCharacter::SetAssassinationFacing(float Yaw)
 {
 	SetCursorFacingActive(false);
@@ -673,12 +716,12 @@ void APlayerCharacter::DoThrowKunai()
 		return;
 	}
 
-	// 투척 어빌리티가 지급되지 않았으면 몸 방향도 바꾸지 않는다.
-	if (!FindAbilitySpecByInputID(EAbilityInputID::ThrowKunai))
-	{
-		return;
-	}
+	// 커서 쪽으로 몸을 돌리는 것은 어빌리티가 실행된 뒤에 한다. 매달림 등으로 막히면 몸도 돌지 않는다.
+	TryActivateAbilityByInputID(EAbilityInputID::ThrowKunai);
+}
 
+void APlayerCharacter::FaceCursorForThrow()
+{
 	// 좌클릭 입력이 Tick보다 먼저 와도 현재 커서로 조준한다.
 	UpdateCursorTarget();
 	if (bHasCursorTarget)
@@ -691,23 +734,17 @@ void APlayerCharacter::DoThrowKunai()
 	}
 
 	SnapToFacingTarget();
-
-	TryActivateAbilityByInputID(EAbilityInputID::ThrowKunai);
 }
 
 void APlayerCharacter::DoMove(float Forward)
 {
-	if (IsAssassinating()) return;
+	if (bIsDead || IsAssassinating()) return;
+
+	// 공격이 끝나기 전에 반대 방향 입력으로 몸이 돌아가지 않게 한다.
+	if (IsAttacking()) return;
 
 	// 매달린 동안(모서리에서 오르내리는 중 포함) 일반 이동 입력이 목표 방향을 바꾸지 않게 한다.
-	if (IsValid(ASC))
-	{
-		if (ASC->HasMatchingGameplayTag(UGAWallAttach::GetWallStateTag())
-			|| ASC->HasMatchingGameplayTag(UGAWallSlide::GetWallSlideAbilityTag()))
-		{
-			return;
-		}
-	}
+	if (IsOnWall()) return;
 
 	// is movement temporarily disabled after wall jumping?
 	if (!bHasWallJumped)
@@ -777,6 +814,7 @@ void APlayerCharacter::DoWAllMove(float Up)
 	FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::WallAttach);
 	if (!Spec) return;
 	const UGAWallAttach* WallAttach = Cast<UGAWallAttach>(Spec->GetPrimaryInstance());
+	if (!WallAttach) return;
 
 	const bool bClimbableWall = WallAttach->GetIsClimbable();
 
@@ -789,6 +827,13 @@ void APlayerCharacter::DoWAllMove(float Up)
 	// 벽타기 벽에서는 위아래 입력으로 벽을 타고 움직인다. 올라가기가 시작됐으면 매달림이 끝나 있으므로 넣지 않는다.
 	if (bClimbableWall && IsWallAttached())
 	{
+		// 벽타기 벽과 일반 벽이 이어져 있으면, 이동할 쪽 벽이 일반 벽일 때 그 자리에서 멈춘다.
+		if (!FMath::IsNearlyZero(Up) && !WallAttach->CanClimbToward(this, Up))
+		{
+			GetCharacterMovement()->StopMovementImmediately();
+			return;
+		}
+
 		//AddMovementInput(FVector::UpVector, Up);
 		const float WallDir = GetActorForwardVector().X >= 0.f ? 1.f : -1.f;
 		AddMovementInput(FVector(WallDir * 0.05f, 0.f, Up), 1.f);
@@ -797,6 +842,9 @@ void APlayerCharacter::DoWAllMove(float Up)
 
 void APlayerCharacter::DoCameraMoveStart()
 {
+	// 공격 중(콤보, 표창, 질풍참 등)에는 조준 모드에 들어가지 않는다.
+	if (IsAttacking()) return;
+
 	APlayerCharacterController* APC = Cast<APlayerCharacterController>(GetController());
 	if (!APC)
 	{
@@ -1122,6 +1170,22 @@ void APlayerCharacter::ReturnToSafePoint_Implementation()
 	if (!bHasSafePoint || bIsDead) return;
 	// 평면 고정을 되돌린 뒤에 안전 지점 평면으로 옮긴다.
 	if (IsValid(HidingComponent)) HidingComponent->ForceExit();
+
+	// 매달리기·공격 등 진행 중인 어빌리티를 끝내고 옮긴다. 매달린 자세나 루트 모션 이동이 안전 지점까지 따라오지 않게 한다.
+	// 분신술을 포함해 활성 어빌리티를 모두 취소한다.
+	if (IsValid(ASC))
+	{
+		TArray<FGameplayAbilitySpecHandle> ActiveHandles;
+		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+		{
+			if (!Spec.IsActive()) continue;
+			ActiveHandles.Add(Spec.Handle);
+		}
+		for (const FGameplayAbilitySpecHandle& Handle : ActiveHandles)
+		{
+			ASC->CancelAbilityHandle(Handle);
+		}
+	}
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
 	SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
