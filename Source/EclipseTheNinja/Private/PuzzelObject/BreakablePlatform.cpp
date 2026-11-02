@@ -7,6 +7,10 @@
 #include "Interface/Interactor.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
+
 // Sets default values
 ABreakablePlatform::ABreakablePlatform()
 {
@@ -24,6 +28,19 @@ ABreakablePlatform::ABreakablePlatform()
 	this->MeshAssembly->SetupAttachment(GetRootComponent());
 
 	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
+
+	// 무너질 때만 켜므로 자동 재생은 끈다.
+	this->BreakEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("BreakEffect"));
+	this->BreakEffect->SetupAttachment(GetRootComponent());
+	this->BreakEffect->bAutoActivate = false;
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> BreakSystem(
+		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/SandFalling/Looped/NS_Sand_Ceiling_04_Looped_Platform.NS_Sand_Ceiling_04_Looped_Platform"));
+
+	if (BreakSystem.Succeeded())
+	{
+		this->BreakEffect->SetAsset(BreakSystem.Object);
+	}
 }
 
 void ABreakablePlatform::ResetToInitial_Implementation()
@@ -31,6 +48,9 @@ void ABreakablePlatform::ResetToInitial_Implementation()
 	GetWorldTimerManager().ClearTimer(this->PlatformBreakTimer);
 	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTimer);
 	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTryTimer);
+	GetWorldTimerManager().ClearTimer(this->BreakEffectTimer);
+	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다.
+	this->BreakEffect->DeactivateImmediate();
 	this->RestorePlatform();
 }
 
@@ -38,7 +58,11 @@ void ABreakablePlatform::ResetToInitial_Implementation()
 void ABreakablePlatform::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	// 기본 이미터는 컴포넌트 X축을 향하는 판이라 사이드뷰 카메라에서는 옆면만 보인다. 카메라를 향하는 이미터를 쓴다.
+	this->BreakEffect->SetVariableBool(TEXT("User.FaceCamera"), true);
+	this->BreakEffect->SetVariableVec2(TEXT("User.ScaleXY"), this->BreakEffectScale);
+
 	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
 	if (!IsValid(AssemblyActor))
 	{
@@ -91,6 +115,15 @@ void ABreakablePlatform::OnCollisionBeginOverlap(UPrimitiveComponent* Overlapped
 		return ;
 	}
 	this->State = EBreakablePlatformState::Breaking;
+	// 플레이어를 감지한 순간 무너질 것을 알리는 이펙트를 짧게 재생한다.
+	this->BreakEffect->Activate(true);
+	GetWorldTimerManager().SetTimer(
+		this->BreakEffectTimer,
+		this,
+		&ABreakablePlatform::StopBreakEffect,
+		this->BreakEffectDuration,
+		false
+	);
 	GetWorldTimerManager().SetTimer(
 		this->PlatformBreakTimer,
 		this,
@@ -134,6 +167,12 @@ void ABreakablePlatform::BreakPlatform()
 		this->RestoreTime,
 		false
 	);
+}
+
+void ABreakablePlatform::StopBreakEffect()
+{
+	// 짧게 보여주고 끝내야 하므로 남은 파티클까지 바로 지운다.
+	this->BreakEffect->DeactivateImmediate();
 }
 
 void ABreakablePlatform::TryRestore()

@@ -10,6 +10,7 @@
 class USphereComponent;
 class UStaticMeshComponent;
 class UProjectileMovementComponent;
+class UNiagaraComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API ATrapArrowActor : public AActor, public IPoolable
@@ -55,6 +56,10 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	TObjectPtr<UProjectileMovementComponent>	ProjectileMovement = nullptr;
+
+	// 날아가는 동안 화살에 붙어 재생할 이펙트
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
+	TObjectPtr<UNiagaraComponent>	FlyEffect = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile")
 	float Lifetime = 3.0f;

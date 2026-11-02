@@ -15,6 +15,11 @@
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
 #include "AbilitySystemComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
@@ -46,6 +51,14 @@ namespace
 UGACloneTech::UGACloneTech()
 {
 	this->InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> CloneEffectAsset(
+		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/LitSandPuff/Looped/NS_SandPuff_Small_Looped.NS_SandPuff_Small_Looped"));
+
+	if (CloneEffectAsset.Succeeded())
+	{
+		this->CloneEffectSystem = CloneEffectAsset.Object;
+	}
 }
 
 void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -218,6 +231,7 @@ void UGACloneTech::HandleTargetAccepted(const FCloneCommandType& InCommand)
 	}
 	this->SpawnedClone->SetCommand(InCommand);
 	this->SpawnedClone->OnCloneDespawned.AddDynamic(this, &UGACloneTech::HandleCloneDespawned);
+	PlayCloneEffect(this->SpawnedClone->GetActorLocation());
 	// 수명이 끝나면 ACloneCharacter::LifeSpanExpired에서 풀에 반환된다
 	this->SpawnedClone->SetLifeSpan(FMath::Max(this->CloneLifeTime, 0.01f));
 	this->OnCloneSpawned.Broadcast();
@@ -246,6 +260,33 @@ void UGACloneTech::SetAvatarCloneTargeting(bool bTargeting) const
 	{
 		Player->SetCloneTargeting(bTargeting);
 	}
+}
+
+void UGACloneTech::PlayCloneEffect(const FVector& InLocation) const
+{
+	UWorld*	World = GetWorld();
+	// 레벨 종료(EndPlay)로 분신이 사라질 때는 재생하지 않는다
+	if (!this->CloneEffectSystem || !World || World->bIsTearingDown)
+	{
+		return ;
+	}
+	UNiagaraComponent*	Effect = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World, this->CloneEffectSystem, InLocation);
+	if (!Effect)
+	{
+		return ;
+	}
+	// 루프 이펙트이므로 시간이 지나면 새 파티클 생성을 멈춘다. 남은 파티클이 사라지면 컴포넌트는 스스로 정리된다
+	FTimerHandle	StopTimer;
+	World->GetTimerManager().SetTimer(
+		StopTimer,
+		FTimerDelegate::CreateWeakLambda(Effect, [Effect]()
+		{
+			Effect->Deactivate();
+		}),
+		this->CloneEffectDuration,
+		false
+	);
 }
 
 bool UGACloneTech::CheckCost(const FGameplayAbilitySpecHandle Handle,
@@ -338,6 +379,8 @@ void UGACloneTech::HandleCloneDespawned(ACloneCharacter* DespawnedClone)
 		return ;
 	}
 	DespawnedClone->OnCloneDespawned.RemoveDynamic(this, &UGACloneTech::HandleCloneDespawned);
+	// 풀에 반환되기 전(아직 숨겨지기 전)에 불리므로 분신이 사라지는 위치에서 재생된다
+	PlayCloneEffect(DespawnedClone->GetActorLocation());
 	this->SpawnedClone.Reset();
 	this->OnCloneCannotSwap.Broadcast();
 	if (IsActive())

@@ -6,6 +6,9 @@
 #include "GAS/Ability/GACooldownBase.h"
 #include "GAElementalFire.generated.h"
 
+class UNiagaraSystem;
+class UNiagaraComponent;
+
 DECLARE_MULTICAST_DELEGATE(FOnElementalFireStateChanged);
 
 /** 공격력 기준 불속성 데미지 계산 결과 */
@@ -98,6 +101,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attack|Fire")
 	float	FireDotRatio = 0.2f;
 
+	/** 불이 붙어 있는 동안 칼에 붙여 재생할 이펙트 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
+	TObjectPtr<UNiagaraSystem>	FireSwordSystem = nullptr;
+
+	/**
+	 * 이펙트를 붙일 소켓. 캐릭터에 붙은 메시 중 이 소켓을 가진 메시(칼)에 붙는다.
+	 * 이펙트 위치/회전은 소켓 트랜스폼을 그대로 따르므로 스켈레톤 에디터에서 소켓을 조정하면 된다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
+	FName	FireSwordSocketName = TEXT("b_ElementalSocket");
+
 	///** 화염 속성 적용 시 공격 후 들어갈 총 데미지의 최대 배율 */
 	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Attack|Fire")
 	//float	FireDotRatio = 0.2f;
@@ -113,6 +127,13 @@ protected:
 #endif
 
 private:
+	// 아바타에 붙은 메시 중 FireSwordSocketName 소켓을 가진 메시를 찾는다.
+	USceneComponent* FindFireSwordAttachComponent() const;
+
 	// 이번 발동에서 적용한 불속성 GE
 	FActiveGameplayEffectHandle FireElementEffectHandle;
+
+	// 이번 발동에서 칼에 붙인 불꽃 이펙트
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent>	FireSwordEffect = nullptr;
 };

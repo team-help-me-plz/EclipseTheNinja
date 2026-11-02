@@ -10,6 +10,13 @@
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
 
+#include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Character.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
+
 UGAElementalFire::UGAElementalFire()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -25,6 +32,14 @@ UGAElementalFire::UGAElementalFire()
 	ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
 
 	FireElementEffectClass = UGEElementalFire::StaticClass();
+
+	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> FireSwordAsset(
+		TEXT("/Game/VFX/SwordEffects/Particles/NS_SwordEffect7.NS_SwordEffect7"));
+
+	if (FireSwordAsset.Succeeded())
+	{
+		FireSwordSystem = FireSwordAsset.Object;
+	}
 }
 
 bool UGAElementalFire::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -75,7 +90,38 @@ void UGAElementalFire::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	WaitRemovedTask->OnRemoved.AddDynamic(this, &UGAElementalFire::OnFireElementRemoved);
 	WaitRemovedTask->ReadyForActivation();
 
+	// 불이 붙어 있는 동안 칼 소켓에 불꽃 이펙트를 붙인다. 불이 꺼지면 EndAbility에서 멈춘다.
+	USceneComponent* AttachComponent = FireSwordSystem ? FindFireSwordAttachComponent() : nullptr;
+	if (AttachComponent)
+	{
+		FireSwordEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(FireSwordSystem, AttachComponent,
+			FireSwordSocketName, FVector::ZeroVector, FRotator::ZeroRotator,
+			EAttachLocation::SnapToTarget, true);
+	}
+
 	OnFireElementStarted.Broadcast();
+}
+
+USceneComponent* UGAElementalFire::FindFireSwordAttachComponent() const
+{
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar) return nullptr;
+
+	// 칼은 캐릭터 메시와 별도의 메시 컴포넌트이므로 소켓을 가진 메시를 찾는다.
+	TInlineComponentArray<UMeshComponent*> Meshes(Avatar);
+	for (UMeshComponent* Mesh : Meshes)
+	{
+		if (Mesh && Mesh->DoesSocketExist(FireSwordSocketName))
+		{
+			return Mesh;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("%s: '%s' 소켓을 가진 메시가 %s에 없어 캐릭터 메시에 붙입니다."),
+		*GetName(), *FireSwordSocketName.ToString(), *Avatar->GetName());
+
+	const ACharacter* Character = Cast<ACharacter>(Avatar);
+	return Character ? Character->GetMesh() : nullptr;
 }
 
 bool UGAElementalFire::GetFireElementTime(float& OutRemaining, float& OutDuration) const
@@ -145,6 +191,13 @@ void UGAElementalFire::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
 	const FActiveGameplayEffectHandle RemainingFireHandle = FireElementEffectHandle;
 	FireElementEffectHandle.Invalidate();
+
+	// 새 불꽃 생성만 멈추고, 남은 불꽃은 수명대로 사라진 뒤 컴포넌트가 스스로 정리된다.
+	if (IsValid(FireSwordEffect))
+	{
+		FireSwordEffect->Deactivate();
+	}
+	FireSwordEffect = nullptr;
 
 	// Super에서 대기 태스크가 정리된 뒤에 GE를 지워야 OnFireElementRemoved가 다시 불리지 않는다.
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
