@@ -168,6 +168,14 @@ protected:
 	EPlayerCondition	PlayerCondition = EPlayerCondition::Normal;
 
 public:
+    float GetLogicalFacingSign() const { return FMath::Cos(FMath::DegreesToRadians(FacingTargetYaw)) >= 0.0f ? 1.0f : -1.0f; }
+    UFUNCTION(BlueprintCallable, Category="Parry")
+    void DoParry();
+    bool IsParrying() const;
+    void SetParryMovementLocked(bool bLocked);
+    UPROPERTY(EditAnywhere, Category="Input")
+    TObjectPtr<UInputAction> ParryAction;
+
 
 	/** Constructor */
 	APlayerCharacter();
@@ -284,6 +292,10 @@ private:
 
 	// 현재 제자리 턴이 회전 마무리(SettleFacing)로 시작되었는지. 커서 회전 종료 처리가 이 턴을 끊지 않게 한다.
 	bool bMoveTurnActive = false;
+
+    bool bParryMovementLocked = false;
+    uint8 SavedParryMovementMode = 0;
+    uint8 SavedParryCustomMovementMode = 0;
 
 	// 좌우 중 최종으로 바라봐야 할 방향(0 또는 180). 이동 입력, 커서, 벽 점프가 갱신한다.
 	float FacingTargetYaw = 0.0f;

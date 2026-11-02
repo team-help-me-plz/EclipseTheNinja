@@ -9,6 +9,8 @@
 #include "InputActionValue.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
+#include "GAS/Ability/GAParry.h"
+#include "GAS/Tags/EclipseGameplayTags.h"
 #include "Engine/World.h"
 #include "SideScrollingInteractable.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -109,6 +111,8 @@ void APlayerCharacter::OnJumped_Implementation()
 
 void APlayerCharacter::BeginPlay()
 {
+  // 부모의 GAS 초기화 전에 기본 패링 항목을 보완한다. BP에서 지정한 클래스가 우선한다.
+  MigrateLegacyAbility(EAbilityInputID::Parry, nullptr, UGAParry::StaticClass());
   Super::BeginPlay();
   InteractComponent->SetBoxExtent(InteractBoxSize);
   InteractComponent->SetAbsolute(false, true, true);
@@ -143,6 +147,7 @@ void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (IsParrying()) return;
 	// 사망 연출과 공격(콤보, 표창, 질풍참 등) 중에는 커서·이동 방향으로 몸을 돌리지 않는다.
 	if (bIsDead || IsAssassinating() || IsHiding() || IsAttacking()) return;
 
@@ -350,6 +355,10 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
+		if (ParryAction)
+		{
+			EnhancedInputComponent->BindAction(ParryAction, ETriggerEvent::Started, this, &APlayerCharacter::DoParry);
+		}
 		if (CloneTechAction)
 		{
 			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneTech);
@@ -480,6 +489,7 @@ void APlayerCharacter::UnPossessed()
 
 void APlayerCharacter::Move(const FInputActionValue& Value)
 {
+	if (IsParrying()) return;
 	if (bIsDead) return;
 
 	FVector2D MoveVector = Value.Get<FVector2D>();
@@ -512,6 +522,8 @@ void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
 	}
 	if (Data.NewValue < Data.OldValue)
 	{
+		FGameplayTagContainer ParryTags(EclipseGameplayTags::Ability_Parry);
+		ASC->CancelAbilities(&ParryTags);
 		PlayHitReaction();
 	}
 }
@@ -597,6 +609,7 @@ void APlayerCharacter::ReceiveAssassination(UAnimMontage* Montage)
 
 void APlayerCharacter::DoBasicAttack()
 {
+	if (IsParrying()) return;
 	if (bIsDead) return;
 	if (!ASC) return;
 	if (IsAssassinating()) return;
@@ -627,6 +640,7 @@ void APlayerCharacter::DoBasicAttack()
 
 void APlayerCharacter::DoAssassinate()
 {
+	if (IsParrying()) return;
 	if (bIsDead) return;
 	if (!IsValid(ASC)) return;
 	if (IsAssassinating()) return;
@@ -722,6 +736,7 @@ void APlayerCharacter::DoThrowKunai()
 
 void APlayerCharacter::FaceCursorForThrow()
 {
+	if (IsParrying()) return;
 	// 좌클릭 입력이 Tick보다 먼저 와도 현재 커서로 조준한다.
 	UpdateCursorTarget();
 	if (bHasCursorTarget)
@@ -738,6 +753,7 @@ void APlayerCharacter::FaceCursorForThrow()
 
 void APlayerCharacter::DoMove(float Forward)
 {
+	if (IsParrying()) return;
 	if (bIsDead || IsAssassinating()) return;
 
 	// 공격이 끝나기 전에 반대 방향 입력으로 몸이 돌아가지 않게 한다.
@@ -772,6 +788,7 @@ void APlayerCharacter::DoMove(float Forward)
 
 void APlayerCharacter::DoJumpStart()
 {
+	if (IsParrying()) return;
 	if (IsAssassinating()) return;
 
 	// 입력 상태에 따라 점프 또는 발판 내려가기를 선택한다.
@@ -896,6 +913,7 @@ void APlayerCharacter::DoUnCrouch()
 
 void APlayerCharacter::DoSwiftStrike()
 {
+	if (IsParrying()) return;
 	if (bIsDead) return;
 	if (!ASC) return;
 	if (!FindAbilitySpecByInputID(EAbilityInputID::SwiftStrike)) return;
@@ -1232,4 +1250,59 @@ void APlayerCharacter::SetPlayerCondition(EPlayerCondition InPlayerCondition)
 	if (InPlayerCondition == PlayerCondition) return;
 	PlayerCondition = InPlayerCondition;
 	OnPlayerConditionChanged.Broadcast(PlayerCondition);
+}
+
+void APlayerCharacter::DoParry()
+{
+	if (bIsDead) return;
+	if (!ASC) return;
+
+	TryActivateAbilityByInputID(EAbilityInputID::Parry);
+}
+
+bool APlayerCharacter::IsParrying() const
+{
+    if (bParryMovementLocked) return true;
+    if (!IsValid(ASC)) return false;
+
+    return ASC->HasMatchingGameplayTag(EclipseGameplayTags::State_Parrying);
+}
+
+void APlayerCharacter::SetParryMovementLocked(bool bLocked)
+{
+    if (bParryMovementLocked == bLocked) return;
+
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (!Movement) return;
+
+    if (bLocked)
+    {
+        SavedParryMovementMode = Movement->MovementMode;
+        SavedParryCustomMovementMode = Movement->CustomMovementMode;
+        bParryMovementLocked = true;
+
+        // 남아 있는 회전 동작과 커서 회전을 정리한 방향으로 고정한다.
+        CancelMoveTurn();
+        if (UPlayerCharacterAnimInstance* Animation = Cast<UPlayerCharacterAnimInstance>(GetMesh()->GetAnimInstance()))
+        {
+            Animation->StopTurnInPlace();
+        }
+        SetCursorFacingActive(false);
+
+        // 입력뿐 아니라 관성과 몽타주 루트 모션에 의한 이동도 막는다.
+        StopJumping();
+        ConsumeMovementInputVector();
+        Movement->StopMovementImmediately();
+        Movement->DisableMovement();
+        return;
+    }
+
+    bParryMovementLocked = false;
+    ConsumeMovementInputVector();
+
+    // 사망 또는 다른 이동 상태 전환을 패링 종료가 덮어쓰지 않게 한다.
+    if (bIsDead) return;
+    if (Movement->MovementMode != MOVE_None) return;
+
+    Movement->SetMovementMode(static_cast<EMovementMode>(SavedParryMovementMode), SavedParryCustomMovementMode);
 }

@@ -10,6 +10,7 @@
 #include "GAS/Animation/AnimNotify_BossAttackHit.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "GAS/StatAttributeSet.h"
+#include "GAS/Ability/GAParry.h"
 
 void UGABossPatternAttack::OnPatternHit(const FBossAttackHitArea& HitArea)
 {
@@ -72,6 +73,8 @@ bool UGABossPatternAttack::ApplyHitDamage(
 	{
 		return false;
 	}
+
+	if (UGAParry::TryParry(Target, GetAvatarActorFromActorInfo(), Hit, bCanBeParried)) return true;
 
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddHitResult(Hit);

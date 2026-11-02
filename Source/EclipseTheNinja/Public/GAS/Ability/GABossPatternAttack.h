@@ -54,4 +54,8 @@ protected:
 	/** 판정 1회당 피해량. Boss Attack Hit 노티파이의 DamageScale이 곱해진다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Damage", meta = (ClampMin = "0.0"))
 	float Damage = 30.0f;
+
+	/** 근접 패턴 BP에서 허용 여부를 지정한다. */
+	UPROPERTY(EditDefaultsOnly, Category="Pattern|Parry")
+	bool bCanBeParried = true;
 };

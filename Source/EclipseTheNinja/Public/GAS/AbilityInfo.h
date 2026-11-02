@@ -20,6 +20,7 @@ enum class EAbilityInputID : uint8
     LedgeClimb = 8,
     WallSlide = 9,
     SwiftStrike,
+    Parry = 11,
     CloneTech = 100,
     ElementalFire = 200,
 };
