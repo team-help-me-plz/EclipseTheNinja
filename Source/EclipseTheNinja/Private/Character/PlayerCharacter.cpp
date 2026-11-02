@@ -2,6 +2,8 @@
 
 
 #include "Character/PlayerCharacter.h"
+#include "Save/GameSaveSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Camera/CameraComponent.h"
@@ -129,6 +131,11 @@ void APlayerCharacter::BeginPlay()
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->MaxFlySpeed = 121.f;
 	Movement->BrakingDecelerationFlying = Movement->BrakingDecelerationWalking;
+
+    GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+    {
+        GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->PlayerReady(this);
+    }));
 
 }
 
@@ -500,6 +507,8 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 
 void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
+    if (GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->IsApplyingRestore()) return;
+    GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->RecordHealth(Data.NewValue);
 	// 체력이 0이면 사망하고, 살아 있는 상태의 체력 감소는 피격으로 처리한다.
 	if (bIsDead)
 	{
@@ -1232,4 +1241,15 @@ void APlayerCharacter::SetPlayerCondition(EPlayerCondition InPlayerCondition)
 	if (InPlayerCondition == PlayerCondition) return;
 	PlayerCondition = InPlayerCondition;
 	OnPlayerConditionChanged.Broadcast(PlayerCondition);
+}
+
+void APlayerCharacter::ApplyUnlockedAbilities(const TArray<EAbilityInputID>& Unlocked)
+{
+    if (!HasAuthority() || !ASC) return;
+    for (const FAbilityInfo& Info : UnlockableAbilities)
+    {
+        if (!Info.AbilityClass || !Unlocked.Contains(Info.InputID)) continue;
+        if (!ASC->FindAbilitySpecFromClass(Info.AbilityClass))
+            ASC->GiveAbility(FGameplayAbilitySpec(Info.AbilityClass, FMath::Max(1, Info.AbilityLevel), ToAbilityInputID(Info.InputID), this));
+    }
 }

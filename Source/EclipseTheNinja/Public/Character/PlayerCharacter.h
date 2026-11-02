@@ -168,6 +168,11 @@ protected:
 	EPlayerCondition	PlayerCondition = EPlayerCondition::Normal;
 
 public:
+    void ApplyUnlockedAbilities(const TArray<EAbilityInputID>& Unlocked);
+
+    // Future unlockable abilities are configured in Blueprint defaults, separately from startup abilities.
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability|Unlocks")
+    TArray<FAbilityInfo> UnlockableAbilities;
 
 	/** Constructor */
 	APlayerCharacter();

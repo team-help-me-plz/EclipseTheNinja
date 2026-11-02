@@ -25,6 +25,8 @@ class ECLIPSETHENINJA_API UCheckpointSubsystem : public UWorldSubsystem
     GENERATED_BODY()
 
 public:
+    void RestoreCheckpoint(ECheckpointId Id) { CurrentCheckpoint = Id; }
+    bool GetCheckpointTransform(FTransform& OutTransform) const;
     // 체크포인트를 서브시스템에 등록하는 함수
     // 리스폰 시 체크포인트의 리스폰 위치를 가져오기 위함
     void RegisterCheckpoint(ACheckpoint* InCheckpoint);
