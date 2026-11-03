@@ -1,6 +1,7 @@
 #include "AI/BTTask_AttackPlayer.h"
 
 #include "Character/Enemy.h"
+#include "Component/EnemySpacingComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BehaviorTree.h"
@@ -82,7 +83,7 @@ EBTNodeResult::Type UBTTask_AttackPlayer::UpdateAttack(UBehaviorTreeComponent& O
     if (Pawn->IsPlayingHitReaction()) return EBTNodeResult::Failed;
 
     // 공격을 시작하기 전에 다른 몬스터와 겹쳐 있으면 먼저 비켜 선다. 물러나는 중에는 정지와 공격 시작을 건너뛴다.
-    if (!bAttackStarted && Pawn->SeparateFromMonstersInAttackRange(Target, DeltaSeconds))
+    if (!bAttackStarted && Pawn->GetSpacingComponent()->SeparateFromMonstersInAttackRange(Target, DeltaSeconds))
     {
         return EBTNodeResult::InProgress;
     }

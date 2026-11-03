@@ -13,6 +13,7 @@ class UWidgetComponent;
 class UAnimMontage;
 class UGABaseAttack;
 class UEnemyDetectionComponent;
+class UEnemySpacingComponent;
 class UCheckpointBoundComponent;
 class UAssassinateTargetComponent;
 class UAssassinationDropComponent;
@@ -139,6 +140,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "AI|Movement")
 	float GetAIChaseSpeed() const { return ChaseSpeed; }
+
+	// 공격 쿨타임(NextAttackTime)이 지나 다음 공격을 시작할 수 있는 시각인지. 간격 유지보다 공격을 우선할지 정할 때 쓴다.
+	bool IsAIAttackCooldownReady() const;
 
 	UFUNCTION(BlueprintCallable, Category = "AI|State")
 	void SetBehaviorState(EEnemyBehaviorState NewState);
@@ -271,8 +275,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	virtual void MoveAlongX(float DestinationX, float Speed, float DeltaTime);
 
-	// 공격 거리 안에서 대상이나 다른 몬스터와 겹쳐 있으면 대상을 바라본 채 뒤로 물러난다. 몬스터끼리는 대상에서 먼 쪽이 물러난다. 물러나는 중이면 true.
-	bool SeparateFromMonstersInAttackRange(const AActor* Target, float DeltaTime);
+	// MoveAlongX가 도착으로 보는 거리. 간격 유지도 같은 기준으로 멈춘다.
+	static constexpr float MoveArriveTolerance = 5.0f;
+
+	// 추격·공격 중 간격 유지, 포위, 낭떠러지 검사를 맡는 컴포넌트.
+	UEnemySpacingComponent* GetSpacingComponent() const { return SpacingComp; }
 
 	// 공격 도중 대상이 죽거나 사라져도 공격 분기를 유지할지. 기본은 대상이 유효할 때만 유지한다.
 	virtual bool ShouldFinishAttackWithoutTarget() const { return false; }
@@ -321,79 +328,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster Overlap", meta = (Units = "cm", EditCondition = "bOverlapWithCharacters"))
 	float MeshYOffset = -35.0f;
 
-	// 추격 중 다른 몬스터와 간격을 유지할지. 혼자 움직이는 보스는 끈다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Spacing")
-	bool bKeepMonsterSpacing = true;
-
-	// 앞에 있는 몬스터와 캡슐 사이에 남겨 둘 간격. 음수면 그만큼 캡슐이 겹친 채 선다. 두 반경 합만큼 음수면 같은 자리까지 붙는다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Spacing", meta = (ClampMin = "-200", Units = "cm", EditCondition = "bKeepMonsterSpacing"))
-	float MonsterSpacingGap = 40.0f;
-
-	// 간격 때문에 멈춘 뒤 이 거리 이상 벌어져야 다시 걷는다. 경계에서 섰다 걸었다를 반복하지 않게 한다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Spacing", meta = (ClampMin = "0", Units = "cm", EditCondition = "bKeepMonsterSpacing"))
-	float MonsterSpacingResumeDistance = 40.0f;
-
-	// 낭떠러지 쪽으로 걸어가지 않고 가장자리 앞에서 멈출지. 끄면 걸어서 떨어질 수 있다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Movement")
-	bool bAvoidLedges = true;
-
-	// 대상(플레이어·분신)과 캡슐 사이에 남겨 둘 간격. 음수면 그만큼 겹친 채 선다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Spacing", meta = (ClampMin = "-200", Units = "cm", EditCondition = "bKeepMonsterSpacing"))
-	float TargetSpacingGap = 10.0f;
-
-	// 추격 중 동료가 적은 쪽으로 대상을 지나 건너가서 양쪽에서 감싸는지. 끄면 한쪽으로만 줄을 선다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Spacing", meta = (EditCondition = "bKeepMonsterSpacing"))
-	bool bSurroundTarget = true;
-
-	// 반대편으로 건너갈 때 대상 X를 지나 이만큼 더 가서 선다. AttackDistance보다 작아야 건너간 뒤 바로 공격한다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Spacing", meta = (ClampMin = "0", Units = "cm", EditCondition = "bKeepMonsterSpacing && bSurroundTarget"))
-	float SurroundCrossDistance = 60.0f;
+	// 추격·공격 중 간격 유지, 포위, 낭떠러지 검사를 맡는다. 간격 설정값은 이 컴포넌트에 있다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Spacing")
+	TObjectPtr<UEnemySpacingComponent> SpacingComp;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI")
 	EEnemyBehaviorState BehaviorState = EEnemyBehaviorState::Patrol;
-
-	// 간격 때문에 멈춰 있는지. 다시 걷기 시작할 거리 판정에 쓴다.
-	bool bHeldBySpacing = false;
-
-	// 앞쪽 몬스터와의 간격을 반영해 이동 목적지를 당긴다. 간격 때문에 멈춰야 하면 현재 X를 돌려준다.
-	float ApplyMonsterSpacing(float DestinationX);
-
-	// 다른 몬스터와 캡슐이 겹쳐 있으면 양보하는 쪽이 비켜 선다. 비켜 서는 중이면 true.
-	// FaceTarget이 있으면 대상에서 먼 쪽이 양보하고, 대상을 바라본 채 대상 반대쪽으로 물러난다.
-	bool TrySeparateFromMonsters(float Speed, float DeltaTime, const AActor* FaceTarget = nullptr);
-
-	// 간격 유지에서 고려할 몬스터인지. 죽었거나 숨겨졌거나 다른 높이에 있으면 제외한다.
-	bool IsSpacingNeighbor(const AEnemy* Other) const;
-
-	// 상대 몬스터와 유지할 중심 사이 거리. 두 캡슐 반경 + MonsterSpacingGap이며 0 아래로 내려가지 않는다.
-	float GetMonsterSpacingDistance(const AEnemy* Other) const;
-
-	// 대상과 유지할 중심 사이 거리. 내 캡슐 반경 + 대상 반경 + TargetSpacingGap이며 0 아래로 내려가지 않는다.
-	float GetTargetSpacingDistance(const AActor* Target) const;
-
-	// 멈춰 있는 대상과 많이 겹쳐 있으면 대상을 바라본 채 간격을 되찾을 때까지 물러난다. 물러나는 중이면 true.
-	bool TryBackAwayFromTarget(const AActor* Target, float DeltaTime);
-
-	// 대상에게서 물러나는 중인지. 간격을 다 되찾을 때까지 유지해 한 발짝씩 끊어 물러나지 않게 한다.
-	bool bBackingAwayFromTarget = false;
-
-	// DirectionX 쪽 바로 앞이 낭떠러지인지. bAvoidLedges가 꺼져 있거나 공중이면 false.
-	bool IsLedgeAhead(float DirectionX) const;
-
-	// 이 X 위치 발밑에 딛을 바닥이 있는지.
-	bool HasGroundAtX(float X) const;
-
-	// 대상의 어느 쪽에 서기로 했는지(+1 / -1). 추격·공격 중이 아니면 0이다.
-	float SurroundSide = 0.0f;
-
-	// 대상 반대편으로 건너가는 중인지. 건너가는 동안은 간격 유지와 공격 시작을 하지 않는다.
-	bool bCrossingSurroundSide = false;
-
-	// 양쪽에 선 동료 수를 보고 내가 설 쪽을 정한다. 한쪽이 많으면 그쪽 맨 뒤 몬스터부터 반대편으로 보낸다.
-	float ChooseSurroundSide(const AActor* Target) const;
-
-	// 포위 인원을 셀 때 내가 속한 쪽. 건너가는 중이면 가려는 쪽, 아니면 지금 서 있는 쪽이다.
-	float GetSurroundHomeSide(float TargetX) const;
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<APawn> CombatTarget;
