@@ -10,12 +10,15 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GAS/Ability/GABaseAttack.h"
+#include "GAS/Tags/EclipseGameplayTags.h"
 #include "GAS/Animation/AnimNotify_BossAttackHit.h"
 
 UGABossPatternBase::UGABossPatternBase()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalOnly;
+
+	SetAssetTags(FGameplayTagContainer(EclipseGameplayTags::Ability_Attack));
 
 	// 기본 공격과 같은 공격 중 태그를 사용해 패턴끼리 겹쳐 실행되지 않게 한다.
 	ActivationOwnedTags.AddTag(UGABaseAttack::GetAttackingTag());
@@ -40,6 +43,12 @@ bool UGABossPatternBase::CanActivateAbility(
 	// 몽타주와 재생할 애님 인스턴스가 있어야 한다.
 	const AEnemy* Enemy = ActorInfo ? Cast<AEnemy>(ActorInfo->AvatarActor.Get()) : nullptr;
 	if (!Enemy || !PatternMontage)
+	{
+		return false;
+	}
+
+	// 피격·패링 경직 중에는 새 패턴을 시작하지 않는다.
+	if (Enemy->IsPlayingHitReaction())
 	{
 		return false;
 	}

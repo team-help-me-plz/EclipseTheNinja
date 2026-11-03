@@ -14,6 +14,7 @@
 
 UGABossGaleSlash::UGABossGaleSlash()
 {
+	bCanBeParried = false;
 	// 판정은 첫 노티파이가 아니라 돌진이 끝날 때 나므로 범위 표시는 OnDashFinished에서 지운다.
 	bHideTelegraphOnLastHit = false;
 }

@@ -168,6 +168,28 @@ protected:
 	EPlayerCondition	PlayerCondition = EPlayerCondition::Normal;
 
 public:
+    float GetLogicalFacingSign() const { return FMath::Cos(FMath::DegreesToRadians(FacingTargetYaw)) >= 0.0f ? 1.0f : -1.0f; }
+    UFUNCTION(BlueprintCallable, Category="Parry")
+    void DoParry();
+    bool IsParrying() const;
+    void SetParryMovementLocked(bool bLocked);
+    UPROPERTY(EditAnywhere, Category="Input")
+    TObjectPtr<UInputAction> ParryAction;
+
+    /**
+     * 디버그용 무적. 켜면 질풍참과 같은 State.Invincible 태그를 추가한다.
+     * BP 기본값이나 레벨 인스턴스에서 켜 두거나, PIE 중 아웃라이너에서 플레이어를 골라 디테일 패널에서 바로 바꿀 수 있다.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bDebugInvincible = false;
+
+    UFUNCTION(BlueprintCallable, Category = "Debug")
+    void SetDebugInvincible(bool bEnable);
+
+#if WITH_EDITOR
+    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
     void ApplyUnlockedAbilities(const TArray<EAbilityInputID>& Unlocked);
 
     // Future unlockable abilities are configured in Blueprint defaults, separately from startup abilities.
@@ -290,6 +312,14 @@ private:
 
 	// 현재 제자리 턴이 회전 마무리(SettleFacing)로 시작되었는지. 커서 회전 종료 처리가 이 턴을 끊지 않게 한다.
 	bool bMoveTurnActive = false;
+
+    bool bParryMovementLocked = false;
+    uint8 SavedParryMovementMode = 0;
+    uint8 SavedParryCustomMovementMode = 0;
+
+    // bDebugInvincible에 맞춰 무적 태그를 붙이거나 뗀다. 태그는 개수로 관리되므로 붙인 횟수를 따로 기억한다.
+    void SyncDebugInvincibleTag();
+    bool bDebugInvincibleTagApplied = false;
 
 	// 좌우 중 최종으로 바라봐야 할 방향(0 또는 180). 이동 입력, 커서, 벽 점프가 갱신한다.
 	float FacingTargetYaw = 0.0f;

@@ -70,6 +70,11 @@ void ATrapArrowActor::OnArrowBeginOverlap(UPrimitiveComponent* OverlappedCompone
 	{
 		return;
 	}
+	// 튕겨낸 플레이어와 아직 겹쳐 있어도 다시 맞히지 않는다
+	if (OtherActor && OtherActor == this->DeflectedBy.Get())
+	{
+		return;
+	}
 	if (OtherActor && OtherActor->Implements<UInteractor>())
 	{
 		ABaseCharacter* InCharacter = Cast<ABaseCharacter>(OtherActor);
@@ -94,6 +99,18 @@ void ATrapArrowActor::OnArrowBeginOverlap(UPrimitiveComponent* OverlappedCompone
 					Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), this->ArrowDamage);
 					TargetASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 				}
+			}
+
+			// 패링으로 튕겨났으면 안전 지점으로 보내지 않고 반대로 날아간다.
+			// 겹침 콜백 안에서 바꾼 속도는 ProjectileMovement가 이번 이동 뒤에도 유지한다.
+			if (AActor* Deflector = this->PendingDeflector.Get())
+			{
+				this->PendingDeflector.Reset();
+				this->DeflectedBy = Deflector;
+				this->ProjectileMovement->Velocity = -this->ProjectileMovement->Velocity;
+				this->ProjectileMovement->UpdateComponentVelocity();
+				SetLifeSpan(Lifetime);
+				return;
 			}
 			IInteractor::Execute_ReturnToSafePoint(OtherActor);
 		}
@@ -136,6 +153,19 @@ void ATrapArrowActor::OnSpawnFromPool_Implementation()
 	// 충돌로 시뮬레이션이 멈추면 UpdatedComponent가 해제되므로 다시 지정 (속도는 SetLaunch에서 설정)
 	this->ProjectileMovement->SetUpdatedComponent(this->SphereCollision);
 	this->bHasHit = false;
+	this->PendingDeflector.Reset();
+	this->DeflectedBy.Reset();
+}
+
+bool ATrapArrowActor::Deflect(AActor* Deflector)
+{
+	if (this->bHasHit || this->DeflectedBy.IsValid() || !IsValid(Deflector) || this->PendingDeflector.IsValid())
+	{
+		return false;
+	}
+
+	this->PendingDeflector = Deflector;
+	return true;
 }
 
 void ATrapArrowActor::OnReturnToPool_Implementation()

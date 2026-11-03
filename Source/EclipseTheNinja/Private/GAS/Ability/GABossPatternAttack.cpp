@@ -10,6 +10,7 @@
 #include "GAS/Animation/AnimNotify_BossAttackHit.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "GAS/StatAttributeSet.h"
+#include "GAS/Tags/EclipseGameplayTags.h"
 
 void UGABossPatternAttack::OnPatternHit(const FBossAttackHitArea& HitArea)
 {
@@ -88,6 +89,11 @@ bool UGABossPatternAttack::ApplyHitDamage(
 	}
 
 	Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), HitDamage);
+	// 패링 여부는 플레이어 쪽 GE 적용 질의가 판단한다. 막을 수 없는 패턴은 태그로 알린다.
+	if (!bCanBeParried)
+	{
+		Spec.Data->AddDynamicAssetTag(EclipseGameplayTags::Attack_Unparryable);
+	}
 	SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
 	return true;
 }

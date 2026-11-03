@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Interface/ParryDeflectable.h"
 #include "Interface/Poolable.h"
 #include "TrapArrowActor.generated.h"
 
@@ -13,7 +14,7 @@ class UProjectileMovementComponent;
 class UNiagaraComponent;
 
 UCLASS()
-class ECLIPSETHENINJA_API ATrapArrowActor : public AActor, public IPoolable
+class ECLIPSETHENINJA_API ATrapArrowActor : public AActor, public IPoolable, public IParryDeflectable
 {
 	GENERATED_BODY()
 	
@@ -47,6 +48,9 @@ public:
 	virtual void	OnSpawnFromPool_Implementation() override;
 	virtual void	OnReturnToPool_Implementation() override;
 
+	// 패링당하면 피해와 안전 지점 복귀 없이 반대로 날아간다.
+	virtual bool	Deflect(AActor* Deflector) override;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	TObjectPtr<USphereComponent>		SphereCollision = nullptr;
@@ -68,5 +72,11 @@ protected:
 
 	// 한 번 처리한 화살이 같은 이동에서 남은 오버랩으로 다시 처리되지 않도록 막는다
 	bool bHasHit = false;
+
+	// 피해 적용 중 패링으로 튕겨낸 액터. 피해 적용이 끝난 뒤 방향을 바꾼다.
+	TWeakObjectPtr<AActor> PendingDeflector;
+
+	// 튕겨낸 액터. 되돌아가는 화살이 다시 맞히지 않도록 무시한다.
+	TWeakObjectPtr<AActor> DeflectedBy;
 
 };

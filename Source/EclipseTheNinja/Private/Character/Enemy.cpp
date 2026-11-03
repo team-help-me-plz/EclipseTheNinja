@@ -10,6 +10,7 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayEffectExtension.h"
 #include "Components/WidgetComponent.h"
+#include "NiagaraSystem.h"
 #include "Widgets/OverheadWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "AIController.h"
@@ -425,6 +426,7 @@ void AEnemy::ResetToInitial_Implementation()
 	BehaviorState = EEnemyBehaviorState::Patrol;
 	CombatTarget.Reset();
 	bPatrolTowardsMax = true;
+	ParryStunEndTime = 0.0;
 	NextAttackTime = 0.0;
 	MonategeDuration = 0.0f;
 
@@ -617,6 +619,7 @@ bool AEnemy::IsAttackActive() const
 
 bool AEnemy::IsPlayingHitReaction() const
 {
+	if (GetWorld()->GetTimeSeconds() < ParryStunEndTime) return true;
 	const UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	return HitReactionMontage && AnimInstance && AnimInstance->Montage_IsPlaying(HitReactionMontage);
 }
@@ -684,6 +687,11 @@ void AEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 		SpacingComp->ClearSpacingHold();
 	}
 
+	if (GetWorld()->GetTimeSeconds() < ParryStunEndTime)
+	{
+		StopHorizontalMovement();
+		return;
+	}
 	const float DistanceX = DestinationX - GetActorLocation().X;
 	if (FMath::Abs(DistanceX) <= MoveArriveTolerance || DeltaTime <= 0.0f)
 	{
@@ -910,3 +918,41 @@ void AEnemy::UpdateOverheadWidgetRotation()
 	}
 }
 
+
+void AEnemy::ReceiveParry(float FallbackStunDuration)
+{
+	if (bIsDead) return;
+
+	// 공격 패턴과 루트 모션을 중단하고 다른 유지형 어빌리티는 보존한다.
+	// 공격 몽타주가 멈춘 뒤에 패링 피격 몽타주를 재생해야 덮어써지지 않는다.
+	if (ASC)
+	{
+		FGameplayTagContainer AttackTags(EclipseGameplayTags::Ability_Attack);
+		ASC->CancelAbilities(&AttackTags);
+	}
+
+	StopHorizontalMovement();
+
+	// 패링 피격 몽타주 중 하나를 무작위로 골라 그 길이만큼, 없으면 패링 쪽에서 정한 시간만큼 경직된다.
+	// 비어 있는 칸은 후보에서 뺀다.
+	float StunDuration = FallbackStunDuration;
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	TArray<UAnimMontage*, TInlineAllocator<4>> Candidates;
+	for (UAnimMontage* Montage : ParryHitMontages)
+	{
+		if (Montage) Candidates.Add(Montage);
+	}
+	if (AnimInstance && Candidates.Num() > 0)
+	{
+		UAnimMontage* Montage = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+		const float PlayLength = AnimInstance->Montage_Play(Montage);
+		if (PlayLength > 0.0f) StunDuration = PlayLength;
+	}
+
+	ParryStunEndTime = FMath::Max(ParryStunEndTime, GetWorld()->GetTimeSeconds() + FMath::Max(0.01f, StunDuration));
+}
+
+UNiagaraSystem* AEnemy::GetParrySparkEffect() const
+{
+	return ParrySparkEffect;
+}

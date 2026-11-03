@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameplayEffectTypes.h"
+#include "Interface/ParryDeflectable.h"
 #include "Interface/Poolable.h"
 #include "KunaiProjectile.generated.h"
 
@@ -30,7 +31,7 @@ struct FKunaiAttachTarget
  * (풀이 등록되지 않았으면 일반 스폰/파괴로 동작한다)
  */
 UCLASS()
-class ECLIPSETHENINJA_API AKunaiProjectile : public AActor, public IPoolable
+class ECLIPSETHENINJA_API AKunaiProjectile : public AActor, public IPoolable, public IParryDeflectable
 {
     GENERATED_BODY()
 
@@ -61,6 +62,9 @@ public:
 
     // 투척 전에 확인된 충돌을 비행 충돌과 동일하게 처리하는 함수
     void HandleLaunchHit(const FHitResult& Hit);
+
+    // 적이 던진 표창만 튕겨낸다. 박히지 않고 다음 틱에 튕겨낸 쪽의 표창으로 되돌아 날아간다.
+    virtual bool Deflect(AActor* Deflector) override;
 
 protected:
     virtual void BeginPlay() override;
@@ -122,6 +126,9 @@ private:
     // 이전 투척의 부착/충돌 무시/피해 정보를 모두 정리한다. 풀 반환과 EndPlay에서 공통으로 사용한다.
     void ClearThrowState();
 
+    // 튕겨낸 쪽을 새 발사자로 삼아 왔던 방향의 반대로 다시 던진다.
+    void LaunchDeflected(AActor* Deflector);
+
 protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Kunai")
     TObjectPtr<USphereComponent> Collision;
@@ -167,6 +174,9 @@ private:
     bool bEnemyThrow = false;
     bool bPlayerThrow = false;
     bool bConsumed = false;
+
+    // 피해 적용 중 패링으로 튕겨낸 액터. 피해 적용이 끝난 뒤 박히는 대신 되돌아간다.
+    TWeakObjectPtr<AActor> PendingDeflector;
 
     // 부착한 부모 소켓 기준 로컬 좌표. 부모가 없으면 월드 좌표
     FVector AttachMoveStart = FVector::ZeroVector;

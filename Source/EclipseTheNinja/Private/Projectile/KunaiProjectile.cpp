@@ -242,6 +242,7 @@ void AKunaiProjectile::ClearThrowState()
 
     SourceASC.Reset();
     DamageSpec.Clear();
+    PendingDeflector.Reset();
 }
 
 void AKunaiProjectile::OnAttachedActorDestroyed(AActor* DestroyedActor)
@@ -431,7 +432,7 @@ void AKunaiProjectile::OnProjectileHit(
     const FVector IncomingDirection = GetActorForwardVector();
 
     // 피해 적용으로 사망 충돌이 해제되기 전에 박힐 본을 찾는다
-    AttachToHitTarget(ResolveAttachTarget(OtherActor, Hit, IncomingDirection), OtherActor, IncomingDirection);
+    const FKunaiAttachTarget AttachTarget = ResolveAttachTarget(OtherActor, Hit, IncomingDirection);
 
     const bool bHostile = bEnemyThrow
         ? (OtherActor->IsA<APlayerCharacter>() || OtherActor->IsA<ACloneCharacter>())
@@ -444,7 +445,48 @@ void AKunaiProjectile::OnProjectileHit(
         && TargetASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) > 0.0f)
     {
         // 충돌 정보와 원래 시전자 Context를 함께 전달해 적의 피격 감지/경계 전환을 유지한다.
-        DamageSpec.Data->GetContext().AddHitResult(Hit, true);
+        // 원인은 이 표창으로 기록해 패링 판정이 튕겨내기로 처리하고, 피격 방향도 표창 위치를 기준으로 잡게 한다.
+        FGameplayEffectContextHandle Context = DamageSpec.Data->GetContext();
+        Context.AddHitResult(Hit, true);
+        Context.AddInstigator(Context.GetInstigator(), this);
         SourceASC->ApplyGameplayEffectSpecToTarget(*DamageSpec.Data.Get(), TargetASC);
     }
+
+    // 패링으로 튕겨났으면 박히지 않는다. 이번 충돌 처리에서 ProjectileMovement가 정지하므로 다음 틱에 다시 던진다.
+    if (AActor* Deflector = PendingDeflector.Get())
+    {
+        PendingDeflector.Reset();
+        GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this,
+            [this, WeakDeflector = TWeakObjectPtr<AActor>(Deflector)]()
+            {
+                if (AActor* DeflectorActor = WeakDeflector.Get())
+                {
+                    LaunchDeflected(DeflectorActor);
+                }
+            }));
+        return;
+    }
+
+    AttachToHitTarget(AttachTarget, OtherActor, IncomingDirection);
+}
+
+bool AKunaiProjectile::Deflect(AActor* Deflector)
+{
+    if (!bEnemyThrow || !IsValid(Deflector) || PendingDeflector.IsValid()) return false;
+
+    PendingDeflector = Deflector;
+    return true;
+}
+
+void AKunaiProjectile::LaunchDeflected(AActor* Deflector)
+{
+    UAbilitySystemComponent* DeflectorASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Deflector);
+    const FGameplayEffectSpecHandle DeflectedSpec = MakeDeflectedDamageSpec(Deflector, this, DamageSpec);
+    const FVector Direction = -LaunchVelocity;
+    const float Speed = LaunchVelocity.Size();
+
+    // 발사자를 바꾼 뒤 다시 초기화하면 진영, 충돌 무시 대상, 수명이 모두 튕겨낸 쪽 기준으로 바뀐다.
+    SetOwner(Deflector);
+    SetInstigator(Cast<APawn>(Deflector));
+    InitializeKunai(DeflectorASC, DeflectedSpec, Direction, Speed);
 }

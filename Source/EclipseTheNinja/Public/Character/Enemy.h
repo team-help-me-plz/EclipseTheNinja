@@ -11,6 +11,7 @@
 class UStatAttributeSet;
 class UWidgetComponent;
 class UAnimMontage;
+class UNiagaraSystem;
 class UGABaseAttack;
 class UEnemyDetectionComponent;
 class UEnemySpacingComponent;
@@ -55,6 +56,9 @@ UCLASS()
 class ECLIPSETHENINJA_API AEnemy : public ABaseCharacter, public ICheckpointResettable, public IPoolable
 {
 	GENERATED_BODY()
+
+private:
+	double ParryStunEndTime = 0.0;
 
 public:
 	// Sets default values for this character's properties
@@ -199,6 +203,17 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> PendingAssassinationMontage;
 
+	/**
+	 * 공격이 패링당했을 때 재생할 경직 몽타주 후보. 패링될 때마다 하나를 무작위로 골라 재생한다.
+	 * 비우면 패링 어빌리티의 AttackerStunDuration만큼 멈춰 선다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Parry")
+	TArray<TObjectPtr<UAnimMontage>> ParryHitMontages;
+
+	/** 이 적의 공격이 패링됐을 때 부딪힌 자리에 낼 불꽃. 비우면 패링 어빌리티의 기본 불꽃을 쓴다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Parry")
+	TObjectPtr<UNiagaraSystem> ParrySparkEffect;
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	// Called every frame
@@ -259,6 +274,12 @@ public:
 	// 피격 몽타주가 현재 재생 중인지 확인하는 함수
 	UFUNCTION(BlueprintPure, Category = "Combat|Hit Reaction")
 	bool IsPlayingHitReaction() const;
+
+	// 플레이어에게 공격이 패링당했을 때 호출된다. 공격을 끊고 패링 피격 몽타주 길이만큼 경직된다.
+	void ReceiveParry(float FallbackStunDuration);
+
+	// 이 적 전용 패링 불꽃. 없으면 nullptr이고 패링 어빌리티의 기본 불꽃을 쓴다.
+	UNiagaraSystem* GetParrySparkEffect() const;
 
 	// 수평 움직임을 종료하는 함수
 	UFUNCTION(BlueprintCallable, Category = "Movement")

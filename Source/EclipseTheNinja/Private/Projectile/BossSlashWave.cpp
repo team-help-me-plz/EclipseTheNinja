@@ -2,6 +2,7 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "Character/Enemy.h"
 #include "Character/PlayerCharacter.h"
 #include "Clone/CloneCharacter.h"
 #include "Components/BoxComponent.h"
@@ -136,8 +137,11 @@ void ABossSlashWave::TryDamage(AActor* OtherActor, const FHitResult& Hit)
 		return;
 	}
 
-	// 보스의 검기는 플레이어와 분신만 맞힌다.
-	if (!OtherActor->IsA<APlayerCharacter>() && !OtherActor->IsA<ACloneCharacter>())
+	// 보스의 검기는 플레이어와 분신만, 튕겨낸 검기는 적만 맞힌다.
+	const bool bValidTarget = bDeflected
+		? OtherActor->IsA<AEnemy>()
+		: OtherActor->IsA<APlayerCharacter>() || OtherActor->IsA<ACloneCharacter>();
+	if (!bValidTarget)
 	{
 		return;
 	}
@@ -169,13 +173,62 @@ void ABossSlashWave::TryDamage(AActor* OtherActor, const FHitResult& Hit)
 	DamagedActors.Add(OtherActor);
 
 	// 원래 시전자 Context에 충돌 정보를 더해 피격 방향 처리에 쓰게 한다.
+	// 원인은 이 검기로 기록해 패링 판정이 튕겨내기로 처리하게 한다.
+	FGameplayEffectContextHandle Context = DamageSpec.Data->GetContext();
 	if (Hit.bBlockingHit || Hit.GetActor())
 	{
-		DamageSpec.Data->GetContext().AddHitResult(Hit, true);
+		Context.AddHitResult(Hit, true);
 	}
+	Context.AddInstigator(Context.GetInstigator(), this);
 
 	SourceASC->ApplyGameplayEffectSpecToTarget(*DamageSpec.Data.Get(), TargetASC);
+
+	// 패링으로 튕겨났으면 사라지지 않고 되돌아간다.
+	if (AActor* Deflector = PendingDeflector.Get())
+	{
+		PendingDeflector.Reset();
+		LaunchDeflected(Deflector);
+		return;
+	}
+
 	OnTargetHit(OtherActor);
+}
+
+bool ABossSlashWave::Deflect(AActor* Deflector)
+{
+	if (bDissipated || bDeflected || !IsValid(Deflector) || PendingDeflector.IsValid())
+	{
+		return false;
+	}
+
+	PendingDeflector = Deflector;
+	return true;
+}
+
+void ABossSlashWave::LaunchDeflected(AActor* Deflector)
+{
+	DamageSpec = MakeDeflectedDamageSpec(Deflector, this, DamageSpec);
+	SourceASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Deflector);
+	bDeflected = true;
+
+	// 튕겨낸 쪽은 다시 맞지 않도록 발사자로 바꾼다. 같은 대상을 다시 때릴 수 있게 기록도 비운다.
+	SetOwner(Deflector);
+	SetInstigator(Cast<APawn>(Deflector));
+	DamagedActors.Reset();
+	SetLifeSpan(Lifetime);
+
+	// 겹침 콜백 안에서 바꾼 속도는 ProjectileMovement가 이번 이동 후에도 유지한다.
+	Movement->Velocity = -Movement->Velocity;
+	Movement->UpdateComponentVelocity();
+	SetActorRotation(Movement->Velocity.Rotation());
+
+	// 스스로 날아가는 이펙트는 이미 나간 입자가 액터를 따라오지 않는다.
+	// Activate(true)만으로는 기존 입자가 지워지지 않아 원래 방향으로 계속 날아가므로, 먼저 즉시 지운 뒤 새 방향으로 다시 재생한다.
+	if (Effect->GetAsset())
+	{
+		Effect->DeactivateImmediate();
+		Effect->Activate(true);
+	}
 }
 
 void ABossSlashWave::OnTargetHit(AActor* OtherActor)

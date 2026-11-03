@@ -52,6 +52,7 @@ UGABaseAttack::UGABaseAttack()
 
 	// 가지고 있으면 활성화되지 않는 태그
 	ActivationBlockedTags.AddTag(TAG_Attacking);
+	ActivationBlockedTags.AddTag(EclipseGameplayTags::State_Parrying);
 	// 벽에 매달린 동안에는 기본 공격 불가
 	ActivationBlockedTags.AddTag(UGAWallAttach::GetWallAttachingTag());
 }
