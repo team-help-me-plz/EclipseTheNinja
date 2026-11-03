@@ -193,7 +193,7 @@ public:
 
 	virtual void RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void ReturnToSafePoint_Implementation() override;
-	virtual void PlayInteractMontage_Implementation(UAnimMontage* InMontage) override;
+	virtual void PlayInteractMontage_Implementation(AActor* InInteractable, UAnimMontage* InMontage) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void DoCloneTech();

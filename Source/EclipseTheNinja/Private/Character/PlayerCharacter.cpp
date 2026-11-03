@@ -154,6 +154,8 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 	if (bIsDead || IsAssassinating() || IsHiding() || IsAttacking()) return;
 	// 벤트 통과처럼 이동을 멈춰 둔 연출(MOVE_None) 중에도 커서로 몸을 돌리지 않는다.
 	if (GetCharacterMovement()->MovementMode == MOVE_None) return;
+	// 상호작용 몽타주 중에는 상호작용 대상을 바라본 채로 둔다.
+	if (IsValid(InteractComponent) && InteractComponent->IsPlayingInteractMontage()) return;
 
 	UpdateCursorTarget();
 	UpdateCursorFacing(DeltaSeconds);
@@ -1203,10 +1205,10 @@ void APlayerCharacter::ReturnToSafePoint_Implementation()
 	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
 }
 
-void APlayerCharacter::PlayInteractMontage_Implementation(UAnimMontage* InMontage)
+void APlayerCharacter::PlayInteractMontage_Implementation(AActor* InInteractable, UAnimMontage* InMontage)
 {
-	// 기본 몽타주와 재생은 InteractComponent가 맡는다
-	if (IsValid(InteractComponent)) InteractComponent->PlayInteractMontage(InMontage);
+	// 방향 맞추기, 입력 잠금, 재생은 InteractComponent가 맡는다
+	if (IsValid(InteractComponent)) InteractComponent->PlayInteractMontage(InInteractable, InMontage);
 }
 
 void APlayerCharacter::AddEngagedEnemy(AEnemy* InEnemy)

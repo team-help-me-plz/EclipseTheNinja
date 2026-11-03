@@ -49,7 +49,7 @@ public:
 
 	virtual void	RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void	ReturnToSafePoint_Implementation() override;
-	virtual void	PlayInteractMontage_Implementation(UAnimMontage* InMontage) override;
+	virtual void	PlayInteractMontage_Implementation(AActor* InInteractable, UAnimMontage* InMontage) override;
 
 	// 수명이 끝나면 Destroy 대신 풀에 반환 (풀이 등록되지 않았으면 Destroy)
 	virtual void	LifeSpanExpired() override;

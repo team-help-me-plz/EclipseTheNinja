@@ -23,9 +23,13 @@ public:
 
 	void	TryInteract();
 
-	// 상호작용 성공 시 상호작용 액터가 호출. InMontage가 nullptr이면 Interactor의 기본 몽타주를 재생
+	// 상호작용 성공 시 상호작용 액터가 호출. 입력을 막고 InInteractable 쪽으로 몸을 돌린 뒤 재생하며, 몽타주가 끝나면 입력을 돌려준다
+	// InMontage가 nullptr이면 기본 몽타주를 재생
 	UFUNCTION(BlueprintCallable)
-	void	PlayInteractMontage(UAnimMontage* InMontage);
+	void	PlayInteractMontage(AActor* InInteractable, UAnimMontage* InMontage);
+
+	// 상호작용 몽타주 재생 중이라 입력이 막혀 있는가
+	bool	IsPlayingInteractMontage() const { return (this->bIsPlayingInteractMontage); }
 
 protected:
 	UFUNCTION()
@@ -57,7 +61,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage")
 	TObjectPtr<UAnimMontage> InteractMontage = nullptr;
 
+	// 몽타주가 끝나거나 끊기면 입력을 돌려준다. 다음 재생에 밀려 끝난 이전 몽타주(InPlayId가 다름)는 무시한다
+	void	OnInteractMontageEnded(UAnimMontage* InMontage, bool bInterrupted, int32 InPlayId);
+	void	SetOwnerInputLocked(bool bInLocked);
+
 private:
+	bool	bIsPlayingInteractMontage = false;
+	// 재생할 때마다 증가. 끝난 몽타주가 마지막으로 재생한 것인지 구분한다
+	int32	InteractMontagePlayId = 0;
+
 	// 현재 Overlap된 상호작용 가능 액터 목록
 	TArray<TWeakObjectPtr<AActor>>	OverlappedInteractActor;
 	// 상호작용 키를 눌렀을 때 상호작용할 액터

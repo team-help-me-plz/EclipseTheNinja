@@ -107,7 +107,7 @@ void AInteractSwitch::Interact_Implementation(AActor* InActor)
 		false
 	);
 	this->RefreshInteractState();
-	IInteractor::Execute_PlayInteractMontage(InActor, nullptr);
+	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
 	IActivatable::Execute_ToggleActivate(this->TargetActor);
 }
 

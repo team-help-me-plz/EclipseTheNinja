@@ -455,7 +455,7 @@ void ACloneCharacter::ReturnToSafePoint_Implementation()
 	this->SetActorRotation(this->SafePointRotate);
 }
 
-void ACloneCharacter::PlayInteractMontage_Implementation(UAnimMontage* InMontage)
+void ACloneCharacter::PlayInteractMontage_Implementation(AActor* InInteractable, UAnimMontage* InMontage)
 {
 	UAnimInstance*	AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
 	if (!AnimInstance)
@@ -471,6 +471,17 @@ void ACloneCharacter::PlayInteractMontage_Implementation(UAnimMontage* InMontage
 			TEXT("[ACloneCharacter::PlayInteractMontage] InteractMontage가 유효하지 않습니다")
 		);
 		return ;
+	}
+	if (IsValid(InInteractable))
+	{
+		// 루트가 한쪽에 치우친 액터도 있으므로 자식 액터까지 포함한 경계의 중심을 바라본다
+		const FBox		Bounds = InInteractable->GetComponentsBoundingBox(false, true);
+		const FVector	LookAt = Bounds.IsValid ? Bounds.GetCenter() : InInteractable->GetActorLocation();
+		const FVector	ToTarget = (LookAt - GetActorLocation()).GetSafeNormal2D();
+		if (!ToTarget.IsNearlyZero())
+		{
+			SetActorRotation(FRotator(0.f, ToTarget.Rotation().Yaw, 0.f));
+		}
 	}
 	this->PlayingInteractMontage = TargetMontage;
 	AnimInstance->Montage_Play(TargetMontage);

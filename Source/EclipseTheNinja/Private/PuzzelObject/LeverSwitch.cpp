@@ -56,7 +56,7 @@ void ALeverSwitch::Interact_Implementation(AActor* InActor)
 	this->bIsInteracted = true;
 	this->bIsToggled = !this->bIsToggled;
 	this->PlayLeverAnim();
-	IInteractor::Execute_PlayInteractMontage(InActor, nullptr);
+	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
 	GetWorldTimerManager().SetTimer(
 		InteractionCooldownTimer,
 		this,
