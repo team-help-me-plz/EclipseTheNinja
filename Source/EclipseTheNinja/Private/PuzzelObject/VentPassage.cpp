@@ -76,7 +76,8 @@ void AVentPassage::Interact_Implementation(AActor* InActor)
 	{
 		return;
 	}
-	ACharacter* TargetCharacter = Cast<ACharacter>(InActor);
+	// 분신은 벤트를 지나가지 않는다 (분신 조준에서도 CanCloneInteract로 걸러진다)
+	ACharacter* TargetCharacter = Cast<APlayerCharacter>(InActor);
 	if (!TargetCharacter)
 	{
 		return ;

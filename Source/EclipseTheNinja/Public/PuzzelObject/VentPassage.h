@@ -34,6 +34,8 @@ public:
 	virtual void			HideInteractionIndicator_Implementation() override;
 	virtual bool			bIsInteractReady_Implementation() override;
 	virtual EInteractState	GetInteractState_Implementation() override;
+	// 분신은 벤트를 지나가지 않는다
+	virtual bool			CanCloneInteract_Implementation() override { return (false); }
 
 	AVentPassage*	GetTargetVent() const { return (this->TargetVent); }
 
