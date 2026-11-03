@@ -222,9 +222,11 @@ void ABossSlashWave::LaunchDeflected(AActor* Deflector)
 	Movement->UpdateComponentVelocity();
 	SetActorRotation(Movement->Velocity.Rotation());
 
-	// 스스로 날아가는 이펙트는 이미 나간 입자가 따라오지 않으므로 새 방향으로 다시 재생한다.
+	// 스스로 날아가는 이펙트는 이미 나간 입자가 액터를 따라오지 않는다.
+	// Activate(true)만으로는 기존 입자가 지워지지 않아 원래 방향으로 계속 날아가므로, 먼저 즉시 지운 뒤 새 방향으로 다시 재생한다.
 	if (Effect->GetAsset())
 	{
+		Effect->DeactivateImmediate();
 		Effect->Activate(true);
 	}
 }
