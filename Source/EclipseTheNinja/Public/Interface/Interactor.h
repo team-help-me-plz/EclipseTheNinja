@@ -7,6 +7,7 @@
 #include "Interactor.generated.h"
 
 class ATargetPoint;
+class UAnimMontage;
 
 // This class does not need to be modified.
 UINTERFACE(MinimalAPI)
@@ -29,5 +30,9 @@ public:
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	void	ReturnToSafePoint();
+
+	// 상호작용 성공 시 상호작용 액터가 호출. InMontage가 nullptr이면 Interactor의 기본 몽타주를 재생
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+	void	PlayInteractMontage(UAnimMontage* InMontage);
 
 };

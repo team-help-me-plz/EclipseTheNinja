@@ -4,6 +4,10 @@
 #include "Component/InteractBoxComponent.h"
 #include "Interface/Interactable.h"
 
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Character.h"
+
 void UInteractBoxComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -30,6 +34,31 @@ void UInteractBoxComponent::TryInteract()
 	{
 		IInteractable::Execute_Interact(this->TargetActor.Get(), GetOwner());
 	}
+}
+
+void UInteractBoxComponent::PlayInteractMontage(UAnimMontage* InMontage)
+{
+	ACharacter*	OwnCharacter = Cast<ACharacter>(GetOwner());
+	if (!OwnCharacter)
+	{
+		return ;
+	}
+	UAnimInstance* AnimInstance = OwnCharacter->GetMesh() ? OwnCharacter->GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInstance)
+	{
+		return ;
+	}
+	UAnimMontage* TargetMontage = IsValid(InMontage) ? InMontage : this->InteractMontage.Get();
+	if (TargetMontage == nullptr)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[UInteractBoxComponent::PlayInteractMontage] InteractMontage가 유효하지 않습니다")
+		);
+		return ;
+	}
+	AnimInstance->Montage_Play(TargetMontage);
 }
 
 void UInteractBoxComponent::OnInteractBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

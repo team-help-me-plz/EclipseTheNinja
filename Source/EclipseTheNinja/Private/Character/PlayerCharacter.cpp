@@ -152,6 +152,8 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	// 사망 연출과 공격(콤보, 표창, 질풍참 등) 중에는 커서·이동 방향으로 몸을 돌리지 않는다.
 	if (bIsDead || IsAssassinating() || IsHiding() || IsAttacking()) return;
+	// 벤트 통과처럼 이동을 멈춰 둔 연출(MOVE_None) 중에도 커서로 몸을 돌리지 않는다.
+	if (GetCharacterMovement()->MovementMode == MOVE_None) return;
 
 	UpdateCursorTarget();
 	UpdateCursorFacing(DeltaSeconds);
@@ -1199,6 +1201,12 @@ void APlayerCharacter::ReturnToSafePoint_Implementation()
 	GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
 	SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
 	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
+}
+
+void APlayerCharacter::PlayInteractMontage_Implementation(UAnimMontage* InMontage)
+{
+	// 기본 몽타주와 재생은 InteractComponent가 맡는다
+	if (IsValid(InteractComponent)) InteractComponent->PlayInteractMontage(InMontage);
 }
 
 void APlayerCharacter::AddEngagedEnemy(AEnemy* InEnemy)

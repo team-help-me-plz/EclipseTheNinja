@@ -126,6 +126,7 @@ void ABaseDoor::Interact_Implementation(AActor* InActor)
 	);
 	this->bIsOpen = !this->bIsOpen;
 	this->RefreshInteractState();
+	IInteractor::Execute_PlayInteractMontage(InActor, nullptr);
 }
 
 void ABaseDoor::ShowInteractionIndicator_Implementation()

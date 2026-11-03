@@ -6,6 +6,8 @@
 #include "Components/BoxComponent.h"
 #include "InteractBoxComponent.generated.h"
 
+class UAnimMontage;
+
 /**
  * 
  */
@@ -20,6 +22,10 @@ public:
 	void	OnScrollInput(const int32 Direction);
 
 	void	TryInteract();
+
+	// 상호작용 성공 시 상호작용 액터가 호출. InMontage가 nullptr이면 Interactor의 기본 몽타주를 재생
+	UFUNCTION(BlueprintCallable)
+	void	PlayInteractMontage(UAnimMontage* InMontage);
 
 protected:
 	UFUNCTION()
@@ -46,6 +52,10 @@ protected:
 
 	// 겹친 액터가 MeshAssembly 같은 자식 액터라면 Interactable을 구현한 부모 액터를 찾아 반환
 	AActor*	ResolveInteractableActor(AActor* InActor) const;
+
+	// 상호작용 액터가 전용 몽타주를 넘기지 않았을 때 재생하는 기본 몽타주
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage")
+	TObjectPtr<UAnimMontage> InteractMontage = nullptr;
 
 private:
 	// 현재 Overlap된 상호작용 가능 액터 목록

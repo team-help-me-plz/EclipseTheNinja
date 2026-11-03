@@ -49,6 +49,7 @@ public:
 
 	virtual void	RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void	ReturnToSafePoint_Implementation() override;
+	virtual void	PlayInteractMontage_Implementation(UAnimMontage* InMontage) override;
 
 	// 수명이 끝나면 Destroy 대신 풀에 반환 (풀이 등록되지 않았으면 Destroy)
 	virtual void	LifeSpanExpired() override;
@@ -71,6 +72,15 @@ public:
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Margin")
 	float	TargetLocationMargin = 49.f;
+
+	// 상호작용 명령일 때 캡슐 가장자리에서 대상 액터의 경계까지 X축 거리가 이 값 이하이면 도착으로 본다
+	// 문처럼 막는 액터는 클릭 지점까지 갈 수 없으므로 클릭 지점 대신 대상의 경계를 기준으로 한다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Margin", meta = (ClampMin = "0.0"))
+	float	InteractReachDistance = 20.f;
+
+	// 상호작용 명령 중 막혀서 멈췄을 때, 캡슐 가장자리에서 대상 경계까지 X축 거리가 이 값 이하이면 도착으로 본다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Margin", meta = (ClampMin = "0.0"))
+	float	StuckInteractReachDistance = 100.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Margin")
 	FVector	InteractVelocity = FVector(0.f, 0.f, 500.f);
@@ -111,6 +121,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Move", meta = (ClampMin = "0.0"))
 	float	UnreachableOscillationTime = 0.5f;
 
+	// 이동 입력 중 수평 속도가 이 값보다 낮으면 막힌 것으로 본다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Move", meta = (ClampMin = "0.0"))
+	float	StuckSpeedThreshold = 10.f;
+
+	// 막힌 상태가 이 시간 이상 이어지면 상호작용 대상 근처면 도착, 아니면 도달 불가로 판정한다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Command|Move", meta = (ClampMin = "0.0"))
+	float	StuckTime = 0.3f;
+
 	void	OnInteractPlayerMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted);
 public:
 	// 마지막 명령의 목표 지점이 도달 불가로 판정되었는지
@@ -119,15 +137,24 @@ public:
 private:
 	float	TurnPauseRemaining = 0.f;
 
+	// 마지막으로 재생한 상호작용 몽타주. 상호작용 액터가 전용 몽타주를 넘길 수 있으므로 중단할 때 이것을 사용한다
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage>	PlayingInteractMontage = nullptr;
+
 	// 이동 중 방향을 뒤집은 횟수. 두 번째부터는 목표를 지나쳐 되돌아가는 왕복으로 본다
 	int32	WalkDirFlipCount = 0;
 	float	OscillationElapsed = 0.f;
+	// 이동 입력 중 막혀 있는 시간
+	float	StuckElapsed = 0.f;
 	bool	bIsTargetUnreachable = false;
 
 	void	ResetMoveProgress();
+	// 이동 명령은 목표 지점, 상호작용 명령은 대상 액터의 경계를 기준으로 도착했는지 판정
+	bool	HasReachedTarget(const FVector& InLocationDiff) const;
+	// 캡슐 가장자리에서 상호작용 대상의 충돌 경계까지 X축 거리. 상호작용 명령이 아니거나 경계를 구할 수 없으면 음수
+	float	GetDistanceToInteractTarget() const;
 	void	ResetInteractionCooldown();
 
-	void	PlayInteractMontage();
 	// 몽타주의 블렌드 아웃이 시작될 때 TargetPlayer를 날린다. 몽타주가 없거나 재생에 실패하면 즉시 날린다
 	void	PlayInteractPlayerMontage();
 	// TargetPlayer를 날리고 상호작용 쿨다운 타이머를 시작한다
