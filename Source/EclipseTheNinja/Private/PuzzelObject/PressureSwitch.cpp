@@ -10,6 +10,23 @@
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Pawn.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Util/EclipseCollisionChannels.h"
+
+namespace
+{
+	// 발판을 누를 수 있는 컴포넌트인지. 플레이어·분신 캡슐(Pawn)과 몬스터 캡슐(Monster)만 누른다.
+	bool IsPressingComponent(const UPrimitiveComponent* Component)
+	{
+		if (!IsValid(Component))
+		{
+			return false;
+		}
+
+		const ECollisionChannel ObjectType = Component->GetCollisionObjectType();
+
+		return ObjectType == ECC_Pawn || ObjectType == ECC_Monster;
+	}
+}
 
 APressureSwitch::APressureSwitch()
 {
@@ -28,6 +45,7 @@ APressureSwitch::APressureSwitch()
 	this->PressureTrigger->SetCollisionObjectType(ECC_WorldDynamic);
 	this->PressureTrigger->SetCollisionResponseToAllChannels(ECR_Ignore);
 	this->PressureTrigger->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	this->PressureTrigger->SetCollisionResponseToChannel(ECC_Monster, ECR_Overlap);
 	this->PressureTrigger->SetGenerateOverlapEvents(true);
 	SetRootComponent(this->PressureTrigger);
 
@@ -73,7 +91,7 @@ void APressureSwitch::PostInitializeComponents()
 void APressureSwitch::OnPressureBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	// 발판은 Pawn(캡슐 등)이 밟았을 때만 작동한다. InteractBox 같은 WorldDynamic 겹침은 무시
-	if (!IsValid(OtherComp) || OtherComp->GetCollisionObjectType() != ECC_Pawn)
+	if (!IsPressingComponent(OtherComp))
 	{
 		return ;
 	}
@@ -87,7 +105,7 @@ void APressureSwitch::OnPressureBeginOverlap(UPrimitiveComponent* OverlappedComp
 
 void APressureSwitch::OnPressureEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (!IsValid(OtherComp) || OtherComp->GetCollisionObjectType() != ECC_Pawn)
+	if (!IsPressingComponent(OtherComp))
 	{
 		return ;
 	}

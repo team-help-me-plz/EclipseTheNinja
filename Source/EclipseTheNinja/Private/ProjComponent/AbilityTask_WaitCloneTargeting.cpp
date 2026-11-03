@@ -182,6 +182,11 @@ void UAbilityTask_WaitCloneTargeting::UpdateTargetCandidate()
 	{
 		HitActor = HitActor->GetParentActor();
 	}
+	// 분신이 쓸 수 없는 액터(벤트, 은신구역 등)는 강조하지 않고 일반 이동 대상으로 취급한다
+	if (IsValid(HitActor) && !IInteractable::Execute_CanCloneInteract(HitActor))
+	{
+		HitActor = nullptr;
+	}
 	// 다 쓴(Done) 액터를 제외하고 커서 아래 상호작용 액터를 강조한다 (쿨다운 중이면 쿨다운 테두리)
 	if (IsValid(HitActor) && IInteractable::Execute_GetInteractState(HitActor) != EInteractState::Done)
 	{

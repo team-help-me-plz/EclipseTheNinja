@@ -10,6 +10,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Util/EclipseCollisionChannels.h"
 
 // Sets default values
 ABreakablePlatform::ABreakablePlatform()
@@ -77,6 +78,7 @@ void ABreakablePlatform::BeginPlay()
 		Mesh->SetCollisionObjectType(ECC_WorldDynamic);
 
 		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		Mesh->SetCollisionResponseToChannel(ECC_Monster, ECR_Block);
 	}
 }
 
@@ -159,6 +161,7 @@ void ABreakablePlatform::BreakPlatform()
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
 		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		Mesh->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
 	}
 	GetWorldTimerManager().SetTimer(
 		this->PlatformRestoreTimer,
@@ -208,6 +211,7 @@ void ABreakablePlatform::RestorePlatform()
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
 		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		Mesh->SetCollisionResponseToChannel(ECC_Monster, ECR_Block);
 	}
 }
 

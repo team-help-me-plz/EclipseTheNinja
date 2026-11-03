@@ -27,6 +27,8 @@ public:
 	virtual void	HideInteractionIndicator_Implementation() override;
 	virtual bool	bIsInteractReady_Implementation() override;
 	virtual EInteractState	GetInteractState_Implementation() override;
+	// 분신은 숨지 않는다
+	virtual bool	CanCloneInteract_Implementation() override { return (false); }
 
 	// 숨었을 때 플레이어가 서 있을 위치
 	FVector	GetHideLocation() const;

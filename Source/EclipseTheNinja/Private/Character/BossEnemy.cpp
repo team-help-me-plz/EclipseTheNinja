@@ -8,6 +8,7 @@
 #include "Component/BossEnemyVFXComponent.h"
 #include "Component/BossLostTargetComponent.h"
 #include "Component/EnemyDetectionComponent.h"
+#include "Component/EnemySpacingComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/DataTable.h"
@@ -31,6 +32,12 @@ ABossEnemy::ABossEnemy()
 
 	// 보스는 덩치가 커서 일반 적보다 먼 거리에서 발도를 시작한다.
 	AttackDistance = 250.0f;
+
+	// 보스는 혼자 움직이므로 다른 몬스터와 간격을 맞추지 않는다.
+	SpacingComp->SetKeepMonsterSpacing(false);
+
+	// 보스는 Pawn 채널 그대로 두어 플레이어와 부딪히게 한다.
+	bOverlapWithCharacters = false;
 
 	// 보스는 암살로 처치되어도 회복 아이템을 떨어뜨리지 않는다.
 	AssassinationDropComp->SetDropActorClass(nullptr);

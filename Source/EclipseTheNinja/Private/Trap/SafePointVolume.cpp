@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Interface/Interactor.h"
 #include "Engine/TargetPoint.h"
+#include "Util/EclipseCollisionChannels.h"
 
 // Sets default values
 ASafePointVolume::ASafePointVolume()
@@ -24,6 +25,9 @@ ASafePointVolume::ASafePointVolume()
 void ASafePointVolume::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 몬스터가 SafePoint에 막히지 않게 한다. Blueprint에 저장된 Custom 응답에는 Monster 채널이 없어 기본값 Block이 적용되므로 런타임에 지정한다.
+	this->CollisionBox->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
 
 	UE_LOG(
 		LogTemp,

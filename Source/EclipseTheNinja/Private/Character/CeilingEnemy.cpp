@@ -1105,7 +1105,7 @@ void ACeilingEnemy::ApplyHangMeshOffset(float Alpha)
 {
 	// 매달림 보정(매달림 몽타주 가중치)과 찍기 자세 보정(기습 몽타주 가중치)을 함께 적용한다.
 	const FVector HangOffset = HangMeshOffset + AutoHangMeshOffset;
-	GetMesh()->SetRelativeLocation(InitialMeshRelativeLocation + HangOffset * Alpha + AmbushBodyCorrection);
+	GetMesh()->SetRelativeLocation(InitialMeshRelativeLocation + HangOffset * Alpha + AmbushBodyCorrection + AppliedMeshYOffset);
 }
 
 bool ACeilingEnemy::IsAmbushAbilityActive() const

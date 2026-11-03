@@ -6,6 +6,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/ArrowComponent.h"
 #include "GameFramework/Pawn.h"
+#include "Util/EclipseCollisionChannels.h"
 
 ACheckpoint::ACheckpoint()
 {
@@ -30,6 +31,9 @@ ACheckpoint::ACheckpoint()
 void ACheckpoint::BeginPlay()
 {
     Super::BeginPlay();
+
+    // 몬스터가 체크포인트에 막히지 않게 한다. Trigger 프로필에는 Monster 채널이 없어 기본값 Block이 적용되므로 런타임에 지정한다.
+    this->ActivationTrigger->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
 
     this->ActivationTrigger->OnComponentBeginOverlap.AddDynamic(this, &ACheckpoint::OnTriggerBeginOverlap);
 

@@ -13,6 +13,7 @@ class UWidgetComponent;
 class UAnimMontage;
 class UGABaseAttack;
 class UEnemyDetectionComponent;
+class UEnemySpacingComponent;
 class UCheckpointBoundComponent;
 class UAssassinateTargetComponent;
 class UAssassinationDropComponent;
@@ -142,6 +143,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "AI|Movement")
 	float GetAIChaseSpeed() const { return ChaseSpeed; }
+
+	// 공격 쿨타임(NextAttackTime)이 지나 다음 공격을 시작할 수 있는 시각인지. 간격 유지보다 공격을 우선할지 정할 때 쓴다.
+	bool IsAIAttackCooldownReady() const;
 
 	UFUNCTION(BlueprintCallable, Category = "AI|State")
 	void SetBehaviorState(EEnemyBehaviorState NewState);
@@ -275,6 +279,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	virtual void MoveAlongX(float DestinationX, float Speed, float DeltaTime);
 
+	// MoveAlongX가 도착으로 보는 거리. 간격 유지도 같은 기준으로 멈춘다.
+	static constexpr float MoveArriveTolerance = 5.0f;
+
+	// 추격·공격 중 간격 유지, 포위, 낭떠러지 검사를 맡는 컴포넌트.
+	UEnemySpacingComponent* GetSpacingComponent() const { return SpacingComp; }
+
 	// 공격 도중 대상이 죽거나 사라져도 공격 분기를 유지할지. 기본은 대상이 유효할 때만 유지한다.
 	virtual bool ShouldFinishAttackWithoutTarget() const { return false; }
 
@@ -314,6 +324,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Combat", meta = (ClampMin = "0.1", Units = "s"))
 	float AttackActivationRetryDelay = 0.5f;
 
+	// 캡슐·메시가 Monster 채널을 써서 플레이어·다른 몬스터와 겹칠 수 있는지. 보스는 끈다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Monster Overlap")
+	bool bOverlapWithCharacters = true;
+
+	// 메시를 캡슐에서 월드 Y축으로 이만큼 옮긴다. 분신처럼 보는 방향과 관계없이 유지되며 충돌과 판정은 캡슐 기준 그대로다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster Overlap", meta = (Units = "cm", EditCondition = "bOverlapWithCharacters"))
+	float MeshYOffset = -35.0f;
+
+	// 추격·공격 중 간격 유지, 포위, 낭떠러지 검사를 맡는다. 간격 설정값은 이 컴포넌트에 있다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Spacing")
+	TObjectPtr<UEnemySpacingComponent> SpacingComp;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI")
 	EEnemyBehaviorState BehaviorState = EEnemyBehaviorState::Patrol;
 
@@ -349,8 +371,15 @@ protected:
 	ECollisionEnabled::Type InitialCapsuleCollision = ECollisionEnabled::QueryAndPhysics;
 	ECollisionEnabled::Type InitialMeshCollision = ECollisionEnabled::NoCollision;
 
-	// 암살 연출이 옮긴 메시 위치를 리스폰 때 되돌리기 위한 초기값
+	// 암살 연출이 옮긴 메시 위치를 리스폰 때 되돌리기 위한 초기값. MeshYOffset은 포함하지 않는다.
 	FVector InitialMeshRelativeLocation = FVector::ZeroVector;
+
+	// 지금 메시 상대 위치에 들어가 있는 MeshYOffset(액터 공간). 메시 위치를 직접 정하는 곳은 이 값을 더한다.
+	FVector AppliedMeshYOffset = FVector::ZeroVector;
+
+	// 보는 방향과 관계없이 메시가 캡슐에서 월드 Y로 MeshYOffset만큼 떨어지도록 맞춘다.
+	void UpdateMeshYOffset();
+	void OnRootTransformUpdated(USceneComponent* UpdatedComponent, EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport);
 
 
 

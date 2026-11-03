@@ -33,6 +33,8 @@
 #include "Components/SphereComponent.h"
 #include "Noise/NoiseTypes.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
+#include "Util/EclipseCollisionChannels.h"
+#include "Component/EnemySpacingComponent.h"
 
 // Sets default values
 AEnemy::AEnemy()
@@ -40,6 +42,10 @@ AEnemy::AEnemy()
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	EnemyDetectComponent = CreateDefaultSubobject<UEnemyDetectionComponent>(TEXT("EnemyDetectionComp"));
+
+	// 추격·공격 중 간격 유지, 포위, 낭떠러지 검사
+	SpacingComp = CreateDefaultSubobject<UEnemySpacingComponent>(TEXT("SpacingComp"));
+
 	AIControllerClass = AAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
@@ -82,10 +88,35 @@ void AEnemy::BeginPlay()
 
 	InitializeBehaviorArea();
 
+	if (bOverlapWithCharacters)
+	{
+		// 몬스터 캡슐은 Monster 채널을 쓰고 몬스터끼리는 통과한다. 간격은 MoveAlongX가 유지한다.
+		// Blueprint에 저장된 캡슐 충돌 설정보다 우선하도록 런타임에 지정한다.
+		GetCapsuleComponent()->SetCollisionObjectType(ECC_Monster);
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+
+		// 메시도 캐릭터 캡슐을 막지 않게 한다. 막으면 다른 몬스터 메시를 밟고 올라가 JumpOff로 튄다.
+		GetMesh()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		GetMesh()->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+	}
+
+	if (SpacingComp->IsAvoidingLedges())
+	{
+		// Blueprint에 예전 기본값(true)이 저장된 적도 낭떠러지에서 떨어지지 않게 런타임에 다시 지정한다.
+		GetCharacterMovement()->bCanWalkOffLedges = false;
+	}
+
 	// 리스폰 시 복원할 충돌 설정 저장
 	InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
 	InitialMeshCollision = GetMesh()->GetCollisionEnabled();
 	InitialMeshRelativeLocation = GetMesh()->GetRelativeLocation();
+
+	if (bOverlapWithCharacters)
+	{
+		// 몬스터가 돌아설 때마다 메시 오프셋을 다시 맞춘다.
+		GetRootComponent()->TransformUpdated.AddUObject(this, &AEnemy::OnRootTransformUpdated);
+		UpdateMeshYOffset();
+	}
 
 	// 체력 변화 델리게이트 바인딩
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
@@ -124,6 +155,12 @@ void AEnemy::InitializeBehaviorArea()
 void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(DeathDeactivateTimer);
+
+	// 메시 Y 오프셋용 루트 트랜스폼 바인딩 해제
+	if (GetRootComponent())
+	{
+		GetRootComponent()->TransformUpdated.RemoveAll(this);
+	}
 
 	// ASC 바인딩 해제
 	if (ASC)
@@ -410,6 +447,8 @@ void AEnemy::ResetToInitial_Implementation()
 	GetCapsuleComponent()->SetCollisionEnabled(InitialCapsuleCollision);
 	GetMesh()->SetCollisionEnabled(InitialMeshCollision);
 	GetMesh()->SetRelativeLocation(InitialMeshRelativeLocation);
+	AppliedMeshYOffset = FVector::ZeroVector;
+	UpdateMeshYOffset();
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->StopMovementImmediately();
@@ -594,6 +633,30 @@ void AEnemy::StopHorizontalMovement()
 	GetCharacterMovement()->Velocity = Velocity;
 }
 
+void AEnemy::UpdateMeshYOffset()
+{
+	if (!bOverlapWithCharacters)
+	{
+		return;
+	}
+
+	// 액터 회전을 상쇄한 오프셋으로 바꿔 넣는다. 이전에 넣은 값만 빼서 다른 연출이 옮긴 위치는 유지한다.
+	const FVector NewOffset = GetActorQuat().UnrotateVector(FVector(0.0f, MeshYOffset, 0.0f));
+
+	if (NewOffset.Equals(AppliedMeshYOffset, 0.01f))
+	{
+		return;
+	}
+
+	GetMesh()->SetRelativeLocation(GetMesh()->GetRelativeLocation() - AppliedMeshYOffset + NewOffset);
+	AppliedMeshYOffset = NewOffset;
+}
+
+void AEnemy::OnRootTransformUpdated(USceneComponent* UpdatedComponent, EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport)
+{
+	UpdateMeshYOffset();
+}
+
 void AEnemy::FaceDirection(float DirectionX)
 {
 	if (!FMath::IsNearlyZero(DirectionX))
@@ -604,19 +667,61 @@ void AEnemy::FaceDirection(float DirectionX)
 
 void AEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 {
+	const float RequestedDistanceX = DestinationX - GetActorLocation().X;
+
+	// 추격 중에만 간격을 유지한다. 순찰·수색에서 앞 몬스터에 막혀 목적지에 영영 못 가는 일을 막는다.
+	// 반대편으로 건너가는 동안은 대상 옆의 몬스터를 지나가야 하므로 간격을 보지 않는다.
+	// 대상 근처에서 공격할 수 있게 되면 앞 몬스터에 막혀 서 있지 않고 공격하러 간다.
+	const bool bUseSpacing = SpacingComp->IsKeepingMonsterSpacing()
+		&& BehaviorState == EEnemyBehaviorState::Chase
+		&& !SpacingComp->IsCrossingSurroundSide()
+		&& !SpacingComp->IsPrioritizingAttack();
+
+	if (bUseSpacing)
+	{
+		DestinationX = SpacingComp->ApplyMonsterSpacing(DestinationX);
+	}
+	else
+	{
+		SpacingComp->ClearSpacingHold();
+	}
+
 	if (GetWorld()->GetTimeSeconds() < ParryStunEndTime)
 	{
 		StopHorizontalMovement();
 		return;
 	}
 	const float DistanceX = DestinationX - GetActorLocation().X;
-	if (FMath::Abs(DistanceX) <= 5.0f || DeltaTime <= 0.0f)
+	if (FMath::Abs(DistanceX) <= MoveArriveTolerance || DeltaTime <= 0.0f)
 	{
+		// 간격 때문에 멈췄으면 원래 가려던 쪽을 바라보고 선다.
+		if (SpacingComp->IsHeldBySpacing())
+		{
+			FaceDirection(RequestedDistanceX);
+		}
+
+		// 추격 대상이 있으면 공격 태스크와 같은 기준(대상에서 먼 쪽이 양보)으로 비켜 선다.
+		// 기준이 다르면 추격 중인 몬스터와 공격 대기 중인 몬스터가 서로 상대가 비키기를 기다리며 겹친 채 멈춘다.
+		const AActor* SeparateFaceTarget = EnemyDetectComponent->GetCurrentTarget();
+
+		if (bUseSpacing && DeltaTime > 0.0f && SpacingComp->TrySeparateFromMonsters(Speed, DeltaTime, SeparateFaceTarget))
+		{
+			return;
+		}
+
 		StopHorizontalMovement();
 		return;
 	}
 
 	FaceDirection(DistanceX);
+
+	// 가려는 쪽이 낭떠러지면 가장자리 앞에서 멈춰 그쪽을 바라보고 선다.
+	if (SpacingComp->IsLedgeAhead(DistanceX))
+	{
+		StopHorizontalMovement();
+		return;
+	}
+
 	GetCharacterMovement()->MaxWalkSpeed = FMath::Min(FMath::Max(1.0f, Speed), FMath::Abs(DistanceX) / DeltaTime);
 
 	AddMovementInput(FVector::ForwardVector, FMath::Sign(DistanceX));
@@ -635,6 +740,12 @@ void AEnemy::SetBehaviorState(EEnemyBehaviorState NewState)
 	}
 	BehaviorState = NewState;
 	StopHorizontalMovement();
+
+	// 추격·공격이 끝나면 정해 둔 자리를 비운다. 다음 추격에서 다시 정한다.
+	if (NewState != EEnemyBehaviorState::Chase && NewState != EEnemyBehaviorState::Attack)
+	{
+		SpacingComp->ResetSurround();
+	}
 }
 
 void AEnemy::StartPatrol()
@@ -678,13 +789,33 @@ bool AEnemy::IsWithinAttackRange(AActor* Target) const
 
 bool AEnemy::CanStartAIAttack(AActor* Target) const
 {
-	return IsWithinAttackRange(Target);
+	// 반대편으로 건너가는 중에는 공격하지 않는다. 지나가다 공격하면 다시 한쪽에 몰린다.
+	return IsWithinAttackRange(Target) && !SpacingComp->IsCrossingSurroundSide();
 }
 
 void AEnemy::UpdateCombatMovement(AActor* Target, float DeltaSeconds)
 {
-	if (IsValidAITarget(Target) && DeltaSeconds > 0.0f)
-		MoveAlongX(Target->GetActorLocation().X, ChaseSpeed, DeltaSeconds);
+	if (!IsValidAITarget(Target) || DeltaSeconds <= 0.0f)
+	{
+		return;
+	}
+
+	// 대상 간격과 포위 자리를 반영한 목적지를 받는다.
+	const float	TargetX = Target->GetActorLocation().X;
+	const float	DestinationX = SpacingComp->UpdateCombatDestinationX(Target);
+
+	// 대상이 다가와 목적지가 내 뒤로 넘어가도 돌아서 걷지 않고, 그 자리에서 대상을 보고 버틴다.
+	const float	MyX = GetActorLocation().X;
+	const bool	bDestinationBehind = (DestinationX - MyX) * (TargetX - MyX) < 0.0f;
+
+	if (!SpacingComp->IsCrossingSurroundSide() && bDestinationBehind)
+	{
+		StopHorizontalMovement();
+		FaceDirection(TargetX - MyX);
+		return;
+	}
+
+	MoveAlongX(DestinationX, ChaseSpeed, DeltaSeconds);
 }
 
 float AEnemy::GetCombatSightRadius() const
@@ -705,6 +836,11 @@ void AEnemy::FaceLocation(const FVector& Location)
 void AEnemy::NotifyNoise(const FVector& InLocation, const float InRadius, const float InStrength)
 {
 	this->EnemyDetectComponent->NotifyNoise(InLocation, InRadius, InStrength);
+}
+
+bool AEnemy::IsAIAttackCooldownReady() const
+{
+	return GetWorld()->GetTimeSeconds() >= NextAttackTime;
 }
 
 bool AEnemy::TryStartAIBaseAttack(AActor* Target)

@@ -16,6 +16,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Util/EclipseCollisionChannels.h"
 
 // Sets default values
 ABurnableVine::ABurnableVine()
@@ -68,6 +69,7 @@ void ABurnableVine::BeginPlay()
 	if (this->bIsBlockPath)
 	{
 		this->CollisionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		this->CollisionBox->SetCollisionResponseToChannel(ECC_Monster, ECR_Block);
 	}
 	if (this->TargetActor && this->TargetActor->Implements<UVineLockable>())
 	{
@@ -103,6 +105,7 @@ void ABurnableVine::ResetToInitial_Implementation()
 	if (this->bIsBlockPath)
 	{
 		this->CollisionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+		this->CollisionBox->SetCollisionResponseToChannel(ECC_Monster, ECR_Block);
 	}
 	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다.
 	this->BurnEffect->DeactivateImmediate();
@@ -155,6 +158,7 @@ void ABurnableVine::FinishBurn()
 	if (this->bIsBlockPath)
 	{
 		this->CollisionBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		this->CollisionBox->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
 	}
 	if (this->TargetActor && this->TargetActor->Implements<UVineLockable>())
 	{

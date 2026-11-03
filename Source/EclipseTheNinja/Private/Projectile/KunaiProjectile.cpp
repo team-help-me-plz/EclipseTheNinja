@@ -15,6 +15,7 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Util/EclipseCollisionChannels.h"
 
 AKunaiProjectile::AKunaiProjectile()
 {
@@ -31,6 +32,7 @@ AKunaiProjectile::AKunaiProjectile()
     Collision->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
     Collision->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
     Collision->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+    Collision->SetCollisionResponseToChannel(ECC_Monster, ECR_Block);
     Collision->SetGenerateOverlapEvents(false);
     Collision->CanCharacterStepUpOn = ECB_No;
 

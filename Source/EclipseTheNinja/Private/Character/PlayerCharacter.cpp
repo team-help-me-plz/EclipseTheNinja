@@ -43,6 +43,7 @@
 #include "GAS/Ability/GAWallSlide.h"
 #include "Character/Enemy.h"
 #include "Component/HidingComponent.h"
+#include "Util/EclipseCollisionChannels.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -125,6 +126,12 @@ void APlayerCharacter::BeginPlay()
   WarnIfAbilityMissing(EAbilityInputID::ThrowKunai);
   WarnIfAbilityMissing(EAbilityInputID::ElementalFire);
   JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
+
+  // 플레이어는 몬스터를 통과한다. Blueprint에 저장된 캡슐 충돌 설정보다 우선하도록 런타임에 지정한다.
+  GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+
+  // 메시가 몬스터 캡슐을 막으면 몬스터가 플레이어 메시를 밟고 튄다.
+  GetMesh()->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
   FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
 	// 체력 변화 델리게이트 바인딩
@@ -157,6 +164,10 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 	if (IsParrying()) return;
 	// 사망 연출과 공격(콤보, 표창, 질풍참 등) 중에는 커서·이동 방향으로 몸을 돌리지 않는다.
 	if (bIsDead || IsAssassinating() || IsHiding() || IsAttacking()) return;
+	// 벤트 통과처럼 이동을 멈춰 둔 연출(MOVE_None) 중에도 커서로 몸을 돌리지 않는다.
+	if (GetCharacterMovement()->MovementMode == MOVE_None) return;
+	// 상호작용 몽타주 중에는 상호작용 대상을 바라본 채로 둔다.
+	if (IsValid(InteractComponent) && InteractComponent->IsPlayingInteractMontage()) return;
 
 	UpdateCursorTarget();
 	UpdateCursorFacing(DeltaSeconds);
@@ -1217,6 +1228,12 @@ void APlayerCharacter::ReturnToSafePoint_Implementation()
 	GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
 	SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
 	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
+}
+
+void APlayerCharacter::PlayInteractMontage_Implementation(AActor* InInteractable, UAnimMontage* InMontage)
+{
+	// 방향 맞추기, 입력 잠금, 재생은 InteractComponent가 맡는다
+	if (IsValid(InteractComponent)) InteractComponent->PlayInteractMontage(InInteractable, InMontage);
 }
 
 void APlayerCharacter::AddEngagedEnemy(AEnemy* InEnemy)
