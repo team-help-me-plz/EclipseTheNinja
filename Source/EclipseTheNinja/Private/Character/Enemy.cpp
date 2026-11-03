@@ -108,8 +108,9 @@ void AEnemy::BeginPlay()
 	}
 
 	// 리스폰 시 복원할 충돌 설정 저장
-	InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
-	InitialMeshCollision = GetMesh()->GetCollisionEnabled();
+	// 풀은 액터 충돌을 끈 채 BeginPlay를 부르므로, 액터 설정을 빼고 컴포넌트 자체 값을 읽는다.
+	InitialCapsuleCollision = GetCapsuleComponent()->BodyInstance.GetCollisionEnabled(false);
+	InitialMeshCollision = GetMesh()->BodyInstance.GetCollisionEnabled(false);
 	InitialMeshRelativeLocation = GetMesh()->GetRelativeLocation();
 
 	if (bOverlapWithCharacters)
@@ -548,6 +549,48 @@ void AEnemy::RestartAI()
 
 	// 정지된 트리는 마지막으로 실행한 에셋으로 루트부터 다시 시작한다.
 	BTComp->RestartTree();
+}
+
+void AEnemy::SuspendAIForScriptedMove()
+{
+	// BT가 이동 입력을 넣지 않도록 먼저 멈춘다.
+	if (AAIController* AIController = Cast<AAIController>(GetController()))
+	{
+		AIController->StopMovement();
+
+		if (UBrainComponent* Brain = AIController->GetBrainComponent())
+		{
+			Brain->StopLogic(TEXT("ScriptedMove"));
+		}
+	}
+
+	StopHorizontalMovement();
+	BehaviorState = EEnemyBehaviorState::Idle;
+	CombatTarget.Reset();
+
+	// 연출 중에는 발각 범위 UI와 감지를 끈다.
+	EnemyDetectComponent->StopDetection();
+}
+
+void AEnemy::ResumeAIAfterScriptedMove(AActor* CombatActor)
+{
+	if (bIsDead)
+	{
+		return;
+	}
+
+	// 연출로 옮겨 온 자리를 새 활동 영역과 이동 평면의 기준으로 삼는다.
+	InitializeBehaviorArea();
+
+	// 감지를 다시 켜고, 대상이 있으면 맞았을 때처럼 바로 전투 상태로 만든다.
+	EnemyDetectComponent->ResetDetection();
+
+	if (CombatActor)
+	{
+		EnemyDetectComponent->NotifyDamaged(CombatActor);
+	}
+
+	RestartAI();
 }
 
 // Called every frame

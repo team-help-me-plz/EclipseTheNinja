@@ -305,6 +305,12 @@ public:
 	// 공격 도중 대상이 죽거나 사라져도 공격 분기를 유지할지. 기본은 대상이 유효할 때만 유지한다.
 	virtual bool ShouldFinishAttackWithoutTarget() const { return false; }
 
+	// 등장 연출처럼 AI 대신 직접 움직일 때 호출한다. BT, 이동, 감지를 멈춘다.
+	void SuspendAIForScriptedMove();
+
+	// 멈춘 AI를 현재 위치를 활동 영역 중심으로 삼아 다시 시작한다. CombatActor가 있으면 바로 전투에 들어간다.
+	void ResumeAIAfterScriptedMove(AActor* CombatActor);
+
 protected:
 	/** 시야 감지와 Blackboard 갱신을 담당한다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI|Detection")

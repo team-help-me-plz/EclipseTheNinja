@@ -23,6 +23,8 @@ enum class EAbilityInputID : uint8
     // 천장 매복 적의 낙하 기습 공격
     CeilingAmbush = 11,
     Parry = 12,
+    // 지원을 부르는 적의 동료 소환
+    SummonAllies = 13,
     CloneTech = 100,
     ElementalFire = 200,
 };
