@@ -145,6 +145,7 @@ void APlayerCharacter::BeginPlay()
 			if (UGAParry::TryParryIncomingEffect(ASC, Spec)) return false;
 			return true;
 		}));
+	SyncDebugInvincibleTag();
 
 	// TOOD 변수로 만들기
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
@@ -1354,6 +1355,42 @@ void APlayerCharacter::SetParryMovementLocked(bool bLocked)
 
     Movement->SetMovementMode(static_cast<EMovementMode>(SavedParryMovementMode), SavedParryCustomMovementMode);
 }
+
+void APlayerCharacter::SetDebugInvincible(bool bEnable)
+{
+    bDebugInvincible = bEnable;
+    SyncDebugInvincibleTag();
+}
+
+void APlayerCharacter::SyncDebugInvincibleTag()
+{
+    // 에디터 월드에 놓인 액터에서 체크를 바꿀 때는 값만 저장하고, 게임(PIE) 월드에서만 태그를 붙인다.
+    if (!GetWorld() || !GetWorld()->IsGameWorld()) return;
+    if (!IsValid(ASC) || bDebugInvincibleTagApplied == bDebugInvincible) return;
+
+    if (bDebugInvincible)
+    {
+        ASC->AddLooseGameplayTag(EclipseGameplayTags::State_Invincible);
+    }
+    else
+    {
+        ASC->RemoveLooseGameplayTag(EclipseGameplayTags::State_Invincible);
+    }
+    bDebugInvincibleTagApplied = bDebugInvincible;
+}
+
+#if WITH_EDITOR
+void APlayerCharacter::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+    Super::PostEditChangeProperty(PropertyChangedEvent);
+
+    // PIE 중 디테일 패널에서 체크를 바꾸면 바로 태그를 맞춘다.
+    if (PropertyChangedEvent.GetPropertyName() == GET_MEMBER_NAME_CHECKED(APlayerCharacter, bDebugInvincible))
+    {
+        SyncDebugInvincibleTag();
+    }
+}
+#endif
 
 void APlayerCharacter::ApplyUnlockedAbilities(const TArray<EAbilityInputID>& Unlocked)
 {
