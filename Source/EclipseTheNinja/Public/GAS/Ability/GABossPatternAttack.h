@@ -55,7 +55,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Damage", meta = (ClampMin = "0.0"))
 	float Damage = 30.0f;
 
-	/** 근접 패턴 BP에서 허용 여부를 지정한다. */
+	/** 끄면 피해 Spec에 Attack.Unparryable 태그를 붙여 패링 판정 중에도 피해가 들어간다. */
 	UPROPERTY(EditDefaultsOnly, Category="Pattern|Parry")
 	bool bCanBeParried = true;
 };

@@ -138,6 +138,14 @@ void APlayerCharacter::BeginPlay()
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
 		.AddUObject(this, &APlayerCharacter::OnHealthChanged);
 
+	// 패링 판정 중 들어온 적의 공격은 피해 대신 패링(적 경직/투사체 튕겨내기)으로 처리한다.
+	ASC->GameplayEffectApplicationQueries.Add(FGameplayEffectApplicationQuery::CreateWeakLambda(this,
+		[this](const FActiveGameplayEffectsContainer&, const FGameplayEffectSpec& Spec)
+		{
+			if (UGAParry::TryParryIncomingEffect(ASC, Spec)) return false;
+			return true;
+		}));
+
 	// TOOD 변수로 만들기
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->MaxFlySpeed = 121.f;
@@ -1282,6 +1290,10 @@ void APlayerCharacter::DoParry()
 {
 	if (bIsDead) return;
 	if (!ASC) return;
+	if (IsParrying()) return;
+
+	// 패링 판정은 바라보는 방향 기준이므로, 회전 중간 각도가 아니라 이동 입력·커서가 정한 최종 방향으로 먼저 돌린다.
+	SnapToFacingTarget();
 
 	TryActivateAbilityByInputID(EAbilityInputID::Parry);
 }
@@ -1315,9 +1327,19 @@ void APlayerCharacter::SetParryMovementLocked(bool bLocked)
         }
         SetCursorFacingActive(false);
 
-        // 입력뿐 아니라 관성과 몽타주 루트 모션에 의한 이동도 막는다.
         StopJumping();
         ConsumeMovementInputVector();
+
+        // 공중에서 이동을 끄면 그 자리에 떠 있게 되므로 수평 관성과 상승만 지우고 계속 떨어지게 한다.
+        if (Movement->IsFalling())
+        {
+            Movement->Velocity.X = 0.0f;
+            Movement->Velocity.Y = 0.0f;
+            Movement->Velocity.Z = FMath::Min(Movement->Velocity.Z, 0.0f);
+            return;
+        }
+
+        // 입력뿐 아니라 관성과 몽타주 루트 모션에 의한 이동도 막는다.
         Movement->StopMovementImmediately();
         Movement->DisableMovement();
         return;

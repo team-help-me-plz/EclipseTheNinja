@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameplayEffectTypes.h"
+#include "Interface/ParryDeflectable.h"
 #include "BossSlashWave.generated.h"
 
 class UAbilitySystemComponent;
@@ -26,7 +27,7 @@ class UStaticMeshComponent;
  * 피해는 발사한 어빌리티가 만든 GE Spec을 그대로 적용한다.
  */
 UCLASS()
-class ECLIPSETHENINJA_API ABossSlashWave : public AActor
+class ECLIPSETHENINJA_API ABossSlashWave : public AActor, public IParryDeflectable
 {
 	GENERATED_BODY()
 
@@ -43,6 +44,9 @@ public:
 
 	// 디버그용으로 HitBox(빨강)와 이동용 Collision(노랑)을 게임 화면에 보이게 하고, 피해를 준 지점을 표시한다.
 	void SetDrawDebug(bool bEnable);
+
+	// 튕겨내면 사라지지 않고 반대로 날아가며, 그때부터는 적만 맞힌다.
+	virtual bool Deflect(AActor* Deflector) override;
 
 protected:
 	virtual void BeginPlay() override;
@@ -69,6 +73,9 @@ protected:
 
 	// 소멸 이펙트를 남기고 액터를 제거한다.
 	void Dissipate(const FVector& Location);
+
+	// 튕겨낸 쪽을 시전자로 삼고 진행 방향을 뒤집는다.
+	void LaunchDeflected(AActor* Deflector);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Slash Wave")
 	TObjectPtr<USphereComponent> Collision;
@@ -113,6 +120,12 @@ private:
 	TSet<TWeakObjectPtr<AActor>> DamagedActors;
 
 	bool bDissipated = false;
+
+	// 패링으로 튕겨난 뒤인지. 켜지면 플레이어 대신 적을 맞힌다.
+	bool bDeflected = false;
+
+	// 피해 적용 중 패링으로 튕겨낸 액터. 피해 적용이 끝난 뒤 방향을 바꾼다.
+	TWeakObjectPtr<AActor> PendingDeflector;
 
 	bool bDrawDebug = false;
 };

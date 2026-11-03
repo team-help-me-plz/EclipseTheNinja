@@ -9,7 +9,8 @@ namespace EclipseGameplayTags
 	ECLIPSETHENINJA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Parry);
 	ECLIPSETHENINJA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Parrying);
 	ECLIPSETHENINJA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ParryWindow);
-	ECLIPSETHENINJA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Parry_Success);
+	// 패링할 수 없는 공격. 피해 GE 에셋 태그나 Spec의 동적 에셋 태그로 붙인다.
+	ECLIPSETHENINJA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack_Unparryable);
 	ECLIPSETHENINJA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Parry_Success);
 	// ---------- 불속성 ----------
 	// 불속성 어빌리티 자체를 가리키는 에셋 태그

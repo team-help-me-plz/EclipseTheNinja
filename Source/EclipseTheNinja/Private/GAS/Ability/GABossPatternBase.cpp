@@ -40,12 +40,15 @@ bool UGABossPatternBase::CanActivateAbility(
 		return false;
 	}
 
-	const AEnemy* StunTarget = ActorInfo ? Cast<AEnemy>(ActorInfo->AvatarActor.Get()) : nullptr;
-	if (StunTarget && StunTarget->IsPlayingHitReaction()) return false;
-
 	// 몽타주와 재생할 애님 인스턴스가 있어야 한다.
 	const AEnemy* Enemy = ActorInfo ? Cast<AEnemy>(ActorInfo->AvatarActor.Get()) : nullptr;
 	if (!Enemy || !PatternMontage)
+	{
+		return false;
+	}
+
+	// 피격·패링 경직 중에는 새 패턴을 시작하지 않는다.
+	if (Enemy->IsPlayingHitReaction())
 	{
 		return false;
 	}
