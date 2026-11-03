@@ -5,6 +5,7 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "TimerManager.h"
 
 UAssassinationDropComponent::UAssassinationDropComponent()
 {
@@ -46,7 +47,7 @@ void UAssassinationDropComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 		CheckpointSubsystem->OnRespawned.RemoveDynamic(this, &UAssassinationDropComponent::HandleCheckpointRespawned);
 	}
 
-	bPendingDrop = false;
+	CancelPendingDrop();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -54,25 +55,68 @@ void UAssassinationDropComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 void UAssassinationDropComponent::HandleEnemyDied(AEnemy* Enemy, bool bByAssassination)
 {
 	// 사망할 때마다 덮어쓰므로, 리셋/풀 반환으로 사라지기 전에 되살아난 경우에도 이전 값이 남지 않는다.
+	CancelPendingDrop();
 	bPendingDrop = bByAssassination && DropActorClass != nullptr;
+
+	if (!bPendingDrop || !bUseDropDelay)
+	{
+		return;
+	}
+
+	// 지연 시간이 0이면 타이머 없이 바로 떨어뜨린다.
+	if (DropDelay <= 0.0f)
+	{
+		SpawnPendingDrop();
+		return;
+	}
+
+	GetWorld()->GetTimerManager().SetTimer(
+		DropDelayTimer,
+		this,
+		&UAssassinationDropComponent::HandleDropDelayElapsed,
+		DropDelay,
+		false
+	);
 }
 
 void UAssassinationDropComponent::HandleEnemyDeathFinished(AEnemy* Enemy)
 {
+	// 지연 시간보다 시체가 먼저 사라지면, 풀 대기 위치로 옮겨지기 전인 지금 떨어뜨린다.
+	SpawnPendingDrop();
+}
+
+void UAssassinationDropComponent::HandleDropDelayElapsed()
+{
+	SpawnPendingDrop();
+}
+
+void UAssassinationDropComponent::SpawnPendingDrop()
+{
+	AEnemy* Enemy = Cast<AEnemy>(GetOwner());
 	if (!bPendingDrop || !IsValid(Enemy))
 	{
 		return;
 	}
 
-	bPendingDrop = false;
+	CancelPendingDrop();
 
 	// 암살 연출이 메시를 옮겨 둘 수 있으므로 캡슐이 아닌 메시 위치(시체 위치)를 기준으로 한다.
 	SpawnDropActor(Enemy->GetMesh()->GetComponentLocation() + SpawnOffset);
 }
 
-void UAssassinationDropComponent::HandleCheckpointRespawned(ECheckpointId CheckpointId)
+void UAssassinationDropComponent::CancelPendingDrop()
 {
 	bPendingDrop = false;
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DropDelayTimer);
+	}
+}
+
+void UAssassinationDropComponent::HandleCheckpointRespawned(ECheckpointId CheckpointId)
+{
+	CancelPendingDrop();
 }
 
 void UAssassinationDropComponent::SpawnDropActor(const FVector& SpawnLocation)

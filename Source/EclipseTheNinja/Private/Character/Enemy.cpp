@@ -73,6 +73,10 @@ AEnemy::AEnemy()
 	{
 		AssassinationDropComp->SetDropActorClass(HealPickupClass.Class);
 	}
+
+	// 시체가 사라질 때까지 기다리지 않고 암살 시작 4초 뒤에 떨어뜨린다.
+	AssassinationDropComp->SetDropDelay(true, 4.0f);
+
 	NoiseDetectComponent = CreateDefaultSubobject<USphereComponent>(TEXT("NoiseDetectComponent"));
 	NoiseDetectComponent->SetupAttachment(RootComponent);
 	NoiseDetectComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
