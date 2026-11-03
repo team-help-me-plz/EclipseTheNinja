@@ -15,6 +15,7 @@
 #include "TimerManager.h"
 #include "GAS/Ability/GALedgeHang.h"
 #include "GAS/Ability/GALedgeClimb.h"
+#include "Util/EclipseCollisionChannels.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallAttach, "Ability.Movement.WallAttach");
 // 벽 매달리기·모서리 매달리기·오르기 상태의 공통 부모. 막을 때는 이 태그 하나로 막는다.
@@ -310,10 +311,18 @@ bool UGAWallAttach::FindWall(const ACharacter* Player, FHitResult& OutHit, bool*
 	const auto* BodyHitComponent = BodyHit.GetComponent();
 	if (!IsValid(BodyHitComponent)) return false;
 	if (BodyHitComponent->GetCollisionObjectType() == ECC_Pawn) return false;
+	if (BodyHitComponent->GetCollisionObjectType() == ECC_Monster)
+	{
+		return false;
+	}
 
 	const auto* HeadHitComponent = HeadHit.GetComponent();
 	if (!IsValid(HeadHitComponent)) return false;
 	if (HeadHitComponent->GetCollisionObjectType() == ECC_Pawn) return false;
+	if (HeadHitComponent->GetCollisionObjectType() == ECC_Monster)
+	{
+		return false;
+	}
 
 	// 머리와 몸통의 결과가 다른 곳인지 확인 (계단 형태인지 확인)
 	if (FMath::Abs(BodyHit.Distance - HeadHit.Distance) > MaxWallDepthDiff) return false;

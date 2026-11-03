@@ -41,6 +41,7 @@
 #include "GAS/Ability/GAWallSlide.h"
 #include "Character/Enemy.h"
 #include "Component/HidingComponent.h"
+#include "Util/EclipseCollisionChannels.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -121,6 +122,12 @@ void APlayerCharacter::BeginPlay()
   WarnIfAbilityMissing(EAbilityInputID::ThrowKunai);
   WarnIfAbilityMissing(EAbilityInputID::ElementalFire);
   JumpMaxCount = 1; // 기존 BP에 남은 점프 횟수 설정도 1회로 맞춘다.
+
+  // 플레이어는 몬스터를 통과한다. Blueprint에 저장된 캡슐 충돌 설정보다 우선하도록 런타임에 지정한다.
+  GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+
+  // 메시가 몬스터 캡슐을 막으면 몬스터가 플레이어 메시를 밟고 튄다.
+  GetMesh()->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
   FacingTargetYaw = GetActorForwardVector().X >= 0.0f ? 0.0f : 180.0f;
 
 	// 체력 변화 델리게이트 바인딩

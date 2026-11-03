@@ -276,6 +276,9 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 	// 폰이랑 쿼리 확인
 	FCollisionObjectQueryParams ObjectParams;
 	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
+
+	// 몬스터 캡슐은 Monster 채널을 쓴다
+	ObjectParams.AddObjectTypesToQuery(ECC_Monster);
 	if (bIsFire)
 	{
 		ObjectParams.AddObjectTypesToQuery(ECC_Vine);   // 불속성일 때만 덩굴도 맞는다

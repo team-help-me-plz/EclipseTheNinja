@@ -35,6 +35,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/AssetManager.h"
+#include "Util/EclipseCollisionChannels.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStrike, "Ability.Attack.SwiftStrike");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStriking, "State.SwiftStriking");
@@ -778,6 +779,8 @@ void UGASwiftStrike::CollectTargets(const ACharacter* Player, const FVector& Sta
 	TArray<FHitResult> Hits;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SwiftStrike), false, Player);
 	FCollisionObjectQueryParams ObjectParam(ECC_Pawn);
+	// 몬스터 캡슐은 Monster 채널을 쓴다
+	ObjectParam.AddObjectTypesToQuery(ECC_Monster);
 
 	GetWorld()->SweepMultiByObjectType(Hits, Start, End, FQuat::Identity, ObjectParam, Shape, Params);
 

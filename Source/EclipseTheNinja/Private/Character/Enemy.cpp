@@ -33,6 +33,26 @@
 #include "Components/SphereComponent.h"
 #include "Noise/NoiseTypes.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
+#include "Util/EclipseCollisionChannels.h"
+#include "EngineUtils.h"
+
+namespace
+{
+	// MoveAlongX가 도착으로 보는 거리. 간격 유지도 같은 기준으로 멈춘다.
+	constexpr float MoveArriveTolerance = 5.0f;
+
+	// 대상이 이 속도보다 느리면 멈춘 것으로 본다. 움직이는 대상에게는 물러나지 않고 버틴다.
+	constexpr float TargetStillSpeed = 10.0f;
+
+	// 대상 간격을 이만큼 넘게 침범당해야 물러나기 시작한다. 조금 겹친 정도로는 움찔거리지 않게 한다.
+	constexpr float TargetBackAwayStartDepth = 15.0f;
+
+	// 캡슐 가장자리에서 이만큼 앞의 바닥을 검사해 낭떠러지를 미리 알아챈다.
+	constexpr float LedgeProbeDistance = 20.0f;
+
+	// 바닥 검사 트레이스를 발밑 계단 높이보다 이만큼 더 깊게 쏜다.
+	constexpr float LedgeProbeExtraDepth = 10.0f;
+}
 
 // Sets default values
 AEnemy::AEnemy()
@@ -82,10 +102,35 @@ void AEnemy::BeginPlay()
 
 	InitializeBehaviorArea();
 
+	if (bOverlapWithCharacters)
+	{
+		// 몬스터 캡슐은 Monster 채널을 쓰고 몬스터끼리는 통과한다. 간격은 MoveAlongX가 유지한다.
+		// Blueprint에 저장된 캡슐 충돌 설정보다 우선하도록 런타임에 지정한다.
+		GetCapsuleComponent()->SetCollisionObjectType(ECC_Monster);
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+
+		// 메시도 캐릭터 캡슐을 막지 않게 한다. 막으면 다른 몬스터 메시를 밟고 올라가 JumpOff로 튄다.
+		GetMesh()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		GetMesh()->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+	}
+
+	if (bAvoidLedges)
+	{
+		// Blueprint에 예전 기본값(true)이 저장된 적도 낭떠러지에서 떨어지지 않게 런타임에 다시 지정한다.
+		GetCharacterMovement()->bCanWalkOffLedges = false;
+	}
+
 	// 리스폰 시 복원할 충돌 설정 저장
 	InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
 	InitialMeshCollision = GetMesh()->GetCollisionEnabled();
 	InitialMeshRelativeLocation = GetMesh()->GetRelativeLocation();
+
+	if (bOverlapWithCharacters)
+	{
+		// 몬스터가 돌아설 때마다 메시 오프셋을 다시 맞춘다.
+		GetRootComponent()->TransformUpdated.AddUObject(this, &AEnemy::OnRootTransformUpdated);
+		UpdateMeshYOffset();
+	}
 
 	// 체력 변화 델리게이트 바인딩
 	HealthChangedDelegateHandle = ASC->GetGameplayAttributeValueChangeDelegate(UStatAttributeSet::GetHealthAttribute())
@@ -409,6 +454,8 @@ void AEnemy::ResetToInitial_Implementation()
 	GetCapsuleComponent()->SetCollisionEnabled(InitialCapsuleCollision);
 	GetMesh()->SetCollisionEnabled(InitialMeshCollision);
 	GetMesh()->SetRelativeLocation(InitialMeshRelativeLocation);
+	AppliedMeshYOffset = FVector::ZeroVector;
+	UpdateMeshYOffset();
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->StopMovementImmediately();
@@ -592,6 +639,30 @@ void AEnemy::StopHorizontalMovement()
 	GetCharacterMovement()->Velocity = Velocity;
 }
 
+void AEnemy::UpdateMeshYOffset()
+{
+	if (!bOverlapWithCharacters)
+	{
+		return;
+	}
+
+	// 액터 회전을 상쇄한 오프셋으로 바꿔 넣는다. 이전에 넣은 값만 빼서 다른 연출이 옮긴 위치는 유지한다.
+	const FVector NewOffset = GetActorQuat().UnrotateVector(FVector(0.0f, MeshYOffset, 0.0f));
+
+	if (NewOffset.Equals(AppliedMeshYOffset, 0.01f))
+	{
+		return;
+	}
+
+	GetMesh()->SetRelativeLocation(GetMesh()->GetRelativeLocation() - AppliedMeshYOffset + NewOffset);
+	AppliedMeshYOffset = NewOffset;
+}
+
+void AEnemy::OnRootTransformUpdated(USceneComponent* UpdatedComponent, EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport)
+{
+	UpdateMeshYOffset();
+}
+
 void AEnemy::FaceDirection(float DirectionX)
 {
 	if (!FMath::IsNearlyZero(DirectionX))
@@ -602,17 +673,335 @@ void AEnemy::FaceDirection(float DirectionX)
 
 void AEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 {
-	const float DistanceX = DestinationX - GetActorLocation().X;
-	if (FMath::Abs(DistanceX) <= 5.0f || DeltaTime <= 0.0f)
+	const float RequestedDistanceX = DestinationX - GetActorLocation().X;
+
+	// 추격 중에만 간격을 유지한다. 순찰·수색에서 앞 몬스터에 막혀 목적지에 영영 못 가는 일을 막는다.
+	// 반대편으로 건너가는 동안은 대상 옆의 몬스터를 지나가야 하므로 간격을 보지 않는다.
+	const bool bUseSpacing = bKeepMonsterSpacing
+		&& BehaviorState == EEnemyBehaviorState::Chase
+		&& !bCrossingSurroundSide;
+
+	if (bUseSpacing)
 	{
+		DestinationX = ApplyMonsterSpacing(DestinationX);
+	}
+	else
+	{
+		bHeldBySpacing = false;
+	}
+
+	const float DistanceX = DestinationX - GetActorLocation().X;
+	if (FMath::Abs(DistanceX) <= MoveArriveTolerance || DeltaTime <= 0.0f)
+	{
+		// 간격 때문에 멈췄으면 원래 가려던 쪽을 바라보고 선다.
+		if (bHeldBySpacing)
+		{
+			FaceDirection(RequestedDistanceX);
+		}
+
+		if (bUseSpacing && DeltaTime > 0.0f && TrySeparateFromMonsters(Speed, DeltaTime))
+		{
+			return;
+		}
+
 		StopHorizontalMovement();
 		return;
 	}
 
 	FaceDirection(DistanceX);
+
+	// 가려는 쪽이 낭떠러지면 가장자리 앞에서 멈춰 그쪽을 바라보고 선다.
+	if (IsLedgeAhead(DistanceX))
+	{
+		StopHorizontalMovement();
+		return;
+	}
+
 	GetCharacterMovement()->MaxWalkSpeed = FMath::Min(FMath::Max(1.0f, Speed), FMath::Abs(DistanceX) / DeltaTime);
 
 	AddMovementInput(FVector::ForwardVector, FMath::Sign(DistanceX));
+}
+
+bool AEnemy::IsLedgeAhead(float DirectionX) const
+{
+	// 공중에 있으면 낙하 중이므로 검사하지 않는다.
+	if (!bAvoidLedges || FMath::IsNearlyZero(DirectionX) || !GetCharacterMovement()->IsMovingOnGround())
+	{
+		return false;
+	}
+
+	const float	ProbeX = GetActorLocation().X
+		+ FMath::Sign(DirectionX) * (GetCapsuleComponent()->GetScaledCapsuleRadius() + LedgeProbeDistance);
+
+	return !HasGroundAtX(ProbeX);
+}
+
+bool AEnemy::HasGroundAtX(float X) const
+{
+	// 캡슐 중심 높이에서 발밑 계단 높이보다 조금 더 깊게 내려 쏜다. 그 안에 막히는 바닥이 없으면 낭떠러지다.
+	const FVector	Start(X, GetActorLocation().Y, GetActorLocation().Z);
+	const float		ProbeDepth = GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
+		+ GetCharacterMovement()->MaxStepHeight
+		+ LedgeProbeExtraDepth;
+	const FVector	End = Start - FVector::UpVector * ProbeDepth;
+
+	// 이동과 같은 채널을 써서 몬스터가 실제로 딛을 수 있는 바닥만 찾는다. 다른 몬스터·플레이어는 이 채널을 무시한다.
+	FCollisionQueryParams	Params(SCENE_QUERY_STAT(EnemyLedgeProbe), false, this);
+	FHitResult				Hit;
+
+	return GetWorld()->LineTraceSingleByChannel(
+		Hit,
+		Start,
+		End,
+		GetCapsuleComponent()->GetCollisionObjectType(),
+		Params
+	);
+}
+
+float AEnemy::ApplyMonsterSpacing(float DestinationX)
+{
+	const float	MyX = GetActorLocation().X;
+	const float	Direction = FMath::Sign(DestinationX - MyX);
+
+	if (FMath::IsNearlyZero(Direction))
+	{
+		bHeldBySpacing = false;
+		return DestinationX;
+	}
+
+	float		LimitedX = DestinationX;
+	bool		bLimited = false;
+
+	for (TActorIterator<AEnemy> It(GetWorld()); It; ++It)
+	{
+		const AEnemy* Other = *It;
+
+		if (!IsSpacingNeighbor(Other))
+		{
+			continue;
+		}
+
+		// 이동 방향 앞쪽에 있는 몬스터에게만 양보한다. 뒤쪽 몬스터는 뒤쪽에서 알아서 멈춘다.
+		const float	OtherX = Other->GetActorLocation().X;
+
+		if ((OtherX - MyX) * Direction <= 0.0f)
+		{
+			continue;
+		}
+
+		// 마주 오는 몬스터에게는 양보하지 않는다. 서로 양보하다 둘 다 멈추는 교착을 막고, 겹쳐 지나가게 둔다.
+		if (Other->GetVelocity().X * Direction < -1.0f)
+		{
+			continue;
+		}
+
+		const float	StopX = OtherX - Direction * GetMonsterSpacingDistance(Other);
+
+		if ((LimitedX - StopX) * Direction > 0.0f)
+		{
+			LimitedX = StopX;
+			bLimited = true;
+		}
+	}
+
+	if (!bLimited)
+	{
+		bHeldBySpacing = false;
+		return DestinationX;
+	}
+
+	// 이미 멈출 위치에 닿았거나 지나쳤으면 뒤로 물러나지 않고 그 자리에 선다.
+	const float	RemainingX = (LimitedX - MyX) * Direction;
+
+	if (RemainingX <= MoveArriveTolerance)
+	{
+		bHeldBySpacing = true;
+		return MyX;
+	}
+
+	// 간격 때문에 멈춰 있었다면 충분히 벌어질 때까지 기다린다.
+	if (bHeldBySpacing && RemainingX < MonsterSpacingResumeDistance)
+	{
+		return MyX;
+	}
+
+	bHeldBySpacing = false;
+	return LimitedX;
+}
+
+bool AEnemy::TrySeparateFromMonsters(float Speed, float DeltaTime, const AActor* FaceTarget)
+{
+	const float	MyX = GetActorLocation().X;
+	const float	MyRadius = GetCapsuleComponent()->GetScaledCapsuleRadius();
+	const bool	bHasFaceTarget = IsValid(FaceTarget);
+	const float	FaceTargetX = bHasFaceTarget ? FaceTarget->GetActorLocation().X : 0.0f;
+
+	for (TActorIterator<AEnemy> It(GetWorld()); It; ++It)
+	{
+		const AEnemy* Other = *It;
+
+		if (!IsSpacingNeighbor(Other))
+		{
+			continue;
+		}
+
+		const float	OtherX = Other->GetActorLocation().X;
+
+		// 둘 중 한쪽만 비켜 선다. 대상이 있으면 대상에서 먼 쪽이, 거리가 같거나 대상이 없으면 UniqueID가 큰 쪽이 양보한다.
+		const float	MyTargetDistance = FMath::Abs(FaceTargetX - MyX);
+		const float	OtherTargetDistance = FMath::Abs(FaceTargetX - OtherX);
+		const bool	bSameTargetDistance = FMath::IsNearlyEqual(MyTargetDistance, OtherTargetDistance, 1.0f);
+
+		if (bHasFaceTarget && !bSameTargetDistance && MyTargetDistance < OtherTargetDistance)
+		{
+			continue;
+		}
+
+		if ((!bHasFaceTarget || bSameTargetDistance) && GetUniqueID() < Other->GetUniqueID())
+		{
+			continue;
+		}
+
+		const float	OtherRadius = Other->GetCapsuleComponent()->GetScaledCapsuleRadius();
+		const float	SpacingDistance = GetMonsterSpacingDistance(Other);
+
+		// 캡슐이 겹쳐 있을 때만 비켜 선다. 간격이 음수면 그만큼 겹친 것까지는 그대로 둔다.
+		const float	SeparateThreshold = FMath::Min(MyRadius + OtherRadius, SpacingDistance - MoveArriveTolerance);
+
+		if (FMath::Abs(OtherX - MyX) >= SeparateThreshold)
+		{
+			continue;
+		}
+
+		// 대상이 있으면 대상 반대쪽, 없으면 상대 반대쪽으로 비킨다. 기준 X가 같으면 바라보는 방향의 뒤쪽으로 비킨다.
+		const float	AwayFromX = bHasFaceTarget && !FMath::IsNearlyEqual(FaceTargetX, MyX)
+			? FaceTargetX
+			: OtherX;
+		const float	Direction = FMath::IsNearlyEqual(AwayFromX, MyX)
+			? -FMath::Sign(GetActorForwardVector().X)
+			: FMath::Sign(MyX - AwayFromX);
+		const float	TargetX = OtherX + Direction * SpacingDistance;
+		const float	DistanceX = TargetX - MyX;
+
+		// 대상 반대쪽 목표가 이미 지금 위치보다 대상 쪽이면 물러날 필요가 없다. 물러날 쪽이 낭떠러지여도 겹친 채로 둔다.
+		if (DistanceX * Direction <= 0.0f || IsLedgeAhead(DistanceX))
+		{
+			continue;
+		}
+
+		// 대상이 있으면 대상을 바라본 채 뒷걸음질한다.
+		FaceDirection(bHasFaceTarget ? FaceTargetX - MyX : DistanceX);
+		GetCharacterMovement()->MaxWalkSpeed = FMath::Min(FMath::Max(1.0f, Speed), FMath::Abs(DistanceX) / DeltaTime);
+
+		AddMovementInput(FVector::ForwardVector, FMath::Sign(DistanceX));
+		return true;
+	}
+
+	return false;
+}
+
+bool AEnemy::SeparateFromMonstersInAttackRange(const AActor* Target, float DeltaTime)
+{
+	if (!bKeepMonsterSpacing || DeltaTime <= 0.0f || !IsValid(Target))
+	{
+		return false;
+	}
+
+	// 대상과의 간격을 먼저 되찾고, 그다음 몬스터끼리 떨어진다.
+	if (TryBackAwayFromTarget(Target, DeltaTime))
+	{
+		return true;
+	}
+
+	return TrySeparateFromMonsters(ChaseSpeed, DeltaTime, Target);
+}
+
+float AEnemy::GetTargetSpacingDistance(const AActor* Target) const
+{
+	const float	RadiusSum = GetCapsuleComponent()->GetScaledCapsuleRadius() + Target->GetSimpleCollisionRadius();
+
+	return FMath::Max(0.0f, RadiusSum + TargetSpacingGap);
+}
+
+bool AEnemy::TryBackAwayFromTarget(const AActor* Target, float DeltaTime)
+{
+	const FVector	MyLocation = GetActorLocation();
+	const FVector	TargetLocation = Target->GetActorLocation();
+
+	// 대상이 점프 등으로 다른 높이에 있거나 움직이는 중이면 물러나지 않고 버틴다.
+	// 다가오는 대상에게 매번 조금씩 물러나면 움찔거려 보인다.
+	const bool	bOtherHeight = FMath::Abs(TargetLocation.Z - MyLocation.Z) >= GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const bool	bTargetMoving = FMath::Abs(Target->GetVelocity().X) > TargetStillSpeed;
+
+	if (bOtherHeight || bTargetMoving)
+	{
+		bBackingAwayFromTarget = false;
+		return false;
+	}
+
+	const float	SpacingDistance = GetTargetSpacingDistance(Target);
+	const float	OffsetX = MyLocation.X - TargetLocation.X;
+	const float	DistanceToTarget = FMath::Abs(OffsetX);
+
+	// 많이 겹쳤을 때 물러나기 시작해, 간격을 다 되찾을 때까지 한 번에 물러난다.
+	if (DistanceToTarget < SpacingDistance - TargetBackAwayStartDepth)
+	{
+		bBackingAwayFromTarget = true;
+	}
+	else if (DistanceToTarget >= SpacingDistance - MoveArriveTolerance)
+	{
+		bBackingAwayFromTarget = false;
+	}
+
+	if (!bBackingAwayFromTarget)
+	{
+		return false;
+	}
+
+	// 지금 서 있는 쪽으로 물러난다. X가 같으면 바라보는 방향의 뒤쪽으로 물러난다.
+	const float	Direction = FMath::IsNearlyZero(OffsetX)
+		? -FMath::Sign(GetActorForwardVector().X)
+		: FMath::Sign(OffsetX);
+	const float	DistanceX = TargetLocation.X + Direction * SpacingDistance - MyLocation.X;
+
+	// 뒤가 낭떠러지면 물러나지 않고 겹친 채로 버틴다.
+	if (IsLedgeAhead(DistanceX))
+	{
+		bBackingAwayFromTarget = false;
+		return false;
+	}
+
+	FaceDirection(-Direction);
+	GetCharacterMovement()->MaxWalkSpeed = FMath::Min(FMath::Max(1.0f, ChaseSpeed), FMath::Abs(DistanceX) / DeltaTime);
+
+	AddMovementInput(FVector::ForwardVector, FMath::Sign(DistanceX));
+	return true;
+}
+
+bool AEnemy::IsSpacingNeighbor(const AEnemy* Other) const
+{
+	if (!IsValid(Other) || Other == this || Other->IsDead() || Other->IsHidden())
+	{
+		return false;
+	}
+
+	if (!Other->HasActorBegunPlay() || Other->GetCapsuleComponent()->GetCollisionEnabled() == ECollisionEnabled::NoCollision)
+	{
+		return false;
+	}
+
+	// 다른 높이의 발판에 있는 몬스터는 길을 막지 않는다.
+	const float	HeightDiff = FMath::Abs(Other->GetActorLocation().Z - GetActorLocation().Z);
+
+	return HeightDiff < GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+}
+
+float AEnemy::GetMonsterSpacingDistance(const AEnemy* Other) const
+{
+	const float	RadiusSum = GetCapsuleComponent()->GetScaledCapsuleRadius()
+		+ Other->GetCapsuleComponent()->GetScaledCapsuleRadius();
+
+	return FMath::Max(0.0f, RadiusSum + MonsterSpacingGap);
 }
 
 void AEnemy::SetBehaviorState(EEnemyBehaviorState NewState)
@@ -628,6 +1017,13 @@ void AEnemy::SetBehaviorState(EEnemyBehaviorState NewState)
 	}
 	BehaviorState = NewState;
 	StopHorizontalMovement();
+
+	// 추격·공격이 끝나면 정해 둔 자리를 비운다. 다음 추격에서 다시 정한다.
+	if (NewState != EEnemyBehaviorState::Chase && NewState != EEnemyBehaviorState::Attack)
+	{
+		SurroundSide = 0.0f;
+		bCrossingSurroundSide = false;
+	}
 }
 
 void AEnemy::StartPatrol()
@@ -671,13 +1067,155 @@ bool AEnemy::IsWithinAttackRange(AActor* Target) const
 
 bool AEnemy::CanStartAIAttack(AActor* Target) const
 {
-	return IsWithinAttackRange(Target);
+	// 반대편으로 건너가는 중에는 공격하지 않는다. 지나가다 공격하면 다시 한쪽에 몰린다.
+	return IsWithinAttackRange(Target) && !bCrossingSurroundSide;
 }
 
 void AEnemy::UpdateCombatMovement(AActor* Target, float DeltaSeconds)
 {
-	if (IsValidAITarget(Target) && DeltaSeconds > 0.0f)
-		MoveAlongX(Target->GetActorLocation().X, ChaseSpeed, DeltaSeconds);
+	if (!IsValidAITarget(Target) || DeltaSeconds <= 0.0f)
+	{
+		return;
+	}
+
+	const float	TargetX = Target->GetActorLocation().X;
+	float		DestinationX = TargetX;
+
+	// 대상 캡슐과 겹치지 않도록 대상 바로 앞이 아니라 간격만큼 떨어진 지점을 목적지로 둔다.
+	const float	TargetSpacing = bKeepMonsterSpacing
+		? GetTargetSpacingDistance(Target)
+		: 0.0f;
+
+	DestinationX += FMath::Sign(GetActorLocation().X - TargetX) * TargetSpacing;
+
+	if (bKeepMonsterSpacing && bSurroundTarget)
+	{
+		SurroundSide = ChooseSurroundSide(Target);
+
+		// 정한 쪽의 반대편에 있으면 건너가기 시작하고, 정한 쪽으로 건너갈 거리만큼 넘어가면 멈춘다.
+		// 건너간 자리도 대상과 겹치지 않도록 대상 간격보다 가까이 서지 않는다.
+		const float	CrossDistance = FMath::Max(SurroundCrossDistance, TargetSpacing);
+
+		// 건너갈 자리에 바닥이 없으면(대상이 낭떠러지 끝에 있으면) 건너가지 않고 지금 쪽에 선다.
+		const bool	bOppositeSide = (GetActorLocation().X - TargetX) * SurroundSide < 0.0f;
+
+		if (bOppositeSide && bAvoidLedges && !HasGroundAtX(TargetX + SurroundSide * CrossDistance))
+		{
+			SurroundSide = -SurroundSide;
+			bCrossingSurroundSide = false;
+		}
+
+		const float	SideOffset = (GetActorLocation().X - TargetX) * SurroundSide;
+
+		if (SideOffset < 0.0f)
+		{
+			bCrossingSurroundSide = true;
+		}
+		else if (SideOffset >= CrossDistance - MoveArriveTolerance)
+		{
+			bCrossingSurroundSide = false;
+		}
+
+		if (bCrossingSurroundSide)
+		{
+			DestinationX = TargetX + SurroundSide * CrossDistance;
+		}
+	}
+	else
+	{
+		SurroundSide = 0.0f;
+		bCrossingSurroundSide = false;
+	}
+
+	// 대상이 다가와 목적지가 내 뒤로 넘어가도 돌아서 걷지 않고, 그 자리에서 대상을 보고 버틴다.
+	const float	MyX = GetActorLocation().X;
+	const bool	bDestinationBehind = (DestinationX - MyX) * (TargetX - MyX) < 0.0f;
+
+	if (!bCrossingSurroundSide && bDestinationBehind)
+	{
+		StopHorizontalMovement();
+		FaceDirection(TargetX - MyX);
+		return;
+	}
+
+	MoveAlongX(DestinationX, ChaseSpeed, DeltaSeconds);
+}
+
+float AEnemy::ChooseSurroundSide(const AActor* Target) const
+{
+	const float	TargetX = Target->GetActorLocation().X;
+	const float	MyDistance = FMath::Abs(GetActorLocation().X - TargetX);
+	const float	MySide = GetSurroundHomeSide(TargetX);
+
+	int32	SameSideCount = 1;
+	int32	OtherSideCount = 0;
+	int32	SameSideBehindCount = 0;
+
+	for (TActorIterator<AEnemy> It(GetWorld()); It; ++It)
+	{
+		const AEnemy* Other = *It;
+
+		// 같은 대상을 두고 자리를 정한 동료만 센다.
+		if (!IsSpacingNeighbor(Other) || FMath::IsNearlyZero(Other->SurroundSide))
+		{
+			continue;
+		}
+
+		const UEnemyDetectionComponent* OtherDetection = Other->GetEneymDetectionComponent();
+
+		if (!OtherDetection || OtherDetection->GetCurrentTarget() != Target)
+		{
+			continue;
+		}
+
+		if (Other->GetSurroundHomeSide(TargetX) * MySide < 0.0f)
+		{
+			++OtherSideCount;
+			continue;
+		}
+
+		++SameSideCount;
+
+		// 같은 쪽에서 나보다 대상에서 먼 동료를 센다. 거리가 같으면 UniqueID가 큰 쪽을 뒤로 본다.
+		const float	OtherDistance = FMath::Abs(Other->GetActorLocation().X - TargetX);
+		const bool	bOtherBehind = FMath::IsNearlyEqual(OtherDistance, MyDistance, 1.0f)
+			? Other->GetUniqueID() > GetUniqueID()
+			: OtherDistance > MyDistance;
+
+		if (bOtherBehind)
+		{
+			++SameSideBehindCount;
+		}
+	}
+
+	// 내 쪽이 두 명 이상 많으면 남는 수의 절반만큼 맨 뒤에서부터 반대편으로 보낸다.
+	const int32	MoveCount = (SameSideCount - OtherSideCount) / 2;
+
+	if (SameSideBehindCount < MoveCount)
+	{
+		return -MySide;
+	}
+
+	return MySide;
+}
+
+float AEnemy::GetSurroundHomeSide(float TargetX) const
+{
+	// 건너가는 중이면 이미 가려는 쪽에 속한 것으로 본다.
+	if (bCrossingSurroundSide && !FMath::IsNearlyZero(SurroundSide))
+	{
+		return SurroundSide;
+	}
+
+	// 대상과 X가 같으면 바라보는 방향의 뒤쪽을 내 쪽으로 본다.
+	const float	MyX = GetActorLocation().X;
+
+	if (FMath::IsNearlyEqual(MyX, TargetX))
+	{
+		return -FMath::Sign(GetActorForwardVector().X);
+	}
+
+	return FMath::Sign(MyX - TargetX);
 }
 
 float AEnemy::GetCombatSightRadius() const

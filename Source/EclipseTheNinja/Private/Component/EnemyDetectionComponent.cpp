@@ -294,6 +294,55 @@ bool UEnemyDetectionComponent::CanSeeTarget(const AActor* Target, float Radius) 
     return false;
 }
 
+APawn* UEnemyDetectionComponent::FindSharedCombatTarget() const
+{
+    const AEnemy* OwnerEnemy = Owner.Get();
+
+    // 이미 전투 중인 적만 빌린다. 모르는 적이 동료 덕에 바로 발각하면 잠입이 무너진다.
+    if (!bShareCombatSight || AlertLevel != EEnemyAlertLevel::Combat || !OwnerEnemy || !GetWorld())
+    {
+        return nullptr;
+    }
+
+    const FVector MyLocation = OwnerEnemy->GetActorLocation();
+    const float MaxHeightDiff = OwnerEnemy->GetSimpleCollisionHalfHeight();
+
+    for (TActorIterator<AEnemy> It(GetWorld()); It; ++It)
+    {
+        const AEnemy* Ally = *It;
+
+        if (Ally == OwnerEnemy || !IsValid(Ally) || Ally->IsDead())
+        {
+            continue;
+        }
+
+        // 직접 본 동료에게서만 빌린다. 빌린 시야끼리 이어 주면 아무도 안 보는데 전투가 끝나지 않는다.
+        const UEnemyDetectionComponent* AllyDetection = Ally->GetEneymDetectionComponent();
+
+        if (!AllyDetection || AllyDetection->AlertLevel != EEnemyAlertLevel::Combat || !AllyDetection->HasDirectSight())
+        {
+            continue;
+        }
+
+        // 가까운 같은 높이의 동료만 고려한다. 다른 발판의 동료가 본 대상까지 쫓지 않는다.
+        const FVector Offset = Ally->GetActorLocation() - MyLocation;
+
+        if (FMath::Abs(Offset.X) > ShareSightRadius || FMath::Abs(Offset.Z) >= MaxHeightDiff)
+        {
+            continue;
+        }
+
+        APawn* AllyTarget = AllyDetection->CurrentTarget.Get();
+
+        if (OwnerEnemy->IsValidAITarget(AllyTarget))
+        {
+            return AllyTarget;
+        }
+    }
+
+    return nullptr;
+}
+
 void UEnemyDetectionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -347,6 +396,7 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
     const EEnemyAlertLevel PreviousLevel = AlertLevel;
     // 대상은 초기화하지 않는다. 전투 중 시야를 놓쳐도 마지막 대상을 유지하고, 끝에서 정리한다.
     bHasLineOfSight = false;
+    bHasDirectSight = false;
 
     // 소유한 액터가 죽은 상태일 때 
     if (OwnerEnemy->IsDead())
@@ -372,6 +422,7 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
             CurrentTarget = Player;
             // BB용 변수 세팅
             bHasLineOfSight = true;
+            bHasDirectSight = true;
             bHasLastKnownLocation = true;
 
             // 마지막으로 목격된 위치 저장
@@ -415,6 +466,15 @@ void UEnemyDetectionComponent::UpdateDetection(float DeltaTime)
                 TimeWithoutSight += DeltaTime;
             else
                 TimeWithoutSight = 0.0f;
+        }
+        // 전투 중 직접 못 봐도 근처 동료가 보고 있으면 본 것과 같이 추격을 이어 간다.
+        else if (APawn* SharedTarget = FindSharedCombatTarget())
+        {
+            CurrentTarget = SharedTarget;
+            bHasLineOfSight = true;
+            bHasLastKnownLocation = true;
+            LastKnownLocation = SharedTarget->GetActorLocation();
+            TimeWithoutSight = 0.0f;
         }
         // 플레이어가 유효하지 않거나, 시야 거리 안에서 보이지 않는 경우
         else

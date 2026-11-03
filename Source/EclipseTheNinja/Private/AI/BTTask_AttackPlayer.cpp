@@ -47,10 +47,10 @@ EBTNodeResult::Type UBTTask_AttackPlayer::ExecuteTask(UBehaviorTreeComponent& Ow
     Enemy = Cast<AEnemy>(AI->GetPawn());
     TaskStartedAt = AI->GetWorld()->GetTimeSeconds();
 
-    return UpdateAttack(OwnerComp);
+    return UpdateAttack(OwnerComp, 0.0f);
 }
 
-EBTNodeResult::Type UBTTask_AttackPlayer::UpdateAttack(UBehaviorTreeComponent& OwnerComp)
+EBTNodeResult::Type UBTTask_AttackPlayer::UpdateAttack(UBehaviorTreeComponent& OwnerComp, float DeltaSeconds)
 {
     AEnemy* Pawn = Enemy.Get();
     if (!Pawn) return EBTNodeResult::Failed;
@@ -80,6 +80,12 @@ EBTNodeResult::Type UBTTask_AttackPlayer::UpdateAttack(UBehaviorTreeComponent& O
     if (!BB->GetValueAsBool(SightKey.SelectedKeyName)) return EBTNodeResult::Failed;
     if (!Pawn->CanStartAIAttack(Target)) return EBTNodeResult::Failed;
     if (Pawn->IsPlayingHitReaction()) return EBTNodeResult::Failed;
+
+    // 공격을 시작하기 전에 다른 몬스터와 겹쳐 있으면 먼저 비켜 선다. 물러나는 중에는 정지와 공격 시작을 건너뛴다.
+    if (!bAttackStarted && Pawn->SeparateFromMonstersInAttackRange(Target, DeltaSeconds))
+    {
+        return EBTNodeResult::InProgress;
+    }
 
     Pawn->StopHorizontalMovement();
     const double Now = Pawn->GetWorld()->GetTimeSeconds();
@@ -114,9 +120,9 @@ EBTNodeResult::Type UBTTask_AttackPlayer::UpdateAttack(UBehaviorTreeComponent& O
     return EBTNodeResult::InProgress;
 }
 
-void UBTTask_AttackPlayer::TickTask(UBehaviorTreeComponent& OwnerComp, uint8*, float)
+void UBTTask_AttackPlayer::TickTask(UBehaviorTreeComponent& OwnerComp, uint8*, float DeltaSeconds)
 {
-    const EBTNodeResult::Type Result = UpdateAttack(OwnerComp);
+    const EBTNodeResult::Type Result = UpdateAttack(OwnerComp, DeltaSeconds);
     if (Result == EBTNodeResult::InProgress) return;
 
     FinishLatentTask(OwnerComp, Result);

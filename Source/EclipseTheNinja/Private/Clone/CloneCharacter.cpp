@@ -6,6 +6,7 @@
 #include "Component/InteractHighlightComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
 #include "Subsystem/UIMessageSubsystem.h"
+#include "Util/EclipseCollisionChannels.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -49,6 +50,9 @@ ACloneCharacter::ACloneCharacter()
 void ACloneCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 몬스터는 분신 캡슐에서 막힌다. 메시까지 막으면 몬스터가 메시를 밟고 튄다.
+	GetMesh()->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
 
 	// 풀에서 재사용되어도 BeginPlay는 한 번뿐이므로 원래 메시 위치는 여기서 한 번만 저장한다
 	this->MeshBaseRelativeLocation = GetMesh()->GetRelativeLocation();

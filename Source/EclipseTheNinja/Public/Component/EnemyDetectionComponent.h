@@ -93,6 +93,9 @@ public:
     /** 마지막 목격 위치. HasLastKnownLocation이 false면 의미 없는 값이다. */
     const FVector& GetLastKnownLocation() const { return LastKnownLocation; }
 
+    /** 이번 감지 갱신에서 직접 대상을 봤는지. 동료에게 빌린 시야는 포함하지 않는다. */
+    bool HasDirectSight() const { return bHasDirectSight; }
+
 	void NotifyNoise(const FVector& InLocation, const float InRadius, const float InStrength);
 
 protected:
@@ -138,6 +141,14 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|Noise", meta=(ClampMin="0.02", Units="s"))
     float NoiseAlertMaintain = 1.0f;
 
+    /** 전투 중 시야를 잃어도 근처 동료가 대상을 직접 보고 있으면 그 시야를 빌려 추격을 이어 간다. 간격 유지로 뒤에 선 몬스터가 추격을 포기하지 않게 한다. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|Share")
+    bool bShareCombatSight = true;
+
+    /** 시야를 빌릴 동료까지의 최대 좌우 거리. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|Share", meta=(ClampMin="0.0", Units="cm", EditCondition="bShareCombatSight"))
+    float ShareSightRadius = 300.0f;
+
 private:
 	// 소음 발생 후 일정시간동안 주목도 하한선을 유지하게 하는 함수
 	void	NoiseAlertStart(float InTargetGauge);
@@ -147,6 +158,8 @@ private:
     APawn* FindVisibleTarget(float Radius) const;
     // 소유한 액터가 파라미터로 들어온 타겟을 볼 수 있는지 반환하는 함수
     bool CanSeeTarget(const AActor* Target, float Radius) const;
+    // 전투 중 근처 동료가 직접 보고 있는 대상을 찾는다. 빌릴 시야가 없으면 nullptr.
+    APawn* FindSharedCombatTarget() const;
     // 감지 로직 업데이트 함수
     void UpdateDetection(float DeltaTime);
     // BB용 변수 업데이트 함수
@@ -176,6 +189,9 @@ private:
     bool bHasLastKnownLocation = false;
     float TimeWithoutSight = 0.0f;
     float DetectionElapsed = 0.0f;
+
+    // 직접 본 시야. 빌린 시야끼리 서로 이어 주지 않도록 bHasLineOfSight와 따로 둔다.
+    bool bHasDirectSight = false;
 
 	FTimerHandle	NoiseTimer;
 	bool			bIsNoise = false;

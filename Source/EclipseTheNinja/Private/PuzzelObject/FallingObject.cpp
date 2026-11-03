@@ -15,6 +15,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Util/EclipseCollisionChannels.h"
 
 // Sets default values
 AFallingObject::AFallingObject()
@@ -160,6 +161,7 @@ void AFallingObject::ResetToInitial_Implementation()
 	GetWorldTimerManager().ClearTimer(this->LandEffectTimer);
 	this->LandEffect->DeactivateImmediate();
 	this->FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	this->FallingBody->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
 	this->FallingBody->SetRelativeLocation(this->InitialBodyRelativeLocation);
 	this->RopeComponent->RestoreRope();
 }
@@ -283,6 +285,7 @@ void AFallingObject::ObjectDrop()
 	//SetActorTickEnabled(true);
 	// 매달려 있을 때는 Pawn을 Ignore하므로, 이미 겹쳐 있던 대상도 첫 이동 시 BeginOverlap이 발생한다
 	FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	FallingBody->SetCollisionResponseToChannel(ECC_Monster, ECR_Overlap);
 }
 
 void AFallingObject::ObjectLand()
@@ -355,5 +358,6 @@ void AFallingObject::TryBlockPawn()
 	}
 	this->bIsPendingBlock = false;
 	this->FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	this->FallingBody->SetCollisionResponseToChannel(ECC_Monster, ECR_Block);
 }
 

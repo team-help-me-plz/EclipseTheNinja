@@ -29,7 +29,7 @@ protected:
     virtual EBTNodeResult::Type AbortTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) override;
     virtual void OnTaskFinished(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, EBTNodeResult::Type Result) override;
 private:
-    EBTNodeResult::Type UpdateAttack(UBehaviorTreeComponent& OwnerComp);
+    EBTNodeResult::Type UpdateAttack(UBehaviorTreeComponent& OwnerComp, float DeltaSeconds);
     void Cleanup();
 
     UPROPERTY(Transient)
