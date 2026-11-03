@@ -11,6 +11,7 @@
 #include "AbilitySystemGlobals.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Components/WidgetComponent.h"
@@ -131,7 +132,35 @@ void ACloneCharacter::ResetMoveProgress()
 	this->TurnPauseRemaining = 0.f;
 	this->WalkDirFlipCount = 0;
 	this->OscillationElapsed = 0.f;
+	this->StuckElapsed = 0.f;
 	this->bIsTargetUnreachable = false;
+}
+
+bool ACloneCharacter::HasReachedTarget(const FVector& InLocationDiff) const
+{
+	const float	Distance = this->GetDistanceToInteractTarget();
+	if (Distance < 0.f)
+	{
+		return (InLocationDiff.SquaredLength() <= this->TargetLocationMargin);
+	}
+	return (Distance <= this->InteractReachDistance);
+}
+
+float ACloneCharacter::GetDistanceToInteractTarget() const
+{
+	if (this->CommandType != ECloneCommandType::Interact || !IsValid(this->TargetActor))
+	{
+		return (-1.f);
+	}
+	// MeshAssembly 같은 자식 액터의 메시도 포함한 충돌 경계
+	const FBox	Bounds = this->TargetActor->GetComponentsBoundingBox(false, true);
+	if (!Bounds.IsValid)
+	{
+		return (-1.f);
+	}
+	const double	MyX = GetActorLocation().X;
+	const double	CenterDistance = FMath::Max3(Bounds.Min.X - MyX, MyX - Bounds.Max.X, 0.0);
+	return (FMath::Max(0.f, static_cast<float>(CenterDistance) - GetCapsuleComponent()->GetScaledCapsuleRadius()));
 }
 
 void ACloneCharacter::OnSpawnFromPool_Implementation()
@@ -154,7 +183,7 @@ void ACloneCharacter::OnReturnToPool_Implementation()
 	this->TargetLocation = FVector::ZeroVector;
 	this->CommandType = ECloneCommandType::Move;
 	this->ResetMoveProgress();
-	this->StopTargetMontage(this->InteractMontage);
+	this->StopTargetMontage(this->PlayingInteractMontage);
 	this->StopTargetMontage(this->InteractPlayerMontage);
 	// 끊긴 몽타주의 콜백은 나중에 오거나 오지 않을 수 있으므로 여기서 바로 입력을 돌려준다
 	this->ReleaseTargetPlayer();
@@ -179,7 +208,8 @@ void ACloneCharacter::Tick(float DeltaTime)
 	if (!this->bIsArrived)
 	{
 		FVector	LocationDiff = this->TargetLocation - GetActorLocation();
-		if (LocationDiff.SquaredLength() > this->TargetLocationMargin)
+		bool	bHasReached = this->HasReachedTarget(LocationDiff);
+		if (!bHasReached)
 		{
 			if (LocationDiff.X * this->WalkDir.X < 0)
 			{
@@ -215,9 +245,39 @@ void ACloneCharacter::Tick(float DeltaTime)
 			else
 			{
 				AddMovementInput(this->WalkDir, 1.f, true);
+
+				// 걷는 중인데 거의 움직이지 않으면 막힌 것으로 본다 (문처럼 반전 없이 계속 밀기만 하는 경우)
+				if (GetVelocity().SizeSquared2D() < FMath::Square(this->StuckSpeedThreshold))
+				{
+					this->StuckElapsed += DeltaTime;
+				}
+				else
+				{
+					this->StuckElapsed = 0.f;
+				}
+				if (this->StuckElapsed >= this->StuckTime)
+				{
+					const float	Distance = this->GetDistanceToInteractTarget();
+					if (Distance >= 0.f && Distance <= this->StuckInteractReachDistance)
+					{
+						bHasReached = true;
+					}
+					else
+					{
+						UE_LOG(
+							LogTemp,
+							Log,
+							TEXT("[ACloneCharacter::Tick] 목표 지점(%s)으로 가는 길이 막혀 이동을 멈춥니다."),
+							*this->TargetLocation.ToString()
+						);
+						this->bIsTargetUnreachable = true;
+						this->StopCloneMovement();
+						return ;
+					}
+				}
 			}
 		}
-		else
+		if (bHasReached)
 		{
 			switch (this->CommandType)
 			{
@@ -227,8 +287,8 @@ void ACloneCharacter::Tick(float DeltaTime)
 			}
 			case (ECloneCommandType::Interact):
 			{
+				// 상호작용 몽타주는 상호작용에 성공한 액터가 PlayInteractMontage로 재생시킨다
 				IInteractable::Execute_Interact(this->TargetActor, this);
-				this->PlayInteractMontage();
 				break;
 			}
 			default:
@@ -254,7 +314,7 @@ void ACloneCharacter::SetCommand(const FCloneCommandType& InCommand)
 		return ;
 	}
 	this->ResetMoveProgress();
-	this->StopTargetMontage(this->InteractMontage);
+	this->StopTargetMontage(this->PlayingInteractMontage);
 	this->StopTargetMontage(this->InteractPlayerMontage);
 	this->CommandType = InCommand.Type;
 	switch (InCommand.Type)
@@ -308,7 +368,7 @@ void ACloneCharacter::Interact_Implementation(AActor* InActor)
 	this->TargetActor = nullptr;
 	this->CommandType = ECloneCommandType::Move;
 	this->ResetMoveProgress();
-	this->StopTargetMontage(this->InteractMontage);
+	this->StopTargetMontage(this->PlayingInteractMontage);
 
 	this->FaceToward(InCharacter);
 	// 날아갈 때까지 플레이어는 제자리에서 입력을 받지 않는다
@@ -395,17 +455,36 @@ void ACloneCharacter::ReturnToSafePoint_Implementation()
 	this->SetActorRotation(this->SafePointRotate);
 }
 
-void ACloneCharacter::PlayInteractMontage()
+void ACloneCharacter::PlayInteractMontage_Implementation(AActor* InInteractable, UAnimMontage* InMontage)
 {
-	if (!this->InteractMontage)
+	UAnimInstance*	AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInstance)
 	{
 		return ;
 	}
-	UAnimInstance*	AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
-	if (AnimInstance)
+	UAnimMontage*	TargetMontage = IsValid(InMontage) ? InMontage : this->InteractMontage.Get();
+	if (TargetMontage == nullptr)
 	{
-		AnimInstance->Montage_Play(this->InteractMontage);
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[ACloneCharacter::PlayInteractMontage] InteractMontage가 유효하지 않습니다")
+		);
+		return ;
 	}
+	if (IsValid(InInteractable))
+	{
+		// 루트가 한쪽에 치우친 액터도 있으므로 자식 액터까지 포함한 경계의 중심을 바라본다
+		const FBox		Bounds = InInteractable->GetComponentsBoundingBox(false, true);
+		const FVector	LookAt = Bounds.IsValid ? Bounds.GetCenter() : InInteractable->GetActorLocation();
+		const FVector	ToTarget = (LookAt - GetActorLocation()).GetSafeNormal2D();
+		if (!ToTarget.IsNearlyZero())
+		{
+			SetActorRotation(FRotator(0.f, ToTarget.Rotation().Yaw, 0.f));
+		}
+	}
+	this->PlayingInteractMontage = TargetMontage;
+	AnimInstance->Montage_Play(TargetMontage);
 }
 
 void ACloneCharacter::PlayInteractPlayerMontage()

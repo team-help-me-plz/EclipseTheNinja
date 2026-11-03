@@ -48,4 +48,8 @@ public:
 	// 상호작용 상태를 확인하는 함수
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
 	EInteractState	GetInteractState();
+	// 분신이 상호작용할 수 있는 액터인지. false면 분신 조준에서 강조되지 않고 상호작용 대상으로 잡히지 않는다
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+	bool	CanCloneInteract();
+	virtual bool	CanCloneInteract_Implementation() { return (true); }
 };
