@@ -12,6 +12,7 @@ class UBoxComponent;
 class UStaticMeshComponent;
 class UCheckpointBoundComponent;
 class UNiagaraComponent;
+class ACharacter;
 
 enum class EBreakablePlatformState
 {
@@ -59,6 +60,14 @@ protected:
 		UPrimitiveComponent* OtherComp,
 		int32 OtherBodyIndex);
 
+	// 무너지기 시작한다 (경고 이펙트 재생 + BreakTime 뒤 BreakPlatform)
+	void	StartBreaking();
+	// 후보 캐릭터 중 메시를 밟고 있는 캐릭터가 있으면 StartBreaking을 호출한다
+	void	CheckStandingOnMesh();
+	// InCharacter가 이 발판의 메시 위에 서 있는가
+	bool	IsStandingOnMesh(const ACharacter* InCharacter) const;
+	void	ClearStandCandidates();
+
 	void	BreakPlatform();
 	void	TryRestore();
 	void	RestorePlatform();
@@ -97,11 +106,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Break|Timer")
 	float	RestoreTime = 1.f;
 
+	// CollisionBox 안에 들어온 캐릭터가 메시를 밟고 있는지 확인하는 간격
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Break|Timer", meta = (ClampMin = "0.01"))
+	float	StandCheckInterval = 0.05f;
+
 private:
 	FTimerHandle	PlatformBreakTimer;
 	FTimerHandle	PlatformRestoreTryTimer;
 	FTimerHandle	PlatformRestoreTimer;
 	FTimerHandle	BreakEffectTimer;
+	FTimerHandle	StandCheckTimer;
+
+	// CollisionBox 안에 있는 플레이어/분신. 메시를 밟았는지는 StandCheckTimer로 확인한다
+	TSet<TWeakObjectPtr<ACharacter>>	StandCandidates;
 
 	EBreakablePlatformState	State = EBreakablePlatformState::Ready;
 
