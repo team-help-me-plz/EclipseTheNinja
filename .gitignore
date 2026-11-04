@@ -78,4 +78,8 @@ DerivedDataCache/*
 
 .codex/
 .gemini/
-.claude/
+# Claude Code: 개인 설정은 제외하고, 팀이 함께 쓰는 스킬과 에디터 MCP 도구만 올린다
+.claude/*
+!.claude/skills/
+!.claude/tools/
+.claude/tools/pcg-assets/

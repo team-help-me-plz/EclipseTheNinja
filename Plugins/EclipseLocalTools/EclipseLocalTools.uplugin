@@ -1,0 +1,28 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "EclipseLocalTools",
+	"Description": "에디터 전용 MCP 툴셋. 콘솔 명령 실행, Live Coding 컴파일, 미저장 에셋 목록. Claude Code 스킬(.claude/skills)이 에디터 파이썬을 실행할 때 쓴다. 게임 빌드에는 포함되지 않는다.",
+	"Category": "Editor",
+	"CreatedBy": "",
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": true,
+	"Installed": false,
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "EclipseLocalTools",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit",
+			"TargetAllowList": ["Editor"]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ToolsetRegistry",
+			"Enabled": true
+		}
+	]
+}
