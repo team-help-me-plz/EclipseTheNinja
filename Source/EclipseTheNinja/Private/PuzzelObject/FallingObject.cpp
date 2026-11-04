@@ -36,6 +36,9 @@ AFallingObject::AFallingObject()
 	FallingBody->SetCollisionResponseToAllChannels(ECR_Ignore);
 	FallingBody->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 	FallingBody->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+	// 매달려 있을 때도 캐릭터와 부딪힌다. 외형은 충돌이 없으므로 이 박스가 외형을 덮어야 한다
+	FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	FallingBody->SetCollisionResponseToChannel(ECC_Monster, ECR_Block);
 
 	this->FallingMeshAssembly = CreateDefaultSubobject<UChildActorComponent>(TEXT("FallingMeshAssembly"));
 	this->FallingMeshAssembly->SetupAttachment(this->FallingBody);
@@ -160,9 +163,11 @@ void AFallingObject::ResetToInitial_Implementation()
 	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다
 	GetWorldTimerManager().ClearTimer(this->LandEffectTimer);
 	this->LandEffect->DeactivateImmediate();
-	this->FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	this->FallingBody->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+	// 원위치로 옮길 때 그 자리에 캐릭터가 있으면 끼이므로, Overlap 상태로 옮긴 뒤 겹친 캐릭터가 없을 때만 Block한다
+	this->FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	this->FallingBody->SetCollisionResponseToChannel(ECC_Monster, ECR_Overlap);
 	this->FallingBody->SetRelativeLocation(this->InitialBodyRelativeLocation);
+	this->TryBlockPawn();
 	this->RopeComponent->RestoreRope();
 }
 
@@ -196,6 +201,12 @@ void AFallingObject::ApplyFallingDamage(AActor* InActor, const FHitResult& InHit
 	}
 	// 캡슐과 메시가 모두 겹칠 수 있으므로 한 번 낙하에 한 번만 데미지를 준다
 	if (this->HitActors.Contains(TargetActor))
+	{
+		return ;
+	}
+	// 몸체 아래에 깔린 대상만 맞는다. 위에 서 있다가 같이 떨어지며 윗면에 닿은 캐릭터는 제외
+	const float	BodyBottomZ = this->FallingBody->GetComponentLocation().Z - this->FallingBody->GetScaledBoxExtent().Z;
+	if (TargetActor->GetActorLocation().Z >= BodyBottomZ)
 	{
 		return ;
 	}
