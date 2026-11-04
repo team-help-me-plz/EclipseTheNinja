@@ -13,6 +13,9 @@ class UGABaseAttack;
 class UGameplayEffect;
 struct FGameplayAbilitySpec;
 
+/** 새 어빌리티가 부여됐을 때 입력 ID와 함께 알린다 (시작 어빌리티, 해금 어빌리티 모두) */
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnAbilityGranted, EAbilityInputID);
+
 /** Player와 Enemy가 공유하는 이동 설정, GAS, 전투 데이터의 부모 클래스. */
 UCLASS(Abstract)
 class ECLIPSETHENINJA_API ABaseCharacter : public ACharacter, public IAbilitySystemInterface
@@ -30,6 +33,9 @@ public:
 
     /** 어빌리티 배열에서 해당 입력 ID로 부여된 어빌리티 스펙을 찾는다. */
     FGameplayAbilitySpec* FindAbilitySpecByInputID(EAbilityInputID InputID) const;
+
+    /** 새 어빌리티가 부여되면 호출된다. 쿨타임 위젯이 획득 시점에 나타날 때 사용한다. */
+    FOnAbilityGranted OnAbilityGranted;
 
 protected:
     virtual void BeginPlay() override;

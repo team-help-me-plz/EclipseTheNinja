@@ -1399,6 +1399,9 @@ void APlayerCharacter::ApplyUnlockedAbilities(const TArray<EAbilityInputID>& Unl
     {
         if (!Info.AbilityClass || !Unlocked.Contains(Info.InputID)) continue;
         if (!ASC->FindAbilitySpecFromClass(Info.AbilityClass))
+        {
             ASC->GiveAbility(FGameplayAbilitySpec(Info.AbilityClass, FMath::Max(1, Info.AbilityLevel), ToAbilityInputID(Info.InputID), this));
+            OnAbilityGranted.Broadcast(Info.InputID);
+        }
     }
 }

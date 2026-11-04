@@ -35,6 +35,13 @@ protected:
 		bool bFromSweep,
 		const FHitResult& SweepResult);
 
+	// 벽(WorldStatic/WorldDynamic)에 막혀 발사체가 멈추면 그 자리에 박힌다
+	UFUNCTION()
+	void OnArrowStop(const FHitResult& ImpactResult);
+
+	// 발사한 함정(과 그 외형 자식 액터)에 막혀 멈추지 않도록 이동 무시 목록에 넣는다
+	void IgnoreOwnerWhenMoving();
+
 	virtual void PostInitializeComponents() override;
 	virtual void LifeSpanExpired() override;
 
@@ -67,6 +74,14 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile")
 	float Lifetime = 3.0f;
+
+	// 벽에 박힐 때 맞은 지점에서 진행 방향으로 더 파고드는 깊이
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Stick", meta = (ClampMin = "0.0"))
+	float StickDepth = 10.f;
+
+	// 벽에 박힌 뒤 풀로 돌아가기까지 남아 있는 시간
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Projectile|Stick", meta = (ClampMin = "0.1"))
+	float StuckLifetime = 2.f;
 
 	float ArrowDamage = 0.0f;
 
