@@ -66,4 +66,10 @@ enum class ECheckpointId : uint8
 
     // Lvl_BossEnemyTest
     BossTest_Arena,             // 보스 몬스터 테스트 구간
+
+    // Lvl_LD_CastleOutside (+ _AbilityRooms, _Hard)
+    LDCastle_Start,             // 하층 시작
+    LDCastle_GaleSlashRoom,     // 질풍참 방 착지대
+    LDCastle_FireBladeRoom,     // 불칼 방 꼭대기 (불칼 획득 위치)
+    LDCastle_BeforeCastle,      // 성 안 문 앞
 };
