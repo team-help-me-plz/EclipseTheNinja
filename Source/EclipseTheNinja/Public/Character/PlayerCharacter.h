@@ -8,6 +8,7 @@
 #include "GAS/AbilityInfo.h"
 #include "Interface/Interactor.h"
 #include "Character/PlayerCondition.h"
+#include "GenericPlatform/ICursor.h"
 #include "PlayerCharacter.generated.h"
 
 class UStatAttributeSet;
@@ -23,6 +24,7 @@ class UNoiseComponent;
 class UHidingComponent;
 class UGAAssassinate;
 class AEnemy;
+class UUserWidget;
 struct FInputActionValue;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlayerConditionChanged, EPlayerCondition);
@@ -213,6 +215,14 @@ public:
 	// 현재 커서 쪽(좌우)으로 몸을 즉시 돌린다. 표창 투척 어빌리티가 실행될 때 호출한다.
 	void FaceCursorForThrow();
 
+	// 우클릭 조준 중 마우스 위치에 띄우는 조준 위젯.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Kunai|Aim")
+	TSubclassOf<UUserWidget> AimWidgetClass;
+
+	// 조준 위젯이 떠 있는 동안 OS 마우스 커서를 숨겨 조준 위젯만 보이게 한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Kunai|Aim")
+	bool bHideMouseCursorWhileAiming = true;
+
 	virtual void RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint) override;
 	virtual void ReturnToSafePoint_Implementation() override;
 	virtual void PlayInteractMontage_Implementation(AActor* InInteractable, UAnimMontage* InMontage) override;
@@ -294,6 +304,15 @@ private:
 	bool bHasSafePoint = false;
 	// 커서의 위치 갱신
 	void UpdateCursorTarget();
+	// 투척 가능할 때만 조준 위젯을 띄우고, 마우스 위치로 옮긴다.
+	void UpdateAimWidget();
+	void SetAimWidgetVisible(bool bVisible);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> AimWidget;
+	bool bAimWidgetVisible = false;
+	// 조준 중 커서를 숨기기 전의 커서 모양
+	EMouseCursor::Type SavedMouseCursor = EMouseCursor::Default;
 	// 캐릭터가 커서를 바라보도록 업데이트하는 함수
 	void UpdateCursorFacing(float DeltaSeconds);
 	void SetCursorFacingActive(bool bActive);
