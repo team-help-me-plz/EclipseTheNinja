@@ -22,7 +22,8 @@ public class EclipseTheNinja : ModuleRules
             "SlateCore",
             "Niagara",
             "GameplayAbilities", "GameplayTags", "GameplayTasks",
-            "DeveloperSettings"
+            "DeveloperSettings",
+            "LevelSequence", "MovieScene"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

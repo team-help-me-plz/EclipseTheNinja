@@ -93,6 +93,37 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Side Scrolling Camera", meta = (ClampMin = 1))
 	float OrthoWidth = 1200.0f;
 
+	// 켜면 카메라와 플레이어 사이를 가리는 정적 메시(집 벽·지붕 등)를 숨기고, 더 이상 가리지 않으면 다시 보이게 한다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Occlusion")
+	bool bHideOccluders = true;
+
+	// 카메라에서 플레이어 쪽으로 훑는 상자의 반 크기. X(좌우)·Z(위아래)를 키우면 더 넓게 숨긴다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Occlusion")
+	FVector OccluderSweepHalfExtent = FVector(40.0f, 5.0f, 50.0f);
+
+	// 플레이어 액터 위치에서 이만큼 올린 지점(가슴 높이)을 향해 훑는다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Occlusion", meta = (Units = "cm"))
+	float OccluderTargetZOffset = 40.0f;
+
+	// 플레이어 바로 앞 이 거리에서 훑기를 멈춘다. 플레이어가 서 있는 바닥·뒤쪽 벽은 숨기지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Occlusion", meta = (Units = "cm"))
+	float OccluderStopDistance = 60.0f;
+
+	// 이 태그가 붙은 컴포넌트나 액터는 가려도 숨기지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Occlusion")
+	FName KeepVisibleTag = TEXT("KeepVisible");
+
+	// 켜면 가림 메시 숨기기를 숨김 구역(HouseCutawayVolume 등) 안에 있을 때만 한다. 그 밖에서는 아무것도 숨기지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Occlusion")
+	bool bHideOccludersOnlyInZones = false;
+
+	// 플레이어가 숨김 구역에 들어가고 나올 때 부른다. 구역이 겹쳐도 모두 나갈 때까지 유지된다
+	UFUNCTION(BlueprintCallable, Category = "Side Scrolling Camera|Occlusion")
+	void EnterOccluderZone();
+
+	UFUNCTION(BlueprintCallable, Category = "Side Scrolling Camera|Occlusion")
+	void ExitOccluderZone();
+
 
 protected:
 	virtual void BeginPlay() override;
@@ -117,5 +148,17 @@ protected:
 
 	// SmoothTeleport로 남은 카메라 오프셋. 0으로 줄어든다.
 	FVector TeleportOffset = FVector::ZeroVector;
+
+	// 카메라와 플레이어 사이를 가리는 정적 메시를 찾아 숨기고, 이번 프레임에 가리지 않은 것은 다시 보이게 하는 함수
+	void UpdateOccluders(const FVector& CameraLocation, const APawn* TargetPawn);
+
+	// 숨겨 둔 메시를 모두 다시 보이게 하는 함수 (컷신 카메라로 바뀌거나 끝날 때)
+	void RestoreOccluders();
+
+	// 지금 숨겨 둔 메시
+	TSet<TWeakObjectPtr<UPrimitiveComponent>> HiddenOccluders;
+
+	// 플레이어가 들어가 있는 숨김 구역 수
+	int32 OccluderZoneCount = 0;
 };
 

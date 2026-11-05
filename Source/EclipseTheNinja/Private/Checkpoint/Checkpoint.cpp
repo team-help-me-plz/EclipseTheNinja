@@ -34,6 +34,8 @@ void ACheckpoint::BeginPlay()
 
     // 몬스터가 체크포인트에 막히지 않게 한다. Trigger 프로필에는 Monster 채널이 없어 기본값 Block이 적용되므로 런타임에 지정한다.
     this->ActivationTrigger->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+    // 벽 붙기 트레이스(WallAttach)도 같은 이유로 기본값 Block이 되므로 무시하게 한다.
+    this->ActivationTrigger->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Ignore);
 
     this->ActivationTrigger->OnComponentBeginOverlap.AddDynamic(this, &ACheckpoint::OnTriggerBeginOverlap);
 

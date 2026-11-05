@@ -11,6 +11,7 @@
 #include "Engine/Canvas.h"
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
+#include "Components/StaticMeshComponent.h"
 
 void APlayerCharacterCameraManager::BeginPlay()
 {
@@ -32,6 +33,8 @@ void APlayerCharacterCameraManager::EndPlay(const EEndPlayReason::Type EndPlayRe
 		AHUD::OnHUDPostRender.Remove(CameraBoundaryDrawHandle);
 		CameraBoundaryDrawHandle.Reset();
 	}
+
+	RestoreOccluders();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -232,7 +235,90 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 
 		// Super를 부르지 않으므로 카메라 모디파이어(카메라 셰이크, 임팩트 프레임 흔들림 등)를 직접 적용한다.
 		ApplyCameraModifiers(DeltaTime, OutVT.POV);
+
+		UpdateOccluders(OutVT.POV.Location, TargetPawn);
 	}
+	else
+	{
+		// 시퀀서 카메라 컷처럼 폰이 아닌 액터가 뷰 타깃이면 그 액터의 카메라를 그대로 쓴다
+		Super::UpdateViewTarget(OutVT, DeltaTime);
+		RestoreOccluders();
+	}
+}
+
+void APlayerCharacterCameraManager::UpdateOccluders(const FVector& CameraLocation, const APawn* TargetPawn)
+{
+	if (!bHideOccluders || !IsValid(TargetPawn) || !GetWorld() || (bHideOccludersOnlyInZones && OccluderZoneCount <= 0))
+	{
+		RestoreOccluders();
+		return;
+	}
+
+	const FVector Target = TargetPawn->GetActorLocation() + FVector(0.0f, 0.0f, OccluderTargetZOffset);
+	const FVector ToTarget = Target - CameraLocation;
+	const float Distance = ToTarget.Size();
+	if (Distance <= OccluderStopDistance + 1.0f)
+	{
+		RestoreOccluders();
+		return;
+	}
+	const FVector SweepEnd = CameraLocation + ToTarget / Distance * (Distance - OccluderStopDistance);
+
+	// 오브젝트 타입 쿼리는 막힘 없이 경로 위의 모든 정적 메시를 돌려준다
+	TArray<FHitResult> Hits;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CameraOccluders), false, TargetPawn);
+	GetWorld()->SweepMultiByObjectType(Hits, CameraLocation, SweepEnd, FQuat::Identity,
+		FCollisionObjectQueryParams(ECC_WorldStatic), FCollisionShape::MakeBox(OccluderSweepHalfExtent), Params);
+
+	TSet<TWeakObjectPtr<UPrimitiveComponent>> Occluders;
+	for (const FHitResult& Hit : Hits)
+	{
+		UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(Hit.GetComponent());
+		if (!IsValid(Mesh)) continue;
+		if (Mesh->ComponentHasTag(KeepVisibleTag)) continue;
+		if (const AActor* MeshOwner = Mesh->GetOwner(); IsValid(MeshOwner) && MeshOwner->ActorHasTag(KeepVisibleTag)) continue;
+		// 원래 보이지 않는 충돌용 메시(지붕 발판, 오르기 상자 등)는 건드리지 않는다
+		if (!Mesh->IsVisible() && !HiddenOccluders.Contains(Mesh)) continue;
+		Occluders.Add(Mesh);
+	}
+
+	for (const TWeakObjectPtr<UPrimitiveComponent>& Hidden : HiddenOccluders)
+	{
+		if (Hidden.IsValid() && !Occluders.Contains(Hidden))
+		{
+			Hidden->SetVisibility(true);
+		}
+	}
+	for (const TWeakObjectPtr<UPrimitiveComponent>& Occluder : Occluders)
+	{
+		if (Occluder.IsValid() && !HiddenOccluders.Contains(Occluder))
+		{
+			Occluder->SetVisibility(false);
+		}
+	}
+	HiddenOccluders = MoveTemp(Occluders);
+}
+
+void APlayerCharacterCameraManager::EnterOccluderZone()
+{
+	++OccluderZoneCount;
+}
+
+void APlayerCharacterCameraManager::ExitOccluderZone()
+{
+	OccluderZoneCount = FMath::Max(0, OccluderZoneCount - 1);
+}
+
+void APlayerCharacterCameraManager::RestoreOccluders()
+{
+	for (const TWeakObjectPtr<UPrimitiveComponent>& Hidden : HiddenOccluders)
+	{
+		if (Hidden.IsValid())
+		{
+			Hidden->SetVisibility(true);
+		}
+	}
+	HiddenOccluders.Reset();
 }
 
 void APlayerCharacterCameraManager::SetCameraExploreMode(bool IsAiming)

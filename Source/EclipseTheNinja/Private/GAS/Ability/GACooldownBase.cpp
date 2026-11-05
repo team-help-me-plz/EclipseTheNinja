@@ -13,6 +13,15 @@ void UGACooldownBase::GetCooldown(float& OutRemaining, float& OutDuration) const
 	);
 }
 
+void UGACooldownBase::StartCooldownWithoutActivation(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo) const
+{
+	if (!ActorInfo)
+	{
+		return;
+	}
+	ApplyCooldown(Handle, ActorInfo, FGameplayAbilityActivationInfo());
+}
+
 void UGACooldownBase::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
 {
 	this->CooldownEffectHandle = FActiveGameplayEffectHandle();
