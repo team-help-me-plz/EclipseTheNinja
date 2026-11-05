@@ -27,6 +27,9 @@ public:
     ECheckpointId GetCheckpointId() const { return this->CheckpointId; }
     FTransform GetRespawnTransform() const;
 
+    // 레벨 시작 체크포인트인지. CheckpointId가 None이라 등록되지 않은 레벨에서 대체 복귀 위치를 찾을 때 쓴다
+    bool IsActivateOnBeginPlay() const { return this->bActivateOnBeginPlay; }
+
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -50,7 +53,7 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UArrowComponent> RespawnPoint = nullptr;
 
-    // 이 체크포인트의 식별자. Enum 순서가 진행 순서이므로, 이미 지나온 체크포인트는 다시 활성화되지 않는다
+    // 이 체크포인트의 식별자. 순서와 관계없이 마지막으로 닿은 체크포인트가 재시작 위치가 된다. None이면 등록되지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint")
     ECheckpointId CheckpointId = ECheckpointId::None;
 

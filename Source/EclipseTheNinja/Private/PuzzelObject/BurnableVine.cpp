@@ -6,6 +6,7 @@
 #include "Util/EclipseCollisionChannels.h"
 #include "GAS/Damage/FireDamageType.h"
 #include "Interface/VineLockable.h"
+#include "Save/GameSaveSubsystem.h"
 
 #include "Components/BoxComponent.h"
 #include "Components/ChildActorComponent.h"
@@ -77,6 +78,16 @@ void ABurnableVine::BeginPlay()
 	}
 
 	this->CollectOverlappingVines();
+
+	// 이어하기라면 다 탄 상태로 시작한다. 위에서 건 대상의 덩굴 잠금도 FinishBurn이 풀어 준다
+	UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);
+	FSavedActorState State;
+
+	if (Save && Save->TakeActorState(this, State) && State.bIsUsed)
+	{
+		this->FinishBurn();
+		this->BurnEffect->DeactivateImmediate();
+	}
 }
 
 // Called every frame
@@ -169,6 +180,14 @@ void ABurnableVine::FinishBurn()
 	this->SetAssemblyVisible(this->BurnedMeshAssembly, true);
 	// 새 파티클 생성만 멈추고, 남은 불꽃은 수명대로 자연스럽게 사라지게 한다.
 	this->BurnEffect->Deactivate();
+
+	// 다 탄 덩굴은 되살아나지 않으므로 세이브에 기록한다
+	if (UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this))
+	{
+		FSavedActorState State;
+		State.bIsUsed = true;
+		Save->RecordActorState(this, State);
+	}
 }
 
 void ABurnableVine::SpreadFire()

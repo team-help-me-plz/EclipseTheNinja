@@ -9,6 +9,7 @@
 #include "GAS/Effects/GEBasicAttackDamage.h"
 #include "Component/ActivateHighlightComponent.h"
 #include "Component/InteractHighlightComponent.h"
+#include "Save/GameSaveSubsystem.h"
 
 #include "Components/BoxComponent.h"
 #include "AbilitySystemComponent.h"
@@ -84,6 +85,19 @@ void AFallingObject::BeginPlay()
 	this->FallingBody->OnComponentBeginOverlap.AddDynamic(this, &AFallingObject::OnFallingBodyBeginOverlap);
 	this->FallingBody->OnComponentEndOverlap.AddDynamic(this, &AFallingObject::OnFallingBodyEndOverlap);
 	this->InitialBodyRelativeLocation = this->FallingBody->GetRelativeLocation();
+
+	// 이어하기라면 착지한 자리에 둔다. 줄을 끊을 때 낙하가 시작되지 않도록 OnRopeCut 연결 전에 처리한다
+	UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);
+	FSavedActorState State;
+
+	if (Save && Save->TakeActorState(this, State) && State.bIsUsed)
+	{
+		this->bIsLanded = true;
+		this->FallingBody->SetRelativeLocation(State.Location);
+		this->RopeComponent->CutRope();
+		this->TryBlockPawn();
+	}
+
 	this->RopeComponent->OnRopeCut.AddUObject(this, &AFallingObject::ObjectDrop);
 
 }
@@ -324,6 +338,15 @@ void AFallingObject::ObjectLand()
 		this->LandEffectDuration,
 		false
 	);
+
+	// 떨어지는 도중이 아니라 착지한 뒤에 기록한다. 액터는 움직이지 않으므로 몸체의 상대 위치로 저장한다
+	if (UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this))
+	{
+		FSavedActorState State;
+		State.bIsUsed = true;
+		State.Location = this->FallingBody->GetRelativeLocation();
+		Save->RecordActorState(this, State);
+	}
 }
 
 void AFallingObject::StopLandEffect()

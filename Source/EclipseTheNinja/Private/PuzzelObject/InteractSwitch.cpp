@@ -7,9 +7,11 @@
 #include "Util/MeshAssembly.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "Component/InteractHighlightComponent.h"
+#include "Save/GameSaveSubsystem.h"
 
 #include "Components/SphereComponent.h"
 #include "Components/WidgetComponent.h"
+#include "Engine/GameInstance.h"
 
 // Sets default values
 AInteractSwitch::AInteractSwitch()
@@ -57,6 +59,18 @@ void AInteractSwitch::BeginPlay()
 		this->InteractHighlight->SetKeyWidget(this->InteractKeyWidget);
 	}
 	this->RefreshInteractState();
+
+	// 아래 MeshAssembly가 없으면 일찍 끝나므로 저장 상태는 그 전에 적용한다
+	UGameInstance* GameInstance = GetGameInstance();
+	UGameSaveSubsystem* Save = GameInstance
+		? GameInstance->GetSubsystem<UGameSaveSubsystem>()
+		: nullptr;
+	FSavedActorState State;
+
+	if (Save && Save->TakeActorState(this, State))
+	{
+		this->ApplySaveState(State);
+	}
 
 	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
 	if (!IsValid(AssemblyActor))
@@ -109,6 +123,32 @@ void AInteractSwitch::Interact_Implementation(AActor* InActor)
 	this->RefreshInteractState();
 	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
 	IActivatable::Execute_ToggleActivate(this->TargetActor);
+	this->SaveSwitchState();
+}
+
+FSavedActorState AInteractSwitch::MakeSaveState() const
+{
+	FSavedActorState State;
+	State.bIsUsed = this->bIsInteracted;
+	return State;
+}
+
+void AInteractSwitch::ApplySaveState(const FSavedActorState& State)
+{
+	this->bIsInteracted = State.bIsUsed;
+	this->RefreshInteractState();
+}
+
+void AInteractSwitch::SaveSwitchState() const
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	UGameSaveSubsystem* Save = GameInstance
+		? GameInstance->GetSubsystem<UGameSaveSubsystem>()
+		: nullptr;
+	if (Save)
+	{
+		Save->RecordActorState(this, this->MakeSaveState());
+	}
 }
 
 void AInteractSwitch::ShowInteractionIndicator_Implementation()

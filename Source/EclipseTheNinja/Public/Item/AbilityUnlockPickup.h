@@ -99,6 +99,10 @@ private:
 	bool	GrantAbility(APlayerCharacter* InPlayer) const;
 	// 다시 상호작용할 수 없게 상태를 Done으로 바꾸고 콜리전을 끈다
 	void	Consume();
+	// 이미 얻은 능력의 픽업을 레벨에서 없앤다. bHideAfterUnlock이 false인 제단형은 남기고 상호작용만 막는다
+	void	RemoveAsObtained();
+	// 같은 능력을 주는 이 레벨의 다른 픽업을 모두 없앤다
+	void	RemoveOtherPickups();
 	void	OpenNotice();
 	void	RefreshHighlight();
 	// 메시 머티리얼을 다이내믹 인스턴스로 바꾸고 SkillTexture를 넣는다

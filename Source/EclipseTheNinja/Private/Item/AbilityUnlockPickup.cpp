@@ -11,6 +11,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/GameInstance.h"
+#include "EngineUtils.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/PlayerController.h"
@@ -67,10 +68,35 @@ void AAbilityUnlockPickup::BeginPlay()
 	const UGameSaveSubsystem* Save = GameInstance ? GameInstance->GetSubsystem<UGameSaveSubsystem>() : nullptr;
 	if (Save && Save->IsAbilityUnlocked(this->AbilityToUnlock))
 	{
-		this->Consume();
+		this->RemoveAsObtained();
 		return;
 	}
 	this->RefreshHighlight();
+}
+
+void AAbilityUnlockPickup::RemoveAsObtained()
+{
+	// 제단처럼 남겨 두는 픽업은 상호작용만 막고, 나머지는 레벨에서 없앤다
+	if (!this->bHideAfterUnlock)
+	{
+		this->Consume();
+		return;
+	}
+
+	Destroy();
+}
+
+void AAbilityUnlockPickup::RemoveOtherPickups()
+{
+	// 방금 얻은 능력을 주는 다른 픽업은 더 이상 의미가 없으므로 함께 없앤다
+	for (TActorIterator<AAbilityUnlockPickup> It(GetWorld()); It; ++It)
+	{
+		AAbilityUnlockPickup* Other = *It;
+		if (Other != this && Other->AbilityToUnlock == this->AbilityToUnlock)
+		{
+			Other->RemoveAsObtained();
+		}
+	}
 }
 
 void AAbilityUnlockPickup::Interact_Implementation(AActor* InActor)
@@ -80,7 +106,20 @@ void AAbilityUnlockPickup::Interact_Implementation(AActor* InActor)
 		return;
 	}
 	APlayerCharacter* Player = Cast<APlayerCharacter>(InActor);
-	if (!IsValid(Player) || !this->GrantAbility(Player))
+	if (!IsValid(Player))
+	{
+		return;
+	}
+
+	// 이미 가진 능력이면 다시 부여하거나 안내를 띄우지 않고 픽업만 없앤다 (시작 능력이거나 세이브 없이 실행한 경우)
+	if (this->AbilityToUnlock != EAbilityInputID::None
+		&& Player->FindAbilitySpecByInputID(this->AbilityToUnlock))
+	{
+		this->RemoveAsObtained();
+		return;
+	}
+
+	if (!this->GrantAbility(Player))
 	{
 		return;
 	}
@@ -88,6 +127,7 @@ void AAbilityUnlockPickup::Interact_Implementation(AActor* InActor)
 	this->UnlockedPlayer = Player;
 	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
 	this->Consume();
+	this->RemoveOtherPickups();
 	this->BP_OnUnlocked(Player);
 
 	if (!this->NoticeWidgetClass)

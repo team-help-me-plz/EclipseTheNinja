@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Interface/Interactable.h"
 #include "Interface/CheckpointResettable.h"
+#include "Save/GameSave.h"
 
 #include "GameFramework/Actor.h"
 #include "InteractSwitch.generated.h"
@@ -74,6 +75,13 @@ protected:
 	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신
 	void	RefreshInteractState();
 	void	RefreshHighlight();
+
+	// 스위치 상태를 세이브용 값으로 만든다. 레버는 On 자세를 더한다
+	virtual FSavedActorState	MakeSaveState() const;
+	// 이어하기로 받은 상태를 적용한다. 대상 액터는 자기 상태를 따로 복원하므로 다시 작동시키지 않는다
+	virtual void	ApplySaveState(const FSavedActorState& State);
+	// 대상을 작동시킨 직후 호출해 스위치 상태를 세이브에 기록한다
+	void	SaveSwitchState() const;
 
 	FTimerHandle	InteractionCooldownTimer;
 	bool			bIsInteractCooldown = false;

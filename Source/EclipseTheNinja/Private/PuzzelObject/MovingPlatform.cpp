@@ -3,6 +3,7 @@
 #include "PuzzelObject/MovingPlatform.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "Component/ActivateHighlightComponent.h"
+#include "Save/GameSaveSubsystem.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -32,6 +33,17 @@ void AMovingPlatform::BeginPlay()
     this->EndPointFloat = static_cast<float>(this->TargetPoint.Num()) - 1.0f;
     this->CycleLength = EndPointFloat * 2.0f;
     this->bIsMovementUse = this->bIsMovement;
+
+    // 이어하기라면 저장된 켜짐 상태와 위치에서 시작한다. DeltaTime 0으로 위치만 맞춘다
+    UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);
+    FSavedActorState State;
+
+    if (Save && Save->TakeActorState(this, State))
+    {
+        this->bIsMovementUse = State.bIsOn;
+        this->RouteProgress = State.Progress;
+        this->PlatformMovement(0.f);
+    }
 }
 
 void AMovingPlatform::PlatformMovement(float DeltaTime)
@@ -94,6 +106,15 @@ void AMovingPlatform::ToggleActivate_Implementation()
         return;
     }
     this->bIsMovementUse = !this->bIsMovementUse;
+
+    // 원위치로 돌아가지 않는 발판은 꺼진 순간의 위치에 멈추므로 진행도도 함께 저장한다
+    if (UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this))
+    {
+        FSavedActorState State;
+        State.bIsOn = this->bIsMovementUse;
+        State.Progress = this->RouteProgress;
+        Save->RecordActorState(this, State);
+    }
 }
 
 void AMovingPlatform::ShowActivationIndicator_Implementation()

@@ -6,6 +6,7 @@
 #include "GameSaveSubsystem.generated.h"
 
 class APlayerCharacter;
+class AActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FGameSaveResult, bool, bSuccess);
 
@@ -20,6 +21,9 @@ class ECLIPSETHENINJA_API UGameSaveSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
+	/** 액터나 컴포넌트에서 이 서브시스템을 찾는다. 게임 인스턴스가 없으면 nullptr. */
+	static UGameSaveSubsystem* Get(const UObject* WorldContext);
+
 	/** 저장 파일을 읽을 수 있고 저장된 맵도 존재하는지 확인한다. 이어하기 버튼의 활성 여부에 사용한다. */
 	UFUNCTION(BlueprintPure, Category = "Save")
 	bool CanContinue() const;
@@ -36,7 +40,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Save")
 	bool ContinueGame();
 
-	/** 현재 체력을 Progress에 넣고 파일로 저장한다. 저장값을 적용하는 중이거나 스테이지 클리어 후 이동 대기 중이면 저장하지 않는다. 사망한 체력도 저장하지 않는다. */
+	/** Progress를 파일로 저장한다. 체력은 갱신하지 않는다(체크포인트 갱신 때만 기록). 저장값을 적용하는 중이거나 스테이지 클리어 후 이동 대기 중, 사망 상태면 저장하지 않는다. */
 	UFUNCTION(BlueprintCallable, Category = "Save")
 	bool SaveProgress();
 
@@ -71,13 +75,28 @@ public:
 	 */
 	bool IsApplyingRestore() const { return bApplyingRestore; }
 
-	/** 살아 있는 동안의 체력 변경을 저장에 반영한다. */
-	void RecordHealth(float Health);
-
 	/** 현재 사용 중인 Progress를 반환한다. 파일을 다시 읽는 함수가 아니므로, 마지막 파일 저장 이후 변경한 값도 들어 있을 수 있다. */
 	const UGameSave* GetProgress() const { return Progress; }
 
+	/**
+	 * 퍼즐 액터가 BeginPlay 끝에서 저장된 상태를 받아 간다. 적용할 상태가 있으면 true.
+	 * 체크포인트에 묶인(BoundCheckpoint가 None이 아닌) 액터는 항상 false로, 처음 상태로 시작한다.
+	 */
+	bool TakeActorState(const AActor* Actor, FSavedActorState& OutState) const;
+
+	/** 체크포인트에 묶이지 않은 퍼즐 액터의 상태가 바뀌었을 때 기록하고 파일에 저장한다. */
+	void RecordActorState(const AActor* Actor, const FSavedActorState& State);
+
 private:
+	// 체크포인트 리셋 대상인지 확인한다. BoundCheckpoint가 None이 아니거나 bAlwaysResetOnRespawn이 켜져 있으면 true.
+	static bool IsCheckpointBound(const AActor* Actor);
+
+	// 살아 있는 플레이어의 현재 체력을 Progress에 기록한다. 파일에는 쓰지 않는다. 사망 상태면 false.
+	bool CaptureHealth();
+
+	// 액터가 Progress에 저장된 맵에 있는지 확인한다. 에디터에서 다른 맵을 직접 실행했을 때 기록이 섞이지 않게 한다.
+	bool IsProgressLevel(const UObject* WorldContext) const;
+
 	// 저장 파일 이름. 확장자는 슬롯 API가 붙인다.
 	const FString SlotName = TEXT("GameSave");
 

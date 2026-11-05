@@ -6,9 +6,11 @@
 #include "Component/InteractHighlightComponent.h"
 #include "Component/ActivateHighlightComponent.h"
 #include "Subsystem/UIMessageSubsystem.h"
+#include "Save/GameSaveSubsystem.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
+#include "Engine/GameInstance.h"
 #include "Engine/StaticMesh.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -53,6 +55,42 @@ void ABaseDoor::BeginPlay()
 		this->InteractHighlight->SetKeyWidget(this->InteractKeyWidget);
 	}
 	this->RefreshInteractState();
+
+	// 체크포인트 리셋은 레벨 기본값으로 돌아가야 하므로 bInitialIsOpen을 정한 뒤에 적용한다
+	this->LoadDoorState();
+}
+
+void ABaseDoor::SaveDoorState() const
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	UGameSaveSubsystem* Save = GameInstance
+		? GameInstance->GetSubsystem<UGameSaveSubsystem>()
+		: nullptr;
+	if (!Save)
+	{
+		return;
+	}
+
+	FSavedActorState State;
+	State.bIsOn = this->bIsOpen;
+	Save->RecordActorState(this, State);
+}
+
+void ABaseDoor::LoadDoorState()
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	UGameSaveSubsystem* Save = GameInstance
+		? GameInstance->GetSubsystem<UGameSaveSubsystem>()
+		: nullptr;
+	FSavedActorState State;
+
+	if (!Save || !Save->TakeActorState(this, State))
+	{
+		return;
+	}
+
+	this->bIsOpen = State.bIsOn;
+	this->OpenAlpha = State.bIsOn ? 1.0 : 0.0;
 }
 
 void ABaseDoor::ResetToInitial_Implementation()
@@ -85,6 +123,7 @@ void ABaseDoor::Tick(float DeltaTime)
 void ABaseDoor::ToggleActivate_Implementation()
 {
 	this->bIsOpen = !this->bIsOpen;
+	this->SaveDoorState();
 }
 
 void ABaseDoor::ShowActivationIndicator_Implementation()
@@ -125,6 +164,7 @@ void ABaseDoor::Interact_Implementation(AActor* InActor)
 		false
 	);
 	this->bIsOpen = !this->bIsOpen;
+	this->SaveDoorState();
 	this->RefreshInteractState();
 	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
 }

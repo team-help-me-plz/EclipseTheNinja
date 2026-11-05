@@ -3,6 +3,7 @@
 
 #include "Character/PlayerCharacter.h"
 #include "Save/GameSaveSubsystem.h"
+#include "Checkpoint/CheckpointSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -625,7 +626,6 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
     if (GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->IsApplyingRestore()) return;
-    GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->RecordHealth(Data.NewValue);
 	// 체력이 0이면 사망하고, 살아 있는 상태의 체력 감소는 피격으로 처리한다.
 	if (bIsDead)
 	{
@@ -1301,7 +1301,24 @@ void APlayerCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSa
 
 void APlayerCharacter::ReturnToSafePoint_Implementation()
 {
-	if (!bHasSafePoint || bIsDead) return;
+	if (bIsDead)
+	{
+		return;
+	}
+
+	// 세이프 포인트 볼륨을 아직 지나지 않았으면(이어하기·리스폰 직후) 현재 체크포인트로,
+	// 그것도 없으면 레벨 시작 체크포인트(bActivateOnBeginPlay)로 옮긴다. 둘 다 없으면 옮기지 않는다.
+	// 세이프 포인트는 캐릭터에만 기록되므로 새로 스폰된 캐릭터는 다음 볼륨을 밟기 전까지 갖고 있지 않다.
+	FTransform TargetTransform = SafePointTransform;
+	if (!bHasSafePoint)
+	{
+		const UCheckpointSubsystem* Checkpoints = GetWorld()->GetSubsystem<UCheckpointSubsystem>();
+		if (!Checkpoints || !Checkpoints->GetFallbackRespawnTransform(GetActorLocation(), TargetTransform))
+		{
+			return;
+		}
+	}
+
 	// 평면 고정을 되돌린 뒤에 안전 지점 평면으로 옮긴다.
 	if (IsValid(HidingComponent)) HidingComponent->ForceExit();
 
@@ -1321,8 +1338,14 @@ void APlayerCharacter::ReturnToSafePoint_Implementation()
 		}
 	}
 	GetCharacterMovement()->StopMovementImmediately();
-	GetCharacterMovement()->SetPlaneConstraintOrigin(SafePointTransform.GetLocation());
-	SetActorLocationAndRotation(SafePointTransform.GetLocation(), SafePointTransform.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
+	GetCharacterMovement()->SetPlaneConstraintOrigin(TargetTransform.GetLocation());
+	SetActorLocationAndRotation(
+		TargetTransform.GetLocation(),
+		TargetTransform.Rotator(),
+		false,
+		nullptr,
+		ETeleportType::TeleportPhysics
+	);
 	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
 }
 

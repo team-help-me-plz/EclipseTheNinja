@@ -7,6 +7,7 @@
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 
+#include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 
@@ -58,8 +59,8 @@ void UCheckpointSubsystem::ActivateCheckpoint(ECheckpointId NewCheckpointId)
 {
     UGameSaveSubsystem* Save = GetWorld()->GetGameInstance()->GetSubsystem<UGameSaveSubsystem>();
     if (Save && Save->IsRestoring()) return;
-    // 선형 진행: 이미 지나온(같거나 낮은) 체크포인트는 무시
-    if (NewCheckpointId == ECheckpointId::None || NewCheckpointId <= this->CurrentCheckpoint)
+    // ID 크기와 관계없이 마지막으로 닿은 체크포인트로 갱신한다. 지금 체크포인트에 다시 닿은 경우만 무시한다
+    if (NewCheckpointId == ECheckpointId::None || NewCheckpointId == this->CurrentCheckpoint)
     {
         return;
     }
@@ -78,6 +79,42 @@ bool UCheckpointSubsystem::GetCheckpointTransform(FTransform& OutTransform) cons
     const ACheckpoint* Checkpoint = Checkpoints.FindRef(CurrentCheckpoint).Get();
     if (!IsValid(Checkpoint)) return false;
     OutTransform = Checkpoint->GetRespawnTransform();
+    return true;
+}
+
+bool UCheckpointSubsystem::GetFallbackRespawnTransform(const FVector& FromLocation, FTransform& OutTransform) const
+{
+    if (this->GetCheckpointTransform(OutTransform))
+    {
+        return true;
+    }
+
+    // CheckpointId가 None인 체크포인트는 등록되지 않으므로 월드에서 직접 찾는다.
+    // 시작 체크포인트가 여럿이면 지금 위치에서 가장 가까운 것을 고른다
+    const ACheckpoint* Closest = nullptr;
+    double ClosestDistSq = TNumericLimits<double>::Max();
+    for (TActorIterator<ACheckpoint> It(GetWorld()); It; ++It)
+    {
+        const ACheckpoint* Candidate = *It;
+        if (!IsValid(Candidate) || !Candidate->IsActivateOnBeginPlay())
+        {
+            continue;
+        }
+
+        const double DistSq = FVector::DistSquared(FromLocation, Candidate->GetActorLocation());
+        if (DistSq < ClosestDistSq)
+        {
+            Closest = Candidate;
+            ClosestDistSq = DistSq;
+        }
+    }
+
+    if (!Closest)
+    {
+        return false;
+    }
+
+    OutTransform = Closest->GetRespawnTransform();
     return true;
 }
 
@@ -124,7 +161,7 @@ void UCheckpointSubsystem::RespawnAtCheckpoint(APawn* PlayerPawn)
     for (const TWeakObjectPtr<UCheckpointBoundComponent>& Weak : this->BoundComponents)
     {
         UCheckpointBoundComponent* Comp = Weak.Get();
-        if (IsValid(Comp) && Comp->GetBoundCheckpoint() == CheckpointId)
+        if (IsValid(Comp) && Comp->ShouldResetOnRespawn(CheckpointId))
         {
             Targets.Add(Comp);
         }
@@ -165,7 +202,8 @@ void UCheckpointSubsystem::RegisterBound(UCheckpointBoundComponent* InComponent)
     }
     */
 
-    if (InComponent->GetBoundCheckpoint() == ECheckpointId::None)
+    // 항상 초기화하는 컴포넌트는 BoundCheckpoint가 None이어도 리스폰 대상으로 등록한다
+    if (InComponent->GetBoundCheckpoint() == ECheckpointId::None && !InComponent->IsAlwaysResetOnRespawn())
     {
         // 퍼즐 클래스들이 컴포넌트를 기본으로 가지므로 체크포인트를 쓰지 않는 레벨에서는 None이 정상. Warning 대신 Log
         UE_LOG(LogTemp, Log, TEXT("[UCheckpointSubsystem::RegisterBound()] %s 는 속한 체크포인트가 None이라 등록되지 않습니다."),

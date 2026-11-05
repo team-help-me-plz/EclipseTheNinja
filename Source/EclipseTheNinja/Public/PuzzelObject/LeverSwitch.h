@@ -33,6 +33,11 @@ protected:
 
 	virtual void	ResetInteractionCooldown() override;
 
+	// 눌림 여부에 On 자세를 더해 저장한다
+	virtual FSavedActorState	MakeSaveState() const override;
+	// 저장된 On 자세를 받는다. 손잡이 자세는 BeginPlay에서 시퀀스를 연결한 뒤 맞춘다
+	virtual void	ApplySaveState(const FSavedActorState& State) override;
+
 	void	PlayLeverAnim();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
