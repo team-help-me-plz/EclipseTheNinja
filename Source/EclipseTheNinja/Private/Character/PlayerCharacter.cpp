@@ -44,6 +44,8 @@
 #include "Character/Enemy.h"
 #include "Component/HidingComponent.h"
 #include "Util/EclipseCollisionChannels.h"
+#include "Blueprint/UserWidget.h"
+#include "UObject/ConstructorHelpers.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -103,6 +105,13 @@ APlayerCharacter::APlayerCharacter()
 
 	// 일반 점프는 1회만 허용하고, 벽 점프는 LaunchCharacter로 처리한다.
 	JumpMaxCount = 1;
+
+	// 우클릭 조준 위젯 기본값. BP에서 다른 위젯으로 바꿀 수 있다.
+	static ConstructorHelpers::FClassFinder<UUserWidget> AimWidgetFinder(TEXT("/Game/Widgets/WBP_AimWidget"));
+	if (AimWidgetFinder.Succeeded())
+	{
+		AimWidgetClass = AimWidgetFinder.Class;
+	}
 }
 
 void APlayerCharacter::OnJumped_Implementation()
@@ -162,6 +171,12 @@ void APlayerCharacter::BeginPlay()
 void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
 	SetCursorFacingActive(false);
+	SetAimWidgetVisible(false);
+	if (AimWidget)
+	{
+		AimWidget->RemoveFromParent();
+		AimWidget = nullptr;
+	}
 	// clear the wall jump timer
 	GetWorld()->GetTimerManager().ClearTimer(WallJumpTimer);
 	Super::EndPlay(EndPlayReason);
@@ -170,6 +185,8 @@ void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	// 아래의 조기 반환(공격 중 등)과 관계없이 조준 위젯은 매 프레임 갱신한다.
+	UpdateAimWidget();
 	if (IsParrying()) return;
 	// 사망 연출과 공격(콤보, 표창, 질풍참 등) 중에는 커서·이동 방향으로 몸을 돌리지 않는다.
 	if (bIsDead || IsAssassinating() || IsHiding() || IsAttacking()) return;
@@ -210,6 +227,74 @@ void APlayerCharacter::UpdateCursorTarget()
 
 	CursorWorldLocation = RayOrigin + RayDirection * Distance;
 	bHasCursorTarget = true;
+}
+
+void APlayerCharacter::UpdateAimWidget()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	const bool bCanShow = AimWidgetClass
+		&& PlayerController && PlayerController->IsLocalPlayerController()
+		&& CanThrowKunai()
+		// 투척 어빌리티는 지상에서만, 벽에 붙지 않았을 때만 실행되므로 그때만 조준점을 보여준다.
+		&& GetCharacterMovement()->IsMovingOnGround()
+		&& !IsOnWall()
+		&& PlayerController->GetMousePosition(MouseX, MouseY);
+
+	SetAimWidgetVisible(bCanShow);
+	if (bCanShow && AimWidget)
+	{
+		// 조준점은 마우스 위치를 그대로 따라간다.
+		AimWidget->SetPositionInViewport(FVector2D(MouseX, MouseY), true);
+	}
+}
+
+void APlayerCharacter::SetAimWidgetVisible(bool bVisible)
+{
+	if (bAimWidgetVisible == bVisible)
+	{
+		return;
+	}
+	bAimWidgetVisible = bVisible;
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (bVisible)
+	{
+		if (!AimWidget && PlayerController && AimWidgetClass)
+		{
+			AimWidget = CreateWidget<UUserWidget>(PlayerController, AimWidgetClass);
+			if (AimWidget)
+			{
+				AimWidget->AddToViewport(10);
+				// 위젯 중앙이 조준 지점에 오도록 한다.
+				AimWidget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f));
+			}
+		}
+		if (AimWidget)
+		{
+			// 클릭이 위젯에 막히지 않도록 히트 테스트를 끈다.
+			AimWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+		if (PlayerController && bHideMouseCursorWhileAiming)
+		{
+			SavedMouseCursor = PlayerController->CurrentMouseCursor;
+			// bShowMouseCursor를 끄면 마우스가 캡처되어 커서 위치가 고정되므로, 모양만 None으로 바꿔 숨긴다.
+			PlayerController->CurrentMouseCursor = EMouseCursor::None;
+		}
+	}
+	else
+	{
+		if (AimWidget)
+		{
+			AimWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		if (PlayerController && bHideMouseCursorWhileAiming
+			&& PlayerController->CurrentMouseCursor == EMouseCursor::None)
+		{
+			PlayerController->CurrentMouseCursor = SavedMouseCursor;
+		}
+	}
 }
 
 void APlayerCharacter::UpdateCursorFacing(float DeltaSeconds)
@@ -510,6 +595,8 @@ void APlayerCharacter::UnPossessed()
 	DoCloneTechEnd();
 	bHasCursorTarget = false;
 	SetCursorFacingActive(false);
+	// 컨트롤러가 떨어지기 전에 조준 위젯을 숨기고 커서 모양을 되돌린다.
+	SetAimWidgetVisible(false);
 	ASC->CancelAllAbilities();
 	Super::UnPossessed();
 }
