@@ -97,6 +97,9 @@ private:
 	// 액터가 Progress에 저장된 맵에 있는지 확인한다. 에디터에서 다른 맵을 직접 실행했을 때 기록이 섞이지 않게 한다.
 	bool IsProgressLevel(const UObject* WorldContext) const;
 
+	// 퍼즐 상태를 맵별로 나눠 둘 때 쓰는 키. 저장된 맵의 패키지 이름이다.
+	FName GetProgressLevelKey() const;
+
 	// 저장 파일 이름. 확장자는 슬롯 API가 붙인다.
 	const FString SlotName = TEXT("GameSave");
 

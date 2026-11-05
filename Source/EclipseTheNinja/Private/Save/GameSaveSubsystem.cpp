@@ -284,9 +284,6 @@ bool UGameSaveSubsystem::SaveStageClear(TSoftObjectPtr<UWorld> NextLevel, bool b
 		Progress->Level = NextLevel;
 		Progress->Checkpoint = ECheckpointId::None;
 		Progress->bHasRespawnTransform = false;
-
-		// 액터 이름은 맵마다 따로 붙으므로 이전 맵의 퍼즐 상태는 버린다.
-		Progress->ActorStates.Reset();
 	}
 
 	const bool bSaved = WriteSave();
@@ -330,6 +327,16 @@ bool UGameSaveSubsystem::IsProgressLevel(const UObject* WorldContext) const
 	return SavedLevel == CurrentLevel || FPackageName::GetShortName(SavedLevel) == CurrentLevel;
 }
 
+FName UGameSaveSubsystem::GetProgressLevelKey() const
+{
+	if (!Progress)
+	{
+		return NAME_None;
+	}
+
+	return FName(*Progress->Level.ToSoftObjectPath().GetLongPackageName());
+}
+
 bool UGameSaveSubsystem::TakeActorState(const AActor* Actor, FSavedActorState& OutState) const
 {
 	if (!IsValid(Actor) || !IsProgressLevel(Actor))
@@ -343,7 +350,11 @@ bool UGameSaveSubsystem::TakeActorState(const AActor* Actor, FSavedActorState& O
 		return false;
 	}
 
-	const FSavedActorState* Found = Progress->ActorStates.Find(Actor->GetFName());
+	const FSavedLevelState* LevelState = Progress->LevelStates.Find(GetProgressLevelKey());
+	const FSavedActorState* Found = LevelState
+		? LevelState->ActorStates.Find(Actor->GetFName())
+		: nullptr;
+
 	if (!Found)
 	{
 		return false;
@@ -367,7 +378,9 @@ void UGameSaveSubsystem::RecordActorState(const AActor* Actor, const FSavedActor
 		return;
 	}
 
-	Progress->ActorStates.Add(Actor->GetFName(), State);
+	// 액터 이름은 맵마다 따로 붙으므로 맵별로 나눠 기록한다
+	FSavedLevelState& LevelState = Progress->LevelStates.FindOrAdd(GetProgressLevelKey());
+	LevelState.ActorStates.Add(Actor->GetFName(), State);
 
 	// 플레이어 준비 전이라 파일 저장이 거절돼도 기록은 남고, PlayerReady의 저장에 함께 들어간다.
 	SaveProgress();

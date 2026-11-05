@@ -38,6 +38,17 @@ struct FSavedActorState
 	float Progress = 0.f;
 };
 
+/** 맵 하나에 배치된 퍼즐 액터들의 저장 상태. */
+USTRUCT()
+struct FSavedLevelState
+{
+	GENERATED_BODY()
+
+	/** 키는 액터 이름. */
+	UPROPERTY(SaveGame)
+	TMap<FName, FSavedActorState> ActorStates;
+};
+
 /**
  * 게임을 종료한 뒤에도 유지할 진행 데이터.
  * 저장 슬롯에는 값만 보관하고, 액터 이동과 능력 부여는 UGameSaveSubsystem이 처리한다.
@@ -88,7 +99,7 @@ public:
 	UPROPERTY(SaveGame)
 	bool bGameCompleted = false;
 
-	/** 저장된 맵(Level)에 배치된 퍼즐 액터의 상태. 키는 액터 이름이고, 다음 맵으로 넘어가면 비운다. */
+	/** 맵별 퍼즐 액터 상태. 키는 맵 패키지 이름. 다음 맵으로 넘어가도 지우지 않아 이전 맵에 다시 들어가면 그대로 복원한다. */
 	UPROPERTY(SaveGame)
-	TMap<FName, FSavedActorState> ActorStates;
+	TMap<FName, FSavedLevelState> LevelStates;
 };
