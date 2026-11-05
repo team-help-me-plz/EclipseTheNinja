@@ -173,7 +173,12 @@ void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
     {
         if (Subsystem->HasValidCheckpoint())
         {
-            if (APlayerCharacter* RespawnedCharacter = GetWorld()->SpawnActor<APlayerCharacter>(RespawnClass, DestroyedActor->GetTransform()))
+            // 시체 위치에 스폰하면 가시 함정 같은 트리거와 겹친 채 BeginPlay 직후 초기 오버랩이 발생해
+            // 새 캐릭터가 피해를 입은 상태로 체크포인트로 옮겨진다. 처음부터 체크포인트 위치에 스폰한다.
+            FTransform SpawnTransform = DestroyedActor->GetTransform();
+            Subsystem->GetCheckpointTransform(SpawnTransform);
+
+            if (APlayerCharacter* RespawnedCharacter = GetWorld()->SpawnActor<APlayerCharacter>(RespawnClass, SpawnTransform))
             {
                 Possess(RespawnedCharacter);
                 Subsystem->RespawnAtCheckpoint(RespawnedCharacter);
