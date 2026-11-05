@@ -454,6 +454,7 @@ void AEnemy::ResetToInitial_Implementation()
 	GetMesh()->SetCollisionEnabled(InitialMeshCollision);
 	GetMesh()->SetRelativeLocation(InitialMeshRelativeLocation);
 	AppliedMeshYOffset = FVector::ZeroVector;
+	bMeshYOffsetSuppressed = false;
 	UpdateMeshYOffset();
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
@@ -689,7 +690,11 @@ void AEnemy::UpdateMeshYOffset()
 	}
 
 	// 액터 회전을 상쇄한 오프셋으로 바꿔 넣는다. 이전에 넣은 값만 빼서 다른 연출이 옮긴 위치는 유지한다.
-	const FVector NewOffset = GetActorQuat().UnrotateVector(FVector(0.0f, MeshYOffset, 0.0f));
+	// 암살 중에는 칼과 드롭 위치가 캡슐 기준으로 맞도록 오프셋을 뺀다.
+	const float OffsetY = bMeshYOffsetSuppressed
+		? 0.0f
+		: MeshYOffset;
+	const FVector NewOffset = GetActorQuat().UnrotateVector(FVector(0.0f, OffsetY, 0.0f));
 
 	if (NewOffset.Equals(AppliedMeshYOffset, 0.01f))
 	{
@@ -698,6 +703,17 @@ void AEnemy::UpdateMeshYOffset()
 
 	GetMesh()->SetRelativeLocation(GetMesh()->GetRelativeLocation() - AppliedMeshYOffset + NewOffset);
 	AppliedMeshYOffset = NewOffset;
+}
+
+void AEnemy::SetMeshYOffsetSuppressed(bool bSuppressed)
+{
+	if (bMeshYOffsetSuppressed == bSuppressed)
+	{
+		return;
+	}
+
+	bMeshYOffsetSuppressed = bSuppressed;
+	UpdateMeshYOffset();
 }
 
 void AEnemy::OnRootTransformUpdated(USceneComponent* UpdatedComponent, EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport)

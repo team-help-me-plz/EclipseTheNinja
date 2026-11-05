@@ -100,8 +100,16 @@ void UAssassinationDropComponent::SpawnPendingDrop()
 
 	CancelPendingDrop();
 
-	// 암살 연출이 메시를 옮겨 둘 수 있으므로 캡슐이 아닌 메시 위치(시체 위치)를 기준으로 한다.
-	SpawnDropActor(Enemy->GetMesh()->GetComponentLocation() + SpawnOffset);
+	// 암살 연출이 메시를 옮겨 둘 수 있으므로 X·Z는 메시 위치(시체 위치)를 기준으로 한다.
+	// Y는 하단·상단 암살이 캡슐을 옆으로 옮기므로 암살 시작 때 받은 이동 평면 Y를 쓴다.
+	FVector DropLocation = Enemy->GetMesh()->GetComponentLocation();
+	if (DropPlaneY.IsSet())
+	{
+		DropLocation.Y = DropPlaneY.GetValue();
+	}
+
+	DropPlaneY.Reset();
+	SpawnDropActor(DropLocation + SpawnOffset);
 }
 
 void UAssassinationDropComponent::CancelPendingDrop()
@@ -117,6 +125,7 @@ void UAssassinationDropComponent::CancelPendingDrop()
 void UAssassinationDropComponent::HandleCheckpointRespawned(ECheckpointId CheckpointId)
 {
 	CancelPendingDrop();
+	DropPlaneY.Reset();
 }
 
 void UAssassinationDropComponent::SpawnDropActor(const FVector& SpawnLocation)

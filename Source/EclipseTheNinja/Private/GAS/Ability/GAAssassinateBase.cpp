@@ -18,6 +18,7 @@
 #include "Character/Enemy.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/AssassinateTargetComponent.h"
+#include "Component/AssassinationDropComponent.h"
 #include "Component/AssassinationTargetingComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/Ability/GABaseAttack.h"
@@ -156,6 +157,15 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	TargetComponent->SetAssassinationInProgress(true);
 	bTargetReserved = true;
 	TargetComponent->SetTargetHighlighted(false);
+
+	// 칼이 꽂히는 위치와 회복 오브 드롭 위치가 어긋나지 않게 메시를 캡슐 위치로 돌린다.
+	Enemy->SetMeshYOffsetSuppressed(true);
+
+	// 하단·상단 암살은 피격자 캡슐을 옆으로 옮기므로, 옮기기 전 캡슐 Y(이동 평면)에 회복 오브를 떨어뜨리게 한다.
+	if (UAssassinationDropComponent* DropComp = Enemy->FindComponentByClass<UAssassinationDropComponent>())
+	{
+		DropComp->SetDropPlaneY(Enemy->GetActorLocation().Y);
+	}
 
 	// 타겟이 파괴될때 실행할 함수를 바인딩
 	Enemy->OnDestroyed.AddDynamic(this, &UGAAssassinateBase::OnVictimDestroyed);
@@ -752,6 +762,10 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		if (!Enemy->IsDead() && bMovementLocked)
 		{
 			Enemy->GetCharacterMovement()->SetMovementMode(VictimMovementMode, VictimCustomMode);
+
+			// 살아남았으면 평소 오프셋으로 되돌린다. 죽었으면 리스폰 때 되돌린다.
+			Enemy->SetMeshYOffsetSuppressed(false);
+
 			if (PausedBrain.IsValid())
 			{
 				PausedBrain->ResumeLogic(TEXT("Assassination cancelled"));

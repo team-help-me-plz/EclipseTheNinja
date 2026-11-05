@@ -31,6 +31,9 @@ public:
 		DropDelay = InDropDelay;
 	}
 
+	/** 드롭할 월드 Y를 고정한다. 암살 연출이 캡슐을 옆으로 옮기기 전 위치를 넘겨 이동 평면에 떨어뜨리게 한다. */
+	void SetDropPlaneY(float InPlaneY) { DropPlaneY = InPlaneY; }
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -81,4 +84,7 @@ private:
 
 	/** 사망 후 DropDelay를 세는 타이머 */
 	FTimerHandle DropDelayTimer;
+
+	/** SetDropPlaneY로 받은 드롭 Y. 없으면 메시 위치의 Y를 쓴다. */
+	TOptional<float> DropPlaneY;
 };

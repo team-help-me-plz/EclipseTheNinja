@@ -75,6 +75,9 @@ public:
 	/** 지금 암살 대상으로 지정될 수 있는지. 경계 단계 검사와 별도로 적 종류별 조건(보스 실드 등)을 추가한다. */
 	virtual bool CanBeAssassinated() const { return true; }
 
+	/** 암살 연출 동안 MeshYOffset을 빼서 메시를 캡슐(암살자와 같은 Y)에 맞춘다. 리스폰 때 다시 켜진다. */
+	void SetMeshYOffsetSuppressed(bool bSuppressed);
+
 	/** 사망 시 알림 (드롭 등 사망에 반응하는 컴포넌트용) */
 	FOnEnemyDeath OnDied;
 
@@ -399,6 +402,9 @@ protected:
 
 	// 지금 메시 상대 위치에 들어가 있는 MeshYOffset(액터 공간). 메시 위치를 직접 정하는 곳은 이 값을 더한다.
 	FVector AppliedMeshYOffset = FVector::ZeroVector;
+
+	// 암살 연출 중이라 MeshYOffset을 적용하지 않는지
+	bool bMeshYOffsetSuppressed = false;
 
 	// 보는 방향과 관계없이 메시가 캡슐에서 월드 Y로 MeshYOffset만큼 떨어지도록 맞춘다.
 	void UpdateMeshYOffset();
