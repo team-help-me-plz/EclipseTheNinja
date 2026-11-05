@@ -22,11 +22,18 @@ ATrapArrowActor::ATrapArrowActor()
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	this->SphereCollision = CreateDefaultSubobject<USphereComponent>(TEXT("SphereCollision"));
-	this->SphereCollision->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Overlap);
+	// 캐릭터(Pawn)는 오버랩으로 처리하고, 벽(WorldStatic/WorldDynamic)에는 막혀 박힌다.
+	// 그 외 채널(Visibility/Camera/커스텀 채널 등)은 무시해서 엉뚱한 볼륨에 겹쳐 바로 사라지지 않게 한다.
+	// 오브젝트 타입을 PhysicsBody로 두고 PhysicsBody를 무시해서 화살끼리는 서로 막지 않는다.
+	this->SphereCollision->SetCollisionObjectType(ECC_PhysicsBody);
+	this->SphereCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	this->SphereCollision->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+	this->SphereCollision->SetCollisionResponseToChannel(ECC_Pawn, ECollisionResponse::ECR_Overlap);
+	this->SphereCollision->SetCollisionResponseToChannel(ECC_WorldStatic, ECollisionResponse::ECR_Block);
+	this->SphereCollision->SetCollisionResponseToChannel(ECC_WorldDynamic, ECollisionResponse::ECR_Block);
 	//this->SphereCollision->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Overlap);
 	//this->SphereCollision->SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldStatic, ECollisionResponse::ECR_Overlap);
 	//this->SphereCollision->SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldDynamic, ECollisionResponse::ECR_Overlap);
-	this->SphereCollision->IgnoreActorWhenMoving(this->GetOwner(), true);
 	//this->SphereCollision->;
 	//this->SphereCollision->;
 	SetRootComponent(this->SphereCollision);
@@ -67,6 +74,12 @@ void ATrapArrowActor::OnArrowBeginOverlap(UPrimitiveComponent* OverlappedCompone
 {
 	// 풀에 반환된 뒤에도 같은 스윕의 남은 오버랩(메시 본별 중복)이 들어올 수 있다
 	if (this->bHasHit)
+	{
+		return;
+	}
+	// 발사 위치가 함정과 겹쳐 있어도 발사한 함정(과 외형 자식 액터)에는 반응하지 않는다
+	const AActor*	OwnerActor = GetOwner();
+	if (OtherActor && OwnerActor && (OtherActor == OwnerActor || OtherActor->GetParentActor() == OwnerActor))
 	{
 		return;
 	}
@@ -124,6 +137,48 @@ void ATrapArrowActor::PostInitializeComponents()
 	Super::PostInitializeComponents();
 
 	this->SphereCollision->OnComponentBeginOverlap.AddDynamic(this, &ATrapArrowActor::OnArrowBeginOverlap);
+	this->ProjectileMovement->OnProjectileStop.AddDynamic(this, &ATrapArrowActor::OnArrowStop);
+}
+
+void ATrapArrowActor::OnArrowStop(const FHitResult& ImpactResult)
+{
+	if (this->bHasHit)
+	{
+		return;
+	}
+	this->bHasHit = true;
+	this->FlyEffect->Deactivate();
+	// 박힌 화살이 표창이나 다른 물체를 막지 않도록 충돌을 끈다 (풀에서 꺼낼 때 기본값으로 복구된다)
+	this->SphereCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 표면에 닿은 위치에서 진행 방향으로 조금 더 파고든다
+	const FVector	Direction = GetActorForwardVector();
+	SetActorLocation(GetActorLocation() + Direction * this->StickDepth, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// 움직이는 물체에 박혔으면 같이 움직인다
+	if (USceneComponent* HitComponent = ImpactResult.GetComponent())
+	{
+		AttachToComponent(HitComponent, FAttachmentTransformRules::KeepWorldTransform);
+	}
+	SetLifeSpan(this->StuckLifetime);
+}
+
+void ATrapArrowActor::IgnoreOwnerWhenMoving()
+{
+	this->SphereCollision->ClearMoveIgnoreActors();
+	AActor*	OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+	this->SphereCollision->IgnoreActorWhenMoving(OwnerActor, true);
+	// 함정 외형은 ChildActorComponent의 자식 액터에 있으므로 함께 무시한다
+	TArray<AActor*>	ChildActors;
+	OwnerActor->GetAllChildActors(ChildActors, true);
+	for (AActor* ChildActor : ChildActors)
+	{
+		this->SphereCollision->IgnoreActorWhenMoving(ChildActor, true);
+	}
 }
 
 void ATrapArrowActor::LifeSpanExpired()
@@ -144,6 +199,7 @@ void ATrapArrowActor::SetLaunch(float InVelocity, float InDamage)
 	this->ProjectileMovement->SetVelocityInLocalSpace(FVector(InVelocity, 0.f, 0.f));
 	this->ArrowDamage = InDamage;
 	this->FlyEffect->Activate(true);
+	this->IgnoreOwnerWhenMoving();
 
 	SetLifeSpan(Lifetime);
 }
@@ -152,6 +208,8 @@ void ATrapArrowActor::OnSpawnFromPool_Implementation()
 {
 	// 충돌로 시뮬레이션이 멈추면 UpdatedComponent가 해제되므로 다시 지정 (속도는 SetLaunch에서 설정)
 	this->ProjectileMovement->SetUpdatedComponent(this->SphereCollision);
+	// 벽에 박히면서 꺼둔 충돌을 되살린다
+	this->SphereCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	this->bHasHit = false;
 	this->PendingDeflector.Reset();
 	this->DeflectedBy.Reset();
@@ -171,6 +229,8 @@ bool ATrapArrowActor::Deflect(AActor* Deflector)
 void ATrapArrowActor::OnReturnToPool_Implementation()
 {
 	this->ProjectileMovement->StopMovementImmediately();
+	// 벽에 박혀 붙어 있던 경우 떼어낸다
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	// 다음 발사 위치에 이전 파티클이 남지 않도록 바로 지운다
 	this->FlyEffect->DeactivateImmediate();
 }

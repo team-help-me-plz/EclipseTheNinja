@@ -25,6 +25,12 @@ public:
 
     ECheckpointId GetBoundCheckpoint() const { return this->BoundCheckpoint; }
 
+    // 어느 체크포인트에서 리스폰하든 초기화되는지
+    bool IsAlwaysResetOnRespawn() const { return this->bAlwaysResetOnRespawn; }
+
+    // 리스폰 시 초기화 대상인지. 묶인 체크포인트가 리스폰 체크포인트와 같거나 bAlwaysResetOnRespawn이 켜져 있으면 true
+    bool ShouldResetOnRespawn(ECheckpointId RespawnCheckpoint) const;
+
     // 리스폰 1단계: 트랜스폼 복원 + ICheckpointResettable::ResetToInitial()
     void ResetOwner();
 
@@ -40,6 +46,11 @@ protected:
     // 플레이어가 이 체크포인트에서 리스폰하면 이 액터가 초기 상태로 리셋된다. (다른 체크포인트에서의 리스폰에는 영향 없음)
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint")
     ECheckpointId BoundCheckpoint = ECheckpointId::None;
+
+    // 켜면 BoundCheckpoint와 관계없이 어느 체크포인트에서 리스폰하든 초기 상태로 리셋한다. (BoundCheckpoint가 None이어도 동작)
+    // 리스폰마다 처음으로 돌아가는 액터이므로 세이브 파일에도 상태를 저장하지 않는다.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint")
+    bool bAlwaysResetOnRespawn = true;
 
     // 리셋 시 BeginPlay 시점의 트랜스폼으로 되돌릴 것인지 여부 (물리 속도도 초기화)
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint")

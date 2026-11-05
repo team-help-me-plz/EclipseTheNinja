@@ -85,6 +85,8 @@ bool UAssassinateTargetComponent::CanAssassinate(const ACharacter* Assassin)
 	if (!Enemy->CanBeAssassinated()) return false;
 	// 이 컴포넌트를 대상으로 이미 암살이 진행되고 있으면 암살 불가
 	if (bAssassinationInProgress) return false;
+	// 적의 현재 전투 타겟이 캐릭터라면 암살 불가
+	if (Enemy->GetCombatTarget() == Assassin) return false;
 
 	const UEnemyDetectionComponent* EDC = Enemy->GetEneymDetectionComponent();
 	if (!IsValid(EDC)) return false;

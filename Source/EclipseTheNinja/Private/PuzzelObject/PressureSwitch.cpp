@@ -4,6 +4,7 @@
 #include "Interface/Interactor.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "Component/InteractHighlightComponent.h"
+#include "Save/GameSaveSubsystem.h"
 
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -67,6 +68,15 @@ void APressureSwitch::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 이어하기라면 이미 눌린 한 번용 발판을 다시 작동하지 않게 한다
+	UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);
+	FSavedActorState State;
+
+	if (Save && Save->TakeActorState(this, State))
+	{
+		this->bIsInteracted = State.bIsUsed;
+	}
+
 	this->RefreshInteractState();
 }
 
@@ -129,6 +139,15 @@ void APressureSwitch::Interact_Implementation(AActor* InActor)
 	IActivatable::Execute_ToggleActivate(this->TargetActor);
 	this->bIsInteracted = true;
 	this->RefreshInteractState();
+
+	// 누르는 동안만 작동하거나 여러 번 누를 수 있는 발판은 남길 상태가 없다. 한 번용 발판만 기록한다
+	UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);
+	if (Save && !this->bIsUnpressure && !this->bIsReinteractable)
+	{
+		FSavedActorState State;
+		State.bIsUsed = true;
+		Save->RecordActorState(this, State);
+	}
 }
 void APressureSwitch::ShowInteractionIndicator_Implementation()
 {

@@ -7,6 +7,49 @@
 #include "GameSave.generated.h"
 
 /**
+ * 현재 맵에 배치된 퍼즐 액터 하나의 저장 상태.
+ * 액터마다 쓰는 의미가 다르다.
+ *  - 문: bIsOn = 열림
+ *  - 스위치·압력 발판: bIsUsed = 눌림
+ *  - 레버: bIsOn = On 자세, bIsUsed = 당김
+ *  - 덩굴: bIsUsed = 다 탐
+ *  - 낙하물: bIsUsed = 착지, Location = 착지한 몸체의 상대 위치
+ *  - 이동 발판: bIsOn = 움직임 켜짐, Progress = 경로 진행도
+ */
+USTRUCT()
+struct FSavedActorState
+{
+	GENERATED_BODY()
+
+	/** 켜짐 상태. 문은 열림, 레버는 On 자세, 이동 발판은 움직임. */
+	UPROPERTY(SaveGame)
+	bool bIsOn = false;
+
+	/** 한 번 쓰고 나면 되돌아가지 않는 상태. 눌린 스위치, 다 탄 덩굴, 떨어진 낙하물. */
+	UPROPERTY(SaveGame)
+	bool bIsUsed = false;
+
+	/** 액터 안에서 움직인 컴포넌트의 상대 위치. 낙하물의 착지 위치. */
+	UPROPERTY(SaveGame)
+	FVector Location = FVector::ZeroVector;
+
+	/** 경로 진행도. 이동 발판이 멈춘 위치. */
+	UPROPERTY(SaveGame)
+	float Progress = 0.f;
+};
+
+/** 맵 하나에 배치된 퍼즐 액터들의 저장 상태. */
+USTRUCT()
+struct FSavedLevelState
+{
+	GENERATED_BODY()
+
+	/** 키는 액터 이름. */
+	UPROPERTY(SaveGame)
+	TMap<FName, FSavedActorState> ActorStates;
+};
+
+/**
  * 게임을 종료한 뒤에도 유지할 진행 데이터.
  * 저장 슬롯에는 값만 보관하고, 액터 이동과 능력 부여는 UGameSaveSubsystem이 처리한다.
  */
@@ -55,4 +98,8 @@ public:
 	/** 종료형 최종 스테이지를 클리어했는지 여부. */
 	UPROPERTY(SaveGame)
 	bool bGameCompleted = false;
+
+	/** 맵별 퍼즐 액터 상태. 키는 맵 패키지 이름. 다음 맵으로 넘어가도 지우지 않아 이전 맵에 다시 들어가면 그대로 복원한다. */
+	UPROPERTY(SaveGame)
+	TMap<FName, FSavedLevelState> LevelStates;
 };

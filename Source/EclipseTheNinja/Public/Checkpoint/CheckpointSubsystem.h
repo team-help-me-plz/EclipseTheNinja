@@ -14,8 +14,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCheckpointEvent, ECheckpointId, C
 
 /**
  * 체크포인트 서브시스템.
- *  - 갱신   : 현재보다 이후의 체크포인트에 도달하면 CurrentCheckpoint를 갱신한다.
- *  - 리스폰 : BoundCheckpoint == CurrentCheckpoint 인 UCheckpointBoundComponent들의 Owner를 초기 상태로 리셋하고,
+ *  - 갱신   : 현재와 다른 체크포인트에 도달하면 ID 크기와 관계없이 CurrentCheckpoint를 갱신한다.
+ *  - 리스폰 : BoundCheckpoint == CurrentCheckpoint 이거나 bAlwaysResetOnRespawn이 켜진 UCheckpointBoundComponent들의 Owner를 초기 상태로 리셋하고,
  *             런타임 스폰 액터를 풀에 반환(풀 액터가 아니면 파괴)한 뒤 플레이어를 체크포인트로 이동시킨다.
  *  - 리셋   : 모든 대상 ResetToInitial -> 모든 대상 OnAfterReset
  */
@@ -27,6 +27,11 @@ class ECLIPSETHENINJA_API UCheckpointSubsystem : public UWorldSubsystem
 public:
     void RestoreCheckpoint(ECheckpointId Id) { CurrentCheckpoint = Id; }
     bool GetCheckpointTransform(FTransform& OutTransform) const;
+
+    // 세이프 포인트가 없을 때 돌아갈 위치를 찾는다. 현재 체크포인트가 있으면 그 위치,
+    // 없으면 bActivateOnBeginPlay가 켜진 체크포인트 중 FromLocation에 가장 가까운 것의 위치. 둘 다 없으면 false
+    bool GetFallbackRespawnTransform(const FVector& FromLocation, FTransform& OutTransform) const;
+
     // 체크포인트를 서브시스템에 등록하는 함수
     // 리스폰 시 체크포인트의 리스폰 위치를 가져오기 위함
     void RegisterCheckpoint(ACheckpoint* InCheckpoint);
@@ -34,7 +39,7 @@ public:
     // 체크포인트를 서브시스템에서 제거하는 함수
     void UnregisterCheckpoint(ACheckpoint* InCheckpoint);
 
-    // 현재보다 이후의(값이 큰) 체크포인트일 때만 갱신
+    // ID 크기와 관계없이 마지막으로 닿은 체크포인트로 갱신한다. 현재 체크포인트와 같으면 무시
     UFUNCTION(BlueprintCallable, Category = "Checkpoint")
     void ActivateCheckpoint(ECheckpointId NewCheckpointId);
 

@@ -104,9 +104,12 @@ void ALeverSwitch::BeginPlay()
 		this->SequenceLength = this->LeverSequence->GetPlayLength();
 		this->PlayRate = this->SequenceLength / this->InteractInterval;
 
-		// 시퀀스를 연결해 두어야 Play가 동작한다. Off 자세(0초)에서 멈춰 둔다
+		// 시퀀스를 연결해 두어야 Play가 동작한다. 현재 자세(이어하기면 저장된 자세)에서 멈춰 둔다
 		this->LeverMesh->SetAnimation(this->LeverSequence);
-		this->LeverMesh->SetPosition(0.f, false);
+		this->LeverMesh->SetPosition(
+			this->bIsToggled ? this->SequenceLength : 0.f,
+			false
+		);
 		this->LeverMesh->Stop();
 	}
 }
@@ -116,6 +119,22 @@ void ALeverSwitch::ResetInteractionCooldown()
 	// 레버가 다 넘어간 뒤에 대상을 작동시킨다
 	Super::ResetInteractionCooldown();
 	IActivatable::Execute_ToggleActivate(this->TargetActor);
+
+	// 대상이 실제로 작동한 뒤에 기록한다. 손잡이가 넘어가는 도중 종료하면 당기지 않은 것으로 남는다
+	this->SaveSwitchState();
+}
+
+FSavedActorState ALeverSwitch::MakeSaveState() const
+{
+	FSavedActorState State = Super::MakeSaveState();
+	State.bIsOn = this->bIsToggled;
+	return State;
+}
+
+void ALeverSwitch::ApplySaveState(const FSavedActorState& State)
+{
+	Super::ApplySaveState(State);
+	this->bIsToggled = State.bIsOn;
 }
 
 void ALeverSwitch::PlayLeverAnim()

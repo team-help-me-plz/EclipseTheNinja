@@ -138,6 +138,7 @@ void ABaseCharacter::GiveInitAbility()
         else
         {
             ASC->GiveAbility(FGameplayAbilitySpec(Info.AbilityClass, Level, InputID, this));
+            OnAbilityGranted.Broadcast(Info.InputID);
         }
     }
 }

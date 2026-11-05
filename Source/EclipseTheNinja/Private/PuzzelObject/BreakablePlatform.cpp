@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Interface/Interactor.h"
+#include "GameFramework/Character.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 
 #include "NiagaraComponent.h"
@@ -50,6 +51,7 @@ void ABreakablePlatform::ResetToInitial_Implementation()
 	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTimer);
 	GetWorldTimerManager().ClearTimer(this->PlatformRestoreTryTimer);
 	GetWorldTimerManager().ClearTimer(this->BreakEffectTimer);
+	this->ClearStandCandidates();
 	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다.
 	this->BreakEffect->DeactivateImmediate();
 	this->RestorePlatform();
@@ -112,10 +114,79 @@ void ABreakablePlatform::OnCollisionBeginOverlap(UPrimitiveComponent* Overlapped
 	{
 		return ;
 	}
+	// 박스에 들어온 것만으로는 부수지 않는다. 메시를 실제로 밟았는지 확인할 후보로 등록한다
+	ACharacter*	Character = Cast<ACharacter>(OtherActor);
+	if (!Character)
+	{
+		return ;
+	}
+	this->StandCandidates.Add(Character);
 	if (this->State != EBreakablePlatformState::Ready)
 	{
 		return ;
 	}
+	this->CheckStandingOnMesh();
+	if (this->State == EBreakablePlatformState::Ready
+		&& !GetWorldTimerManager().IsTimerActive(this->StandCheckTimer))
+	{
+		GetWorldTimerManager().SetTimer(
+			this->StandCheckTimer,
+			this,
+			&ABreakablePlatform::CheckStandingOnMesh,
+			this->StandCheckInterval,
+			true
+		);
+	}
+}
+
+void ABreakablePlatform::CheckStandingOnMesh()
+{
+	if (this->State != EBreakablePlatformState::Ready)
+	{
+		GetWorldTimerManager().ClearTimer(this->StandCheckTimer);
+		return ;
+	}
+	for (auto It = this->StandCandidates.CreateIterator(); It; ++It)
+	{
+		const ACharacter*	Character = It->Get();
+		if (!Character)
+		{
+			It.RemoveCurrent();
+			continue ;
+		}
+		if (this->IsStandingOnMesh(Character))
+		{
+			this->StartBreaking();
+			return ;
+		}
+	}
+	if (this->StandCandidates.IsEmpty())
+	{
+		GetWorldTimerManager().ClearTimer(this->StandCheckTimer);
+	}
+}
+
+bool ABreakablePlatform::IsStandingOnMesh(const ACharacter* InCharacter) const
+{
+	// 캐릭터가 서 있는 컴포넌트(발밑)가 이 발판 외형의 메시인지 확인한다
+	const UPrimitiveComponent*	MovementBase = InCharacter ? Cast<UPrimitiveComponent>(InCharacter->GetMovementBaseObject()) : nullptr;
+	const AActor*				AssemblyActor = this->MeshAssembly->GetChildActor();
+	return MovementBase && AssemblyActor && MovementBase->GetOwner() == AssemblyActor;
+}
+
+void ABreakablePlatform::ClearStandCandidates()
+{
+	GetWorldTimerManager().ClearTimer(this->StandCheckTimer);
+	this->StandCandidates.Reset();
+}
+
+void ABreakablePlatform::StartBreaking()
+{
+	if (this->State != EBreakablePlatformState::Ready)
+	{
+		return ;
+	}
+	GetWorldTimerManager().ClearTimer(this->StandCheckTimer);
 	this->State = EBreakablePlatformState::Breaking;
 	// 플레이어를 감지한 순간 무너질 것을 알리는 이펙트를 짧게 재생한다.
 	this->BreakEffect->Activate(true);
@@ -142,6 +213,11 @@ void ABreakablePlatform::OnCollisionEndOverlap(UPrimitiveComponent* OverlappedCo
 		return;
 	}
 	this->OverlapCount--;
+	// 캡슐/메시 등 여러 컴포넌트가 겹칠 수 있으므로, 액터가 박스에서 완전히 나갔을 때만 후보에서 뺀다
+	if (OtherActor && !this->CollisionBox->IsOverlappingActor(OtherActor))
+	{
+		this->StandCandidates.Remove(Cast<ACharacter>(OtherActor));
+	}
 }
 
 void ABreakablePlatform::BreakPlatform()

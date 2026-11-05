@@ -73,6 +73,10 @@ AEnemy::AEnemy()
 	{
 		AssassinationDropComp->SetDropActorClass(HealPickupClass.Class);
 	}
+
+	// 시체가 사라질 때까지 기다리지 않고 암살 시작 4초 뒤에 떨어뜨린다.
+	AssassinationDropComp->SetDropDelay(true, 4.0f);
+
 	NoiseDetectComponent = CreateDefaultSubobject<USphereComponent>(TEXT("NoiseDetectComponent"));
 	NoiseDetectComponent->SetupAttachment(RootComponent);
 	NoiseDetectComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
@@ -108,8 +112,9 @@ void AEnemy::BeginPlay()
 	}
 
 	// 리스폰 시 복원할 충돌 설정 저장
-	InitialCapsuleCollision = GetCapsuleComponent()->GetCollisionEnabled();
-	InitialMeshCollision = GetMesh()->GetCollisionEnabled();
+	// 풀은 액터 충돌을 끈 채 BeginPlay를 부르므로, 액터 설정을 빼고 컴포넌트 자체 값을 읽는다.
+	InitialCapsuleCollision = GetCapsuleComponent()->BodyInstance.GetCollisionEnabled(false);
+	InitialMeshCollision = GetMesh()->BodyInstance.GetCollisionEnabled(false);
 	InitialMeshRelativeLocation = GetMesh()->GetRelativeLocation();
 
 	if (bOverlapWithCharacters)
@@ -449,6 +454,7 @@ void AEnemy::ResetToInitial_Implementation()
 	GetMesh()->SetCollisionEnabled(InitialMeshCollision);
 	GetMesh()->SetRelativeLocation(InitialMeshRelativeLocation);
 	AppliedMeshYOffset = FVector::ZeroVector;
+	bMeshYOffsetSuppressed = false;
 	UpdateMeshYOffset();
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
@@ -550,6 +556,48 @@ void AEnemy::RestartAI()
 	BTComp->RestartTree();
 }
 
+void AEnemy::SuspendAIForScriptedMove()
+{
+	// BT가 이동 입력을 넣지 않도록 먼저 멈춘다.
+	if (AAIController* AIController = Cast<AAIController>(GetController()))
+	{
+		AIController->StopMovement();
+
+		if (UBrainComponent* Brain = AIController->GetBrainComponent())
+		{
+			Brain->StopLogic(TEXT("ScriptedMove"));
+		}
+	}
+
+	StopHorizontalMovement();
+	BehaviorState = EEnemyBehaviorState::Idle;
+	CombatTarget.Reset();
+
+	// 연출 중에는 발각 범위 UI와 감지를 끈다.
+	EnemyDetectComponent->StopDetection();
+}
+
+void AEnemy::ResumeAIAfterScriptedMove(AActor* CombatActor)
+{
+	if (bIsDead)
+	{
+		return;
+	}
+
+	// 연출로 옮겨 온 자리를 새 활동 영역과 이동 평면의 기준으로 삼는다.
+	InitializeBehaviorArea();
+
+	// 감지를 다시 켜고, 대상이 있으면 맞았을 때처럼 바로 전투 상태로 만든다.
+	EnemyDetectComponent->ResetDetection();
+
+	if (CombatActor)
+	{
+		EnemyDetectComponent->NotifyDamaged(CombatActor);
+	}
+
+	RestartAI();
+}
+
 // Called every frame
 void AEnemy::Tick(float DeltaTime)
 {
@@ -642,7 +690,11 @@ void AEnemy::UpdateMeshYOffset()
 	}
 
 	// 액터 회전을 상쇄한 오프셋으로 바꿔 넣는다. 이전에 넣은 값만 빼서 다른 연출이 옮긴 위치는 유지한다.
-	const FVector NewOffset = GetActorQuat().UnrotateVector(FVector(0.0f, MeshYOffset, 0.0f));
+	// 암살 중에는 칼과 드롭 위치가 캡슐 기준으로 맞도록 오프셋을 뺀다.
+	const float OffsetY = bMeshYOffsetSuppressed
+		? 0.0f
+		: MeshYOffset;
+	const FVector NewOffset = GetActorQuat().UnrotateVector(FVector(0.0f, OffsetY, 0.0f));
 
 	if (NewOffset.Equals(AppliedMeshYOffset, 0.01f))
 	{
@@ -651,6 +703,17 @@ void AEnemy::UpdateMeshYOffset()
 
 	GetMesh()->SetRelativeLocation(GetMesh()->GetRelativeLocation() - AppliedMeshYOffset + NewOffset);
 	AppliedMeshYOffset = NewOffset;
+}
+
+void AEnemy::SetMeshYOffsetSuppressed(bool bSuppressed)
+{
+	if (bMeshYOffsetSuppressed == bSuppressed)
+	{
+		return;
+	}
+
+	bMeshYOffsetSuppressed = bSuppressed;
+	UpdateMeshYOffset();
 }
 
 void AEnemy::OnRootTransformUpdated(USceneComponent* UpdatedComponent, EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport)

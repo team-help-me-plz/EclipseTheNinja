@@ -2,15 +2,26 @@
 
 #include "Character/PlayerCharacter.h"
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "Checkpoint/CheckpointBoundComponent.h"
 #include "GAS/StatAttributeSet.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/PackageName.h"
 
 namespace GameSave
 {
 	constexpr int32 User = 0;
+}
+
+UGameSaveSubsystem* UGameSaveSubsystem::Get(const UObject* WorldContext)
+{
+	const UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+	UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+
+	return GameInstance ? GameInstance->GetSubsystem<UGameSaveSubsystem>() : nullptr;
 }
 
 bool UGameSaveSubsystem::HasSaveFile() const
@@ -113,8 +124,7 @@ void UGameSaveSubsystem::PlayerReady(APlayerCharacter* Player)
 		return;
 	}
 
-	if (Progress->Level.ToSoftObjectPath().GetLongPackageName() != UGameplayStatics::GetCurrentLevelName(Player, true)
-		&& FPackageName::GetShortName(Progress->Level.ToSoftObjectPath().GetLongPackageName()) != UGameplayStatics::GetCurrentLevelName(Player, true))
+	if (!IsProgressLevel(Player))
 	{
 		CurrentPlayer.Reset();
 		return;
@@ -173,6 +183,12 @@ void UGameSaveSubsystem::PlayerReady(APlayerCharacter* Player)
 		FTransform Transform;
 		if (CP->GetCheckpointTransform(Transform))
 		{
+			// 새로 켜진 시작 체크포인트일 때만 체력을 기록한다. 리스폰·이어하기는 같은 체크포인트라 저장 체력을 유지한다
+			if (CP->GetCurrentCheckpoint() != Progress->Checkpoint || !Progress->bHasHealth)
+			{
+				CaptureHealth();
+			}
+
 			Progress->Checkpoint = CP->GetCurrentCheckpoint();
 			Progress->RespawnTransform = Transform;
 			Progress->bHasRespawnTransform = true;
@@ -200,6 +216,23 @@ bool UGameSaveSubsystem::SaveProgress()
 		return false;
 	}
 
+	// 체력은 체크포인트 갱신 때만 기록하므로 여기서는 사망 여부만 확인한다
+	const float Health = CurrentPlayer->GetStatAttribute()->GetHealth();
+	if (!FMath::IsFinite(Health) || Health <= 0.f)
+	{
+		return false;
+	}
+
+	return WriteSave();
+}
+
+bool UGameSaveSubsystem::CaptureHealth()
+{
+	if (!Progress || !CurrentPlayer.IsValid())
+	{
+		return false;
+	}
+
 	const float Health = CurrentPlayer->GetStatAttribute()->GetHealth();
 	if (!FMath::IsFinite(Health) || Health <= 0.f)
 	{
@@ -208,15 +241,7 @@ bool UGameSaveSubsystem::SaveProgress()
 
 	Progress->Health = Health;
 	Progress->bHasHealth = true;
-	return WriteSave();
-}
-
-void UGameSaveSubsystem::RecordHealth(float Health)
-{
-	if (Health > 0.f)
-	{
-		SaveProgress();
-	}
+	return true;
 }
 
 void UGameSaveSubsystem::SaveCheckpoint(ECheckpointId Id, const FTransform& Transform)
@@ -231,6 +256,8 @@ void UGameSaveSubsystem::SaveCheckpoint(ECheckpointId Id, const FTransform& Tran
 	Progress->RespawnTransform = Transform;
 	Progress->bHasRespawnTransform = true;
 
+	// 이어하기는 체크포인트에 닿은 순간의 체력으로 시작한다
+	CaptureHealth();
 	SaveProgress();
 }
 
@@ -284,4 +311,88 @@ bool UGameSaveSubsystem::UnlockAbility(EAbilityInputID Ability)
 bool UGameSaveSubsystem::IsAbilityUnlocked(EAbilityInputID Ability) const
 {
 	return Progress && Progress->UnlockedAbilities.Contains(Ability);
+}
+
+bool UGameSaveSubsystem::IsProgressLevel(const UObject* WorldContext) const
+{
+	if (!Progress)
+	{
+		return false;
+	}
+
+	// GetCurrentLevelName은 PIE 접두어를 뺀 짧은 맵 이름을 돌려준다.
+	const FString SavedLevel = Progress->Level.ToSoftObjectPath().GetLongPackageName();
+	const FString CurrentLevel = UGameplayStatics::GetCurrentLevelName(WorldContext, true);
+
+	return SavedLevel == CurrentLevel || FPackageName::GetShortName(SavedLevel) == CurrentLevel;
+}
+
+FName UGameSaveSubsystem::GetProgressLevelKey() const
+{
+	if (!Progress)
+	{
+		return NAME_None;
+	}
+
+	return FName(*Progress->Level.ToSoftObjectPath().GetLongPackageName());
+}
+
+bool UGameSaveSubsystem::TakeActorState(const AActor* Actor, FSavedActorState& OutState) const
+{
+	if (!IsValid(Actor) || !IsProgressLevel(Actor))
+	{
+		return false;
+	}
+
+	// 체크포인트에 묶인 퍼즐은 이어하기에서 항상 처음 상태로 시작한다.
+	if (IsCheckpointBound(Actor))
+	{
+		return false;
+	}
+
+	const FSavedLevelState* LevelState = Progress->LevelStates.Find(GetProgressLevelKey());
+	const FSavedActorState* Found = LevelState
+		? LevelState->ActorStates.Find(Actor->GetFName())
+		: nullptr;
+
+	if (!Found)
+	{
+		return false;
+	}
+
+	OutState = *Found;
+	return true;
+}
+
+void UGameSaveSubsystem::RecordActorState(const AActor* Actor, const FSavedActorState& State)
+{
+	// 저장값을 적용하는 중이거나 다음 맵으로 이동 대기 중이면 기록하지 않는다.
+	if (!IsValid(Actor) || bApplyingRestore || bStageTravel || !IsProgressLevel(Actor))
+	{
+		return;
+	}
+
+	// 체크포인트에 묶인 퍼즐은 체크포인트 리셋이 상태를 관리하므로 세이브에 남기지 않는다.
+	if (IsCheckpointBound(Actor))
+	{
+		return;
+	}
+
+	// 액터 이름은 맵마다 따로 붙으므로 맵별로 나눠 기록한다
+	FSavedLevelState& LevelState = Progress->LevelStates.FindOrAdd(GetProgressLevelKey());
+	LevelState.ActorStates.Add(Actor->GetFName(), State);
+
+	// 플레이어 준비 전이라 파일 저장이 거절돼도 기록은 남고, PlayerReady의 저장에 함께 들어간다.
+	SaveProgress();
+}
+
+bool UGameSaveSubsystem::IsCheckpointBound(const AActor* Actor)
+{
+	const UCheckpointBoundComponent* Bound = Actor
+		? Actor->FindComponentByClass<UCheckpointBoundComponent>()
+		: nullptr;
+
+	// 항상 초기화되는 액터도 리스폰이 상태를 관리하므로 세이브 대상에서 뺀다.
+	return Bound
+		&& (Bound->GetBoundCheckpoint() != ECheckpointId::None || Bound->IsAlwaysResetOnRespawn());
 }

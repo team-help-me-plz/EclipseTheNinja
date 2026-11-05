@@ -40,6 +40,11 @@ void UCheckpointBoundComponent::EndPlay(const EEndPlayReason::Type EndPlayReason
     Super::EndPlay(EndPlayReason);
 }
 
+bool UCheckpointBoundComponent::ShouldResetOnRespawn(ECheckpointId RespawnCheckpoint) const
+{
+    return this->bAlwaysResetOnRespawn || this->BoundCheckpoint == RespawnCheckpoint;
+}
+
 void UCheckpointBoundComponent::ResetOwner()
 {
     AActor* Owner = GetOwner();

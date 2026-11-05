@@ -77,7 +77,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TObjectPtr<UChildActorComponent>	FallingMeshAssembly = nullptr;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBoundComponent = nullptr;
 
 	// 떨어질 위치를 보여줄 컴포넌트

@@ -88,6 +88,11 @@ protected:
 private:
 	void	ResetInteractionCooldown();
 
+	// 열림 상태를 세이브에 기록한다
+	void	SaveDoorState() const;
+	// 이어하기라면 저장된 열림 상태를 연출 없이 적용한다. 메시는 첫 Tick의 DoorMovement가 맞춘다
+	void	LoadDoorState();
+
 	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신
 	void	RefreshInteractState();
 	void	RefreshHighlight();
