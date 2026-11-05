@@ -188,6 +188,11 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	// 아래의 조기 반환(공격 중 등)과 관계없이 조준 위젯은 매 프레임 갱신한다.
 	UpdateAimWidget();
+	// 상호작용 키는 암살이 우선이므로, 암살이 가능한 동안에는 상호작용 표시를 숨겨 헷갈리지 않게 한다.
+	if (IsValid(InteractComponent))
+	{
+		InteractComponent->SetIndicatorSuppressed(CanAssassinateCurrentTarget());
+	}
 	if (IsParrying()) return;
 	// 사망 연출과 공격(콤보, 표창, 질풍참 등) 중에는 커서·이동 방향으로 몸을 돌리지 않는다.
 	if (bIsDead || IsAssassinating() || IsHiding() || IsAttacking()) return;
@@ -744,7 +749,12 @@ void APlayerCharacter::DoBasicAttack()
 		DoThrowKunai();
 		return;
 	}
-
+	// 상호작용보다 암살을 우선하고, 실패하더라도 같은 입력으로 상호작용하지 않는다.
+	if (CanAssassinateCurrentTarget())
+	{
+		DoAssassinate();
+		return;
+	}
 	// 첫 공격 전에만 방향을 확정하고, 콤보 추가 입력은 기존 공격 방향을 유지한다.
 	if (!ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
 	{
@@ -928,18 +938,21 @@ void APlayerCharacter::DoInteract()
 		return;
 	}
 
-	// 상호작용보다 암살을 우선하고, 실패하더라도 같은 입력으로 상호작용하지 않는다.
-	if (IsValid(AssassinateTargetingComponent))
-	{
-		UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
-		if (IsValid(Target) && Target->CanAssassinate(this))
-		{
-			DoAssassinate();
-			return;
-		}
-	}
+	//// 상호작용보다 암살을 우선하고, 실패하더라도 같은 입력으로 상호작용하지 않는다.
+	//if (CanAssassinateCurrentTarget())
+	//{
+	//	DoAssassinate();
+	//	return;
+	//}
 
 	this->InteractComponent->TryInteract();
+}
+
+bool APlayerCharacter::CanAssassinateCurrentTarget() const
+{
+	if (!IsValid(AssassinateTargetingComponent)) return false;
+	UAssassinateTargetComponent* Target = AssassinateTargetingComponent->GetCurrentTarget();
+	return IsValid(Target) && Target->CanAssassinate(this);
 }
 
 void APlayerCharacter::DoWAllMove(float Up)

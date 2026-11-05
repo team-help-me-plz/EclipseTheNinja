@@ -192,14 +192,36 @@ void UInteractBoxComponent::OnInteractBoxEndOverlap(UPrimitiveComponent* Overlap
 
 void UInteractBoxComponent::ChangeTargetActor(AActor* InActor)
 {
-	if (this->TargetActor.IsValid())
-	{
-		IInteractable::Execute_HideInteractionIndicator(this->TargetActor.Get());
-	}
 	this->TargetActor = InActor;
-	if (this->TargetActor.IsValid())
+	this->RefreshTargetIndicator();
+}
+
+void UInteractBoxComponent::SetIndicatorSuppressed(bool bInSuppressed)
+{
+	if (this->bIndicatorSuppressed == bInSuppressed)
 	{
-		IInteractable::Execute_ShowInteractionIndicator(this->TargetActor.Get());
+		return ;
+	}
+	this->bIndicatorSuppressed = bInSuppressed;
+	this->RefreshTargetIndicator();
+}
+
+void UInteractBoxComponent::RefreshTargetIndicator()
+{
+	AActor*	DesiredActor = this->bIndicatorSuppressed ? nullptr : this->TargetActor.Get();
+	AActor*	ShownActor = this->IndicatorShownActor.Get();
+	if (ShownActor == DesiredActor)
+	{
+		return ;
+	}
+	if (ShownActor)
+	{
+		IInteractable::Execute_HideInteractionIndicator(ShownActor);
+	}
+	this->IndicatorShownActor = DesiredActor;
+	if (DesiredActor)
+	{
+		IInteractable::Execute_ShowInteractionIndicator(DesiredActor);
 	}
 }
 
