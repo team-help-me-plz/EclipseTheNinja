@@ -24,7 +24,7 @@ enum class EBossGimmickPortalSide : uint8
  * - 플레이어가 트리거에 닿으면 같은 LinkId의 반대쪽 포탈 ArrivalPoint로 순간이동한다.
  *   기믹 스테이지는 보스 맵에 레벨 인스턴스로 들어가므로 보스 상태와 링크 제한시간이 그대로 이어진다.
  * - 보스 스테이지 포탈은 보스의 기믹 순번이 자기 LinkId일 때만 열려, 레버를 정해진 순서로만 풀 수 있다.
- * - 기믹 스테이지 포탈은 레버(StageLever)의 TargetActor로 지정한다. 레버를 당기면 보스에게 링크 해제를 요청한다.
+ * - 기믹 스테이지 포탈은 레버(StageLever)의 TargetActors에 넣는다. 레버를 당기면 보스에게 링크 해제를 요청한다.
  * - 링크 상태는 보스의 UBossEnemyGimmickComponent가 SetLinkActive로 알려 준다.
  */
 UCLASS()
