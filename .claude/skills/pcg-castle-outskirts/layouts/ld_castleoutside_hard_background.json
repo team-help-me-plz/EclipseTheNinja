@@ -1,0 +1,28 @@
+{
+  "_comment": "Lvl_LD_CastleOutside_Hard 배경. 레인 Y 1000, 블록 뒷면 Y 700, 카메라 Y 2000. 실내 볼륨은 Y -100~700(그림자 차단 상자는 -360까지).",
+  "volumes": [
+    { "class": "Forest", "label": "PCG_Forest_Mid", "folder": "PCG/Background",
+      "center": [5000, -8000, 0], "size": [18000, 3600, 8000],
+      "props": { "Seed": 3, "CellSpacing": 650, "MapleRatio": 1.0, "MapleScaleMin": 2.2, "MapleScaleMax": 3.4 } },
+    { "class": "Forest", "label": "PCG_Forest_Far", "folder": "PCG/Background",
+      "center": [5000, -15000, 0], "size": [40000, 10000, 8000],
+      "props": { "Seed": 5, "CellSpacing": 1300, "NoiseThreshold": 0.5, "MapleRatio": 1.0, "MapleScaleMin": 4, "MapleScaleMax": 5.5 } },
+    { "class": "FarSilhouette", "label": "PCG_FarSilhouette", "folder": "PCG/Background",
+      "center": [5000, -27000, 2500], "size": [60000, 20000, 8000],
+      "props": { "TenshuCount": 1, "TenshuRangeX": 6000 } }
+  ],
+  "lines": [
+    { "class": "CastleWall", "label": "PCG_CastleWall_Near", "folder": "PCG/Midground",
+      "start": [800, -2000, 0], "length": 7500,
+      "props": { "Seed": 11, "WallHeightScale": 1.75, "BastionPlacement": "Manual", "BastionPositions": [2850],
+                 "BastionWidth": 1300, "BastionDepth": 400 } },
+    { "class": "CastleWall", "label": "PCG_CastleWall_Upper", "folder": "PCG/Midground",
+      "start": [-1500, -3500, 0], "length": 9100,
+      "props": { "Seed": 12, "WallHeightScale": 4.5, "BastionPlacement": "Manual", "BastionPositions": [4000, 7700],
+                 "BastionWidth": 1300, "BastionDepth": 850 } },
+    { "class": "TownRow", "label": "PCG_TownRow_Far", "folder": "PCG/Town",
+      "start": [-3000, -5200, 0], "length": 15500,
+      "props": { "Seed": 7, "TwoStoryRatio": 0.9, "BlockHousesMin": 2, "BlockHousesMax": 4, "HouseOverlap": 40,
+                 "AlleyMin": 400, "AlleyMax": 1200, "AlleyFenceRatio": 0.0, "PropDensity": 0.1 } }
+  ]
+}

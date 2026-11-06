@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('inspect','apply','regen','count','shots','save')][string]$Mode,
+    [Parameter(Mandatory=$true)][ValidateSet('inspect','apply','migrate','regen','count','shots','save')][string]$Mode,
     [string]$Layout = "",
     [string[]]$Labels = @(),
     [string]$Shots = "",
@@ -64,7 +64,7 @@ if ($Labels.Count -gt 0) { $a.labels = $Labels }
 Invoke-Build $a
 
 # 생성은 비동기라 잠시 뒤 따로 센다
-if ($Mode -eq 'apply' -or $Mode -eq 'regen') {
+if ($Mode -eq 'apply' -or $Mode -eq 'migrate' -or $Mode -eq 'regen') {
     Start-Sleep 3
     "--- 생성 결과"
     $c = @{ mode = 'count' }
