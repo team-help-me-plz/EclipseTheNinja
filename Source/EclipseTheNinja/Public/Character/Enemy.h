@@ -378,6 +378,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Death", meta = (ClampMin = "0.0", Units = "s"))
 	float DeathDespawnDelay = 3.0f;
 
+	/** 시체 유지 시간이 끝나면 숨길지 여부. 보스처럼 처치 후 컷신에도 시체가 남아야 하면 끈다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Death")
+	bool bHideCorpseAfterDeath = true;
+
 	/** 이 적이 속한 체크포인트 구간. 해당 체크포인트에서 플레이어가 리스폰하면 적도 리스폰된다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent> CheckpointBound;
