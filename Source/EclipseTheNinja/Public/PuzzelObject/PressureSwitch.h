@@ -37,6 +37,7 @@ public:
 
 protected:
 	virtual void PostInitializeComponents() override;
+	virtual void PostLoad() override;
 	virtual void BeginPlay() override;
 
 	UFUNCTION()
@@ -67,10 +68,22 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInteractHighlightComponent>	InteractHighlight = nullptr;
 
+	// 작동시킬 대상 목록. IActivatable을 구현한 대상만 함께 토글된다
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|Target")
+	TArray<TObjectPtr<AActor>>	TargetActors;
+
+	// 구버전 단일 대상. 이미 저장된 레벨을 불러올 때 PostLoad에서 TargetActors로 옮기고 비운다
+	UPROPERTY()
 	TObjectPtr<AActor>			TargetActor = nullptr;
 
-	// PressureTrigger 밖으로 플레이어 혹은 분신이 나갔을 때 TargetActor의 Activate 상황을 다시 토글할 것인가
+	// TargetActors 중 IActivatable을 구현한 대상이 하나라도 있는가
+	bool	HasActivatableTarget() const;
+	// 모든 대상의 Activate 상태를 토글한다
+	void	ToggleTargets();
+	// 모든 대상의 Activate 테두리를 켜거나 끈다
+	void	SetTargetIndicator(bool bShow);
+
+	// PressureTrigger 밖으로 플레이어 혹은 분신이 나갔을 때 TargetActors의 Activate 상황을 다시 토글할 것인가
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|State")
 	bool	bIsUnpressure = false;
 
@@ -89,7 +102,7 @@ private:
 	EInteractState	InteractState = EInteractState::Ready;
 	// 선택(강조)을 요청한 수. InteractBox 선택, 발판 강조, 분신 조준 커서가 각각 Show/Hide를 짝지어 호출한다
 	int32			SelectCount = 0;
-	// TargetActor의 Activate 테두리를 켜 둔 상태인가 (Show/Hide를 짝지어 호출하기 위함)
+	// TargetActors의 Activate 테두리를 켜 둔 상태인가 (Show/Hide를 짝지어 호출하기 위함)
 	bool			bIsShowingTargetIndicator = false;
 };
 

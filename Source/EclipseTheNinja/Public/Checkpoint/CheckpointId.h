@@ -72,4 +72,10 @@ enum class ECheckpointId : uint8
     Tutorial_Assassinate,       // 첫 번째 세이프포인트 : 암살 시연 시퀀스 + 은신·암살 연습
     Tutorial_Clone,             // 두 번째 세이프포인트 : 분신술 시연 시퀀스 + 발판·스위치·문·환풍구
     Tutorial_Combat,            // 기본/콤보 공격 + 패링 + 쿠나이
+
+    // Lvl_LD_CastleOutside (+ _AbilityRooms, _Hard)
+    LDCastle_Start,             // 하층 시작
+    LDCastle_GaleSlashRoom,     // 질풍참 방 착지대
+    LDCastle_FireBladeRoom,     // 불칼 방 꼭대기 (불칼 획득 위치)
+    LDCastle_BeforeCastle,      // 성 안 문 앞
 };

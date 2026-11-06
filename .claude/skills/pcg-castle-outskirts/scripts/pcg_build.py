@@ -16,13 +16,13 @@ GRAPH_DIR = '/Game/PCG/Graphs/'
 SPLINE_BP = '/Game/PCG/Actors/BP_PCG_SplineSource.BP_PCG_SplineSource_C'
 GROUND_MESH = '/Game/_ExternalAssets/JapaneseVillageKit/Meshes/SM_JVK_Paving_Ground_Dirt_01_16x16'
 
-# 그래프별 덮어쓸 수 있는 파라미터와 타입(i=int32, d=double, b=bool, v=vector). 메시(소프트 오브젝트) 파라미터는 제외
+# 그래프별 덮어쓸 수 있는 파라미터와 타입(i=int32, d=double, b=bool, v=vector, s=에셋 경로 문자열). 메시(소프트 오브젝트) 파라미터는 제외
 _COMMON = {'Seed': 'i'}
 PARAMS = {
     'PCG_TownRow': dict(_COMMON, LampSpacing='d', PropDensity='d', FacingSide='d', PlaceStreet='b',
                         BlockHousesMin='i', BlockHousesMax='i', HouseOverlap='d', AlleyMin='d', AlleyMax='d',
                         AlleyFenceRatio='d', AlleyPropDensity='d', TwoStoryRatio='d', RowOffsetX='d',
-                        WoodRoofBlockRatio='d', WoodBlockHousesMin='d', WoodBlockHousesMax='d'),
+                        WoodRoofBlockRatio='d', WoodBlockHousesMin='d', WoodBlockHousesMax='d', HouseSet='s'),
     'PCG_CastleWall': dict(_COMMON, WallHeightScale='d', SpawnFence='b', CornerMinTurn='d', FenceOffset='v',
                            FlipOutward='b', SpawnYagura='b', YaguraRatio='d', YaguraOffset='v', YaguraMinSpacing='d'),
     'PCG_CastleKeep': dict(_COMMON, TreeScaleMin='v', TreeScaleMax='v', YaguraCount='i', TreeDensity='d',
@@ -77,11 +77,15 @@ def get_param(gi, name, t):
         return H.get_double_parameter(gi, name)
     if t == 'b':
         return H.get_bool_parameter(gi, name)
+    if t == 's':
+        return str(H.get_soft_object_path_parameter(gi, name).export_text())
     p = H.get_vector_parameter(gi, name)
     return [p.x, p.y, p.z]
 
 
 def same(a, b):
+    if isinstance(a, str) or isinstance(b, str):
+        return str(a).split('.')[0] == str(b).split('.')[0]
     if isinstance(a, list):
         return all(abs(float(x) - float(y)) < 1e-3 for x, y in zip(a, b))
     if isinstance(a, bool) or isinstance(b, bool):
@@ -103,6 +107,8 @@ def set_param(a, name, v):
         H.set_vector_parameter(gi, name, vec(v))
     elif t == 'i':
         H.set_int32_parameter(gi, name, int(v))
+    elif t == 's':
+        H.set_soft_object_path_parameter(gi, name, unreal.SoftObjectPath(v))
     else:
         H.set_double_parameter(gi, name, float(v))
     # set 함수는 반환값이 없으므로 다시 읽어 확인
@@ -172,10 +178,9 @@ def apply_spline(d):
         s = a.get_component_by_class(unreal.SplineComponent)
         # BP 기본 스플라인으로 되돌아가지 않게 편집 표시
         s.set_editor_property('spline_has_been_edited', True)
-        s.clear_spline_points(False)
-        for p in d['points']:
-            z = p[2] if len(p) > 2 else 0
-            s.add_spline_point(unreal.Vector(p[0], p[1], z), unreal.SplineCoordinateSpace.LOCAL, False)
+        # UE 5.8: add_spline_point(..., False)로 넣은 점은 개수에 잡히지 않는다 → 한 번에 넣는다
+        pts = [unreal.Vector(p[0], p[1], p[2] if len(p) > 2 else 0) for p in d['points']]
+        s.set_spline_points(pts, unreal.SplineCoordinateSpace.LOCAL, True)
         if d.get('linear', False):
             for i in range(len(d['points'])):
                 s.set_spline_point_type(i, unreal.SplinePointType.LINEAR, False)

@@ -106,12 +106,13 @@ powershell -ExecutionPolicy Bypass -File "$S/scripts/run.ps1" -Mode save        
 | 숲 밀도 | `CellSize`↑ 또는 `NoiseThreshold`↑ = 성김. `MapleRatio` 1 = 대나무 없음 |
 | 원경 | `TenshuCount`, `YaguraCount`, `RoofClusterCount`, `TreeCellSize`, `TreeNoiseThreshold` |
 | 전경 | `MaxCount`, `Density`, `TreeRatio`, `MinSpacing` |
-| 테마(메시) 교체 | `...Mesh` 파라미터(소프트 오브젝트)는 이 스크립트로 못 넣는다 → 사용자가 디테일 패널에서 지정하도록 안내 |
+| 집 메시 교체 | `PCG_TownRow`의 `HouseSet`(에셋 경로 문자열)에 집 세트 데이터 에셋(`EclipseTownHouseSet`)을 지정. 기본 `/Game/PCG/Data/DA_TownHouses_Default.DA_TownHouses_Default`. 새 세트는 이 에셋을 복제해 항목(Mesh, Roof 기와/나무, Stories 1/2, Weight, WidthOverride)을 바꿔 만든다. 집 폭은 메시 바운드에서 자동 계산 |
+| 성벽·숲 등 메시 교체 | 그 외 `...Mesh` 파라미터(소프트 오브젝트)는 이 스크립트로 못 넣는다 → 사용자가 디테일 패널에서 지정하도록 안내 |
 
 ## 5. 함정
 - 파라미터를 바꾼 뒤 결과가 안 바뀌면 `pcg.FlushCache` 후 강제 생성이 필요하다(`apply`/`regen`이 처리).
 - 스플라인을 파이썬으로 고칠 때 `spline_has_been_edited`를 켜지 않으면 BP 기본 스플라인(2점)으로 돌아간다(스크립트가 처리).
-- **그래프 자체를 수정할 일이 생기면**(노드 추가 등) 이 스킬 범위 밖이다. 특히 PCG_TownRow의 Subdivide 그래머 모듈 가중치는 int8이라 127을 넘기면 `check(bModuleExpanded)` 크래시가 난다.
+- **그래프 자체를 수정할 일이 생기면**(노드 추가 등) 이 스킬 범위 밖이다. PCG_TownRow의 집·골목 나누기는 C++ 노드 `Eclipse Town Row`(`Source/EclipseTheNinja/Private/PCG/PCGEclipseTownRow.cpp`)가 한다. 규칙을 바꾸려면 C++ 수정과 빌드가 필요하다.
 - 알려진 문제: PCG_Foreground의 담장 기둥 스포너가 연결되지 않아 나오지 않는다. PCG_CastleKeep은 닫힌 성벽용.
 - 단풍나무는 나나이트가 켜져 있다. 렉이 생기면 원경 나무 수(`TreeCellSize`·`CellSize`↑)부터 줄인다.
 - 상태 표시줄 "N개 저장되지 않음" 버튼은 절대 누르지 않는다(모달로 MCP가 멈춤).

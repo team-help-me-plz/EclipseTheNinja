@@ -34,7 +34,7 @@ void ALeverSwitch::Interact_Implementation(AActor* InActor)
 	{
 		return;
 	}
-	if (!this->TargetActor || !this->TargetActor->Implements<UActivatable>())
+	if (!this->HasActivatableTarget())
 	{
 		return;
 	}
@@ -118,7 +118,7 @@ void ALeverSwitch::ResetInteractionCooldown()
 {
 	// 레버가 다 넘어간 뒤에 대상을 작동시킨다
 	Super::ResetInteractionCooldown();
-	IActivatable::Execute_ToggleActivate(this->TargetActor);
+	this->ToggleTargets();
 
 	// 대상이 실제로 작동한 뒤에 기록한다. 손잡이가 넘어가는 도중 종료하면 당기지 않은 것으로 남는다
 	this->SaveSwitchState();
