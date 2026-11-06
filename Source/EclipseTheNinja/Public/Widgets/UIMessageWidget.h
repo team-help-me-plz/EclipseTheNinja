@@ -19,7 +19,8 @@ class ECLIPSETHENINJA_API UUIMessageWidget : public UUserWidget
 	GENERATED_BODY()
 	
 public:
-	void	MakeMessage(const FText& InText);
+	// InHoldDuration이 0 이하이면 MessageHoldDuration을 쓴다
+	void	MakeMessage(const FText& InText, float InHoldDuration = -1.f);
 
 protected:
 	virtual void NativeConstruct() override;

@@ -106,6 +106,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Boss|Energy Link")
 	FOnBossEnergyLinkEvent OnEnergyLinkFailed;
 
+	/** 처형 어빌리티가 보스를 플레이어 등 뒤로 옮기고 몽타주를 시작한 직후 호출된다. 처형 컷신을 이 시점에 맞춘다. */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Execution")
+	FOnBossEnergyLinkEvent OnExecutionStarted;
+
 	// 처형 어빌리티가 읽는 설정
 	const TSoftObjectPtr<UAnimMontage>& GetExecutionAttackMontage() const { return ExecutionAttackMontage; }
 	const TSoftObjectPtr<UAnimMontage>& GetExecutionVictimMontage() const { return ExecutionVictimMontage; }

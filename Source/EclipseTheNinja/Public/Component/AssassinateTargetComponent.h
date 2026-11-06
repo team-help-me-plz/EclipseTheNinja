@@ -38,6 +38,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Assassinate|Outline")
 	void SetTargetHighlighted(bool bInValue);
 
+	/**
+	 * SourceMesh의 포즈를 따라가는 암살 테두리 메시를 만들어 등록한다. 처음에는 숨겨 둔다.
+	 * 적이 아닌 연출용 메시(튜토리얼 컷신의 희생 적 등)에도 같은 테두리를 씌울 때 쓴다.
+	 */
+	static USkeletalMeshComponent* CreateOutlineMesh(USkeletalMeshComponent* SourceMesh, UMaterialInterface* Material,
+		float Thickness, const FLinearColor& Color);
+
 	/** 암살 연출을 시작할 등 뒤 위치. 사이드뷰 이동 평면과 암살자의 바닥 높이를 유지한다. */
 	FVector GetApproachLocation(const ACharacter* Assassin) const;
 

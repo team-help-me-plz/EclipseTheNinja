@@ -5,7 +5,9 @@
 #include "Engine/GameInstance.h"
 
 #include "Character/BossEnemy.h"
+#include "Level/TutorialSequenceTrigger.h"
 #include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -32,6 +34,9 @@ ALevelClearTrigger::ALevelClearTrigger()
 void ALevelClearTrigger::BeginPlay()
 {
     Super::BeginPlay();
+
+    // 벽 붙기 트레이스(WallAttach)가 트리거 상자에 막히지 않게 한다. Trigger 프로필에는 WallAttach 채널이 없어 기본값 Block이 적용되므로 런타임에 지정한다.
+    this->ClearTrigger->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Ignore);
 
     if (IsValid(this->BossToDefeat))
     {
@@ -121,15 +126,47 @@ void ALevelClearTrigger::ClearLevel()
 
     this->OnLevelCleared.Broadcast();
 
+    // 엔딩 컷신을 먼저 재생하고, 끝 프레임에 도달하면 이동·종료를 이어 간다
+    APawn* PlayerPawn = PlayerController ? PlayerController->GetPawn() : nullptr;
+    if (IsValid(this->EndingSequence) && IsValid(PlayerPawn))
+    {
+        FVector Origin = PlayerPawn->GetActorLocation();
+        if (const UCapsuleComponent* Capsule = PlayerPawn->FindComponentByClass<UCapsuleComponent>())
+        {
+            Origin.Z -= Capsule->GetScaledCapsuleHalfHeight();
+        }
+
+        this->EndingSequence->OnSequenceEnded.AddUniqueDynamic(this, &ALevelClearTrigger::OnEndingSequenceEnded);
+        this->EndingSequence->PlaySequenceAt(PlayerController, FTransform(Origin));
+        if (this->EndingSequence->IsPlaying())
+        {
+            return;
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("[ALevelClearTrigger::ClearLevel()] %s : 엔딩 컷신을 재생하지 못해 바로 넘어갑니다."), *GetActorNameOrLabel());
+        this->EndingSequence->OnSequenceEnded.RemoveDynamic(this, &ALevelClearTrigger::OnEndingSequenceEnded);
+    }
+
+    FinishClear();
+}
+
+void ALevelClearTrigger::OnEndingSequenceEnded(ATutorialSequenceTrigger* Trigger)
+{
+    Trigger->OnSequenceEnded.RemoveDynamic(this, &ALevelClearTrigger::OnEndingSequenceEnded);
+    FinishClear();
+}
+
+void ALevelClearTrigger::FinishClear()
+{
     if (this->bQuitGameOnClear)
     {
-        StartQuitCountdown(PlayerController);
+        StartQuitCountdown(UGameplayStatics::GetPlayerController(this, 0));
         return;
     }
 
     if (this->NextLevel.IsNull())
     {
-        UE_LOG(LogTemp, Warning, TEXT("[ALevelClearTrigger::ClearLevel()] %s 의 NextLevel이 비어 있어 레벨을 이동하지 않습니다."),
+        UE_LOG(LogTemp, Warning, TEXT("[ALevelClearTrigger::FinishClear()] %s 의 NextLevel이 비어 있어 레벨을 이동하지 않습니다."),
             *GetActorNameOrLabel());
         return;
     }
@@ -146,7 +183,7 @@ void ALevelClearTrigger::ClearLevel()
 
 void ALevelClearTrigger::TravelToNextLevel()
 {
-    UGameplayStatics::OpenLevelBySoftObjectPtr(this, this->NextLevel);
+    UGameplayStatics::OpenLevelBySoftObjectPtr(this, this->NextLevel, true, this->TravelOptions);
 }
 
 void ALevelClearTrigger::StartQuitCountdown(APlayerController* PlayerController)

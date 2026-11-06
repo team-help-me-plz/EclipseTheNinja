@@ -107,6 +107,8 @@ void UGABossExecution::ActivateAbility(
 	);
 	WaitTask->OnFinish.AddDynamic(this, &UGABossExecution::OnExecutionFinished);
 	WaitTask->ReadyForActivation();
+
+	Boss->OnExecutionStarted.Broadcast();
 }
 
 void UGABossExecution::MoveBehindVictim(ABossEnemy* Boss, const APlayerCharacter* Player) const

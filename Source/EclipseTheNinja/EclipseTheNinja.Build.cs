@@ -23,6 +23,7 @@ public class EclipseTheNinja : ModuleRules
             "Niagara",
             "GameplayAbilities", "GameplayTags", "GameplayTasks",
             "DeveloperSettings",
+            "LevelSequence", "MovieScene",
             "PCG"
 		});
 

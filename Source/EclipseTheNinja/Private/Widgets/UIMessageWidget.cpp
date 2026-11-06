@@ -7,7 +7,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 
-void UUIMessageWidget::MakeMessage(const FText& InText)
+void UUIMessageWidget::MakeMessage(const FText& InText, float InHoldDuration)
 {
 	if (!this->UIMessageVerticalBox || !this->MessageEntryClass || !GetOwningPlayer())
 	{
@@ -18,7 +18,7 @@ void UUIMessageWidget::MakeMessage(const FText& InText)
 	{
 		return ;
 	}
-	NewMessageEntry->SetEntryText(InText, this->MessageHoldDuration);
+	NewMessageEntry->SetEntryText(InText, InHoldDuration > 0.f ? InHoldDuration : this->MessageHoldDuration);
 	UVerticalBoxSlot* EntrySlot = this->UIMessageVerticalBox->AddChildToVerticalBox(NewMessageEntry);
 	if (EntrySlot)
 	{

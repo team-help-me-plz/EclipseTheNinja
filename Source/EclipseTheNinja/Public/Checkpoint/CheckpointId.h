@@ -67,6 +67,12 @@ enum class ECheckpointId : uint8
     // Lvl_BossEnemyTest
     BossTest_Arena,             // 보스 몬스터 테스트 구간
 
+    // Lvl_Tutorial (저장 값이 밀리지 않도록 끝에 추가)
+    Tutorial_Start,             // 지붕 위 시작 지점 + 기본 이동
+    Tutorial_Assassinate,       // 첫 번째 세이프포인트 : 암살 시연 시퀀스 + 은신·암살 연습
+    Tutorial_Clone,             // 두 번째 세이프포인트 : 분신술 시연 시퀀스 + 발판·스위치·문·환풍구
+    Tutorial_Combat,            // 기본/콤보 공격 + 패링 + 쿠나이
+
     // Lvl_LD_CastleOutside (+ _AbilityRooms, _Hard)
     LDCastle_Start,             // 하층 시작
     LDCastle_GaleSlashRoom,     // 질풍참 방 착지대

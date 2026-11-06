@@ -265,7 +265,17 @@ bool UGAWallAttach::CanClimbToward(const ACharacter* Player, float Up) const
 
 	// 벽이 없으면(모서리 위, 벽 아래 끝) 기존처럼 움직인다. 올라가기·내려가기는 다른 어빌리티가 맡는다.
 	FHitResult WallHit;
-	if (!GetWorld()->LineTraceSingleByChannel(WallHit, ProbeStart, ProbeEnd, ECC_WallAttach, Params)) return true;
+	if (!GetWorld()->LineTraceSingleByChannel(WallHit, ProbeStart, ProbeEnd, ECC_WallAttach, Params))
+	{
+		if (Up < 0.f) return true;
+
+		// 위로 갈 때는 머리 높이(FindWall의 머리 트레이스와 같은 높이)에 아직 벽이 있을 때만 올라간다.
+		// 벽 위 끝을 넘으면 여기서 멈추고 모서리 올라가기(LedgeClimb)에 맡긴다. 올라가기가 안 되는 곳에서 허공으로 계속 올라가지 않게 한다.
+		FVector HeadStart = Player->GetActorLocation();
+		HeadStart.Z += HalfHeight * 0.5f;
+		FHitResult HeadHit;
+		return GetWorld()->LineTraceSingleByChannel(HeadHit, HeadStart, HeadStart + ForwardVector * WallSearchDist, ECC_WallAttach, Params);
+	}
 
 	// 벽이 있으면 벽타기 벽이어야 이어서 움직인다
 	FHitResult ClimbHit;

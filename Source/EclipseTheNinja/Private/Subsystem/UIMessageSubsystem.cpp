@@ -27,16 +27,16 @@ void UUIMessageSubsystem::RegisterUIMessage(APlayerController* InPC, UUIMessageW
 	}
 }
 
-void UUIMessageSubsystem::ShowMessageText(const FText& InText)
+void UUIMessageSubsystem::ShowMessageText(const FText& InText, float InHoldDuration)
 {
 	if (!this->TargetUIMessageWidget)
 	{
 		return ;
 	}
-	this->TargetUIMessageWidget->MakeMessage(InText);
+	this->TargetUIMessageWidget->MakeMessage(InText, InHoldDuration);
 }
 
-void UUIMessageSubsystem::ShowMessage(APlayerController* InPC, const FText& InText)
+void UUIMessageSubsystem::ShowMessage(APlayerController* InPC, const FText& InText, float InHoldDuration)
 {
 	if (!InPC)
 	{
@@ -46,7 +46,7 @@ void UUIMessageSubsystem::ShowMessage(APlayerController* InPC, const FText& InTe
 	{
 		if (UUIMessageSubsystem* Subsystem = LocalPlayer->GetSubsystem<UUIMessageSubsystem>())
 		{
-			Subsystem->ShowMessageText(InText);
+			Subsystem->ShowMessageText(InText, InHoldDuration);
 		}
 	}
 }
