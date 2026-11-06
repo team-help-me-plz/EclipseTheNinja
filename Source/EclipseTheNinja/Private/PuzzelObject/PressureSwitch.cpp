@@ -2,6 +2,7 @@
 
 #include "PuzzelObject/PressureSwitch.h"
 #include "Interface/Interactor.h"
+#include "Interface/Activatable.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "Component/InteractHighlightComponent.h"
 #include "Save/GameSaveSubsystem.h"
@@ -98,6 +99,60 @@ void APressureSwitch::PostInitializeComponents()
 	this->PressureTrigger->OnComponentEndOverlap.AddDynamic(this, &APressureSwitch::OnPressureEndOverlap);
 }
 
+void APressureSwitch::PostLoad()
+{
+	Super::PostLoad();
+
+	// 구버전 단일 대상(TargetActor)으로 저장된 레벨을 배열로 옮긴다
+	if (this->TargetActor)
+	{
+		this->TargetActors.AddUnique(this->TargetActor);
+		this->TargetActor = nullptr;
+	}
+}
+
+bool APressureSwitch::HasActivatableTarget() const
+{
+	for (const AActor* Target : this->TargetActors)
+	{
+		if (IsValid(Target) && Target->Implements<UActivatable>())
+		{
+			return (true);
+		}
+	}
+	return (false);
+}
+
+void APressureSwitch::ToggleTargets()
+{
+	for (AActor* Target : this->TargetActors)
+	{
+		if (IsValid(Target) && Target->Implements<UActivatable>())
+		{
+			IActivatable::Execute_ToggleActivate(Target);
+		}
+	}
+}
+
+void APressureSwitch::SetTargetIndicator(bool bShow)
+{
+	for (AActor* Target : this->TargetActors)
+	{
+		if (!IsValid(Target) || !Target->Implements<UActivatable>())
+		{
+			continue ;
+		}
+		if (bShow)
+		{
+			IActivatable::Execute_ShowActivationIndicator(Target);
+		}
+		else
+		{
+			IActivatable::Execute_HideActivationIndicator(Target);
+		}
+	}
+}
+
 void APressureSwitch::OnPressureBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	// 발판은 Pawn(캡슐 등)이 밟았을 때만 작동한다. InteractBox 같은 WorldDynamic 겹침은 무시
@@ -132,11 +187,11 @@ void APressureSwitch::Interact_Implementation(AActor* InActor)
 	{
 		return;
 	}
-	if (!this->TargetActor || !this->TargetActor->Implements<UActivatable>())
+	if (!this->HasActivatableTarget())
 	{
 		return;
 	}
-	IActivatable::Execute_ToggleActivate(this->TargetActor);
+	this->ToggleTargets();
 	this->bIsInteracted = true;
 	this->RefreshInteractState();
 
@@ -200,18 +255,7 @@ void APressureSwitch::RefreshHighlight()
 		return ;
 	}
 	this->bIsShowingTargetIndicator = bShouldShowTarget;
-	if (!IsValid(this->TargetActor) || !this->TargetActor->Implements<UActivatable>())
-	{
-		return ;
-	}
-	if (bShouldShowTarget)
-	{
-		IActivatable::Execute_ShowActivationIndicator(this->TargetActor);
-	}
-	else
-	{
-		IActivatable::Execute_HideActivationIndicator(this->TargetActor);
-	}
+	this->SetTargetIndicator(bShouldShowTarget);
 }
 
 

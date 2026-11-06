@@ -249,6 +249,8 @@ public:
 
 	UAssassinationTargetingComponent* GetAssassinationTargetingComponent() const { return AssassinateTargetingComponent; }
 	bool IsAssassinating() const;
+	// 지금 상호작용 키를 누르면 암살이 실행되는지. 상호작용보다 우선한다.
+	bool CanAssassinateCurrentTarget() const;
 	bool IsWallAttached() const;
 	// 은신구역에 들어가는 중, 숨어 있는 중, 나오는 중 모두 true.
 	// 이 동안의 입력은 HidingComponent가 컨트롤러 IMC를 바꿔서 제한한다.

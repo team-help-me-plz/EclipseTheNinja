@@ -31,6 +31,9 @@ public:
 	// 상호작용 몽타주 재생 중이라 입력이 막혀 있는가
 	bool	IsPlayingInteractMontage() const { return (this->bIsPlayingInteractMontage); }
 
+	// 같은 키로 더 우선하는 행동(암살 등)이 가능할 때 상호작용 대상의 표시를 숨긴다. 대상 선택은 유지된다
+	void	SetIndicatorSuppressed(bool bInSuppressed);
+
 protected:
 	UFUNCTION()
 	void	OnInteractBoxBeginOverlap(
@@ -74,6 +77,11 @@ private:
 	TArray<TWeakObjectPtr<AActor>>	OverlappedInteractActor;
 	// 상호작용 키를 눌렀을 때 상호작용할 액터
 	TWeakObjectPtr<AActor>			TargetActor = nullptr;
+	// 지금 표시를 켜 둔 액터. 표시는 횟수로 관리되므로 Show/Hide 짝을 맞추기 위해 기록한다
+	TWeakObjectPtr<AActor>			IndicatorShownActor = nullptr;
+	bool							bIndicatorSuppressed = false;
+	// 억제 여부에 맞춰 TargetActor의 표시를 켜거나 끈다
+	void	RefreshTargetIndicator();
 	// 선택 목록에는 넣지 않고 테두리만 강조 중인 액터 (발판 등). Show/Hide를 한 번씩만 호출하기 위해 기록한다
 	TSet<TWeakObjectPtr<AActor>>	HighlightOnlyActors;
 };

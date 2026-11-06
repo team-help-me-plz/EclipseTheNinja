@@ -28,6 +28,7 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	virtual void PostLoad() override;
 
 public:	
 	// Called every frame
@@ -62,8 +63,20 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UWidgetComponent>	InteractKeyWidget = nullptr;
 
+	// 작동시킬 대상 목록. IActivatable을 구현한 대상만 함께 토글된다
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|Target")
+	TArray<TObjectPtr<AActor>>	TargetActors;
+
+	// 구버전 단일 대상. 이미 저장된 레벨을 불러올 때 PostLoad에서 TargetActors로 옮기고 비운다
+	UPROPERTY()
 	TObjectPtr<AActor>			TargetActor = nullptr;
+
+	// TargetActors 중 IActivatable을 구현한 대상이 하나라도 있는가
+	bool	HasActivatableTarget() const;
+	// 모든 대상의 Activate 상태를 토글한다
+	void	ToggleTargets();
+	// 모든 대상의 Activate 테두리를 켜거나 끈다
+	void	SetTargetIndicator(bool bShow);
 
 	// 여러번 Interact 할 수 있는 액터인가
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|State")
@@ -93,7 +106,7 @@ private:
 	EInteractState	InteractState = EInteractState::Ready;
 	// 선택(강조)을 요청한 수. InteractBox 선택, 발판 강조, 분신 조준 커서가 각각 Show/Hide를 짝지어 호출한다
 	int32			SelectCount = 0;
-	// TargetActor의 Activate 테두리를 켜 둔 상태인가 (Show/Hide를 짝지어 호출하기 위함)
+	// TargetActors의 Activate 테두리를 켜 둔 상태인가 (Show/Hide를 짝지어 호출하기 위함)
 	bool			bIsShowingTargetIndicator = false;
 
 };

@@ -89,6 +89,60 @@ void AInteractSwitch::BeginPlay()
 	}
 }
 
+void AInteractSwitch::PostLoad()
+{
+	Super::PostLoad();
+
+	// 구버전 단일 대상(TargetActor)으로 저장된 레벨을 배열로 옮긴다
+	if (this->TargetActor)
+	{
+		this->TargetActors.AddUnique(this->TargetActor);
+		this->TargetActor = nullptr;
+	}
+}
+
+bool AInteractSwitch::HasActivatableTarget() const
+{
+	for (const AActor* Target : this->TargetActors)
+	{
+		if (IsValid(Target) && Target->Implements<UActivatable>())
+		{
+			return (true);
+		}
+	}
+	return (false);
+}
+
+void AInteractSwitch::ToggleTargets()
+{
+	for (AActor* Target : this->TargetActors)
+	{
+		if (IsValid(Target) && Target->Implements<UActivatable>())
+		{
+			IActivatable::Execute_ToggleActivate(Target);
+		}
+	}
+}
+
+void AInteractSwitch::SetTargetIndicator(bool bShow)
+{
+	for (AActor* Target : this->TargetActors)
+	{
+		if (!IsValid(Target) || !Target->Implements<UActivatable>())
+		{
+			continue ;
+		}
+		if (bShow)
+		{
+			IActivatable::Execute_ShowActivationIndicator(Target);
+		}
+		else
+		{
+			IActivatable::Execute_HideActivationIndicator(Target);
+		}
+	}
+}
+
 // Called every frame
 void AInteractSwitch::Tick(float DeltaTime)
 {
@@ -102,7 +156,7 @@ void AInteractSwitch::Interact_Implementation(AActor* InActor)
 	{
 		return;
 	}
-	if (!this->TargetActor || !this->TargetActor->Implements<UActivatable>())
+	if (!this->HasActivatableTarget())
 	{
 		return;
 	}
@@ -122,7 +176,7 @@ void AInteractSwitch::Interact_Implementation(AActor* InActor)
 	);
 	this->RefreshInteractState();
 	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
-	IActivatable::Execute_ToggleActivate(this->TargetActor);
+	this->ToggleTargets();
 	this->SaveSwitchState();
 }
 
@@ -211,18 +265,7 @@ void AInteractSwitch::RefreshHighlight()
 		return ;
 	}
 	this->bIsShowingTargetIndicator = bShouldShowTarget;
-	if (!IsValid(this->TargetActor) || !this->TargetActor->Implements<UActivatable>())
-	{
-		return ;
-	}
-	if (bShouldShowTarget)
-	{
-		IActivatable::Execute_ShowActivationIndicator(this->TargetActor);
-	}
-	else
-	{
-		IActivatable::Execute_HideActivationIndicator(this->TargetActor);
-	}
+	this->SetTargetIndicator(bShouldShowTarget);
 }
 
 
