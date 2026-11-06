@@ -113,9 +113,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Occlusion")
 	FName KeepVisibleTag = TEXT("KeepVisible");
 
-	// 켜면 가림 메시 숨기기를 숨김 구역(HouseCutawayVolume 등) 안에 있을 때만 한다. 그 밖에서는 아무것도 숨기지 않는다
+	// 켜면 가림 메시 숨기기를 숨김 구역(bAllowOccluderHiding을 켠 HouseCutawayVolume, 튜토리얼 퍼즐 하우스) 안에 있을 때만 한다.
+	// 그 밖에서는 카메라와 플레이어 사이에 무엇이 있어도 숨기지 않는다
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Occlusion")
-	bool bHideOccludersOnlyInZones = false;
+	bool bHideOccludersOnlyInZones = true;
 
 	// 플레이어가 숨김 구역에 들어가고 나올 때 부른다. 구역이 겹쳐도 모두 나갈 때까지 유지된다
 	UFUNCTION(BlueprintCallable, Category = "Side Scrolling Camera|Occlusion")

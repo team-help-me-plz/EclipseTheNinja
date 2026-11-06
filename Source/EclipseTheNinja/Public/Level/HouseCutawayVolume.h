@@ -61,9 +61,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cutaway")
 	bool bKeepShadows = true;
 
-	// 켜면 안에 있는 동안 카메라 매니저의 가림 메시 숨기기를 허용한다 (bHideOccludersOnlyInZones인 카메라용)
+	// 켜면 안에 있는 동안 카메라 매니저의 가림 메시 숨기기를 허용한다 (bHideOccludersOnlyInZones인 카메라용).
+	// 벽 이름 필터와 상관없이 카메라를 가리는 것을 모두 숨기므로, 벽을 다 날려야 하는 집(튜토리얼 퍼즐 하우스)에서만 켠다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cutaway")
-	bool bAllowOccluderHiding = true;
+	bool bAllowOccluderHiding = false;
 
 private:
 	// 카메라 매니저에 숨김 구역 진입을 알린 상태인지
