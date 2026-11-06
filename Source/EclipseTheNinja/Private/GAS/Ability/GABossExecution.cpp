@@ -58,6 +58,12 @@ void UGABossExecution::ActivateAbility(
 
 	Boss->GetCharacterMovement()->StopMovementImmediately();
 
+	// 플레이어가 공중에서 처형되면 보스도 그 옆 공중에 서야 하므로 연출 동안 중력을 끈다.
+	// 플레이어는 사망 처리에서 이동이 꺼져(MOVE_None) 그 자리에 멈춘다.
+	SavedBossMovementMode = Boss->GetCharacterMovement()->MovementMode;
+	Boss->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+	bBossGravityDisabled = true;
+
 	MoveBehindVictim(Boss, Player);
 	SetIgnoreVictimCollision(true);
 
@@ -452,7 +458,20 @@ void UGABossExecution::EndAbility(
 	SetIgnoreVictimCollision(false);
 
 	// 보스가 살아 있으면 AI를 다시 켠다.
-	const ABossEnemy* Boss = Cast<ABossEnemy>(GetAvatarActorFromActorInfo());
+	ABossEnemy* Boss = Cast<ABossEnemy>(GetAvatarActorFromActorInfo());
+
+	// 껐던 중력을 되돌린다. 공중이었다면 이제 떨어진다.
+	if (bBossGravityDisabled && IsValid(Boss) && !Boss->IsDead())
+	{
+		UCharacterMovementComponent* Movement = Boss->GetCharacterMovement();
+		if (Movement->MovementMode == MOVE_Flying)
+		{
+			Movement->SetMovementMode(SavedBossMovementMode == MOVE_Walking || SavedBossMovementMode == MOVE_NavWalking
+				? MOVE_Falling : SavedBossMovementMode.GetValue());
+		}
+	}
+	bBossGravityDisabled = false;
+
 	if (PausedBrain.IsValid() && IsValid(Boss) && !Boss->IsDead())
 	{
 		PausedBrain->ResumeLogic(TEXT("BossExecution finished"));
