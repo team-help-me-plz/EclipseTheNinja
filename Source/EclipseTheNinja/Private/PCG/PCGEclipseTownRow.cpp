@@ -28,7 +28,16 @@ namespace EclipseTownRow
 
         // 메시 바운드 가운데 X(피벗이 가운데가 아닐 때 보정)
         double CenterX = 0.0;
+
+        // 거리 쪽 정면의 로컬 Y. 보통은 바운드 최소 Y, 뒤집힌 집은 최대 Y
+        double FrontY = 0.0;
+
+        // 정면이 로컬 +Y인 집. 180도 돌려 정면이 거리를 보게 한다
+        bool bFlipFacing = false;
     };
+
+    // 기존 SM_Town_* 프리팹의 정면 로컬 Y. 모든 집의 정면을 이 선에 맞춰 길과 나란히 세운다
+    constexpr double ReferenceFrontY = -120.0;
 
     // 스플라인 위 한 구간(집 또는 골목)
     struct FModule
@@ -192,6 +201,8 @@ bool FPCGEclipseTownRowElement::ExecuteInternal(FPCGContext* Context) const
             Candidate.Stories = FMath::Clamp(Entry.Stories, 1, 2);
             Candidate.Weight = Entry.Weight;
             Candidate.CenterX = Box.GetCenter().X;
+            Candidate.bFlipFacing = Entry.bFlipFacing;
+            Candidate.FrontY = (Entry.bFlipFacing ? Box.Max.Y : Box.Min.Y) + (Entry.bFlipFacing ? -Entry.FrontInset : Entry.FrontInset);
             Candidate.Width = Entry.WidthOverride > 0.0f
                 ? static_cast<double>(Entry.WidthOverride)
                 : Box.GetSize().X;
@@ -335,13 +346,26 @@ bool FPCGEclipseTownRowElement::ExecuteInternal(FPCGContext* Context) const
             const FVector EndLocation = TransformAtDistance(Line, Module.Start + Module.Size).GetLocation();
             const FVector Direction = (EndLocation - StartLocation).GetSafeNormal();
             const FVector Up = TransformAtDistance(Line, Module.Start + Module.Size * 0.5).GetRotation().GetUpVector();
-            const FRotator Rotation = FRotationMatrix::MakeFromXZ(Direction, Up).Rotator();
+            FRotator Rotation = FRotationMatrix::MakeFromXZ(Direction, Up).Rotator();
             FVector Location = (StartLocation + EndLocation) * 0.5;
 
-            // 그래프가 집을 Yaw 180으로 돌리므로, 메시 바운드 가운데가 모듈 가운데에 오게 진행 방향으로 보정
+            // 그래프가 집을 Yaw 180으로 돌리므로 메시 로컬 (X, Y)는 모듈 기준 (-X, -Y)로 놓인다.
+            // 메시 바운드 가운데 X가 모듈 가운데에, 정면(FrontY)이 ReferenceFrontY 선에 오게 피벗 차이만큼 옮긴다.
+            // 정면이 +Y인 집은 포인트를 180도 더 돌려(그래프와 합쳐 0도) 정면이 거리를 보게 한다.
             if (Module.bHouse)
             {
-                Location += Direction * Candidates[Module.Candidate].CenterX;
+                const FCandidate& Candidate = Candidates[Module.Candidate];
+                const FQuat BaseRotation = Rotation.Quaternion();
+                if (Candidate.bFlipFacing)
+                {
+                    // 최종 회전이 0도이므로 메시 로컬 (X, Y)가 그대로 놓인다
+                    Location += BaseRotation.RotateVector(FVector(-Candidate.CenterX, -ReferenceFrontY - Candidate.FrontY, 0.0));
+                    Rotation = (BaseRotation * FQuat(FVector::UpVector, UE_PI)).Rotator();
+                }
+                else
+                {
+                    Location += BaseRotation.RotateVector(FVector(Candidate.CenterX, Candidate.FrontY - ReferenceFrontY, 0.0));
+                }
             }
 
             const double HalfSize = Module.Size * 0.5;
