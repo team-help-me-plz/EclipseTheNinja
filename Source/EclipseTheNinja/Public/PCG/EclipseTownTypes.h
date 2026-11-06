@@ -22,7 +22,8 @@ struct FEclipseTownHouseEntry
 {
     GENERATED_BODY()
 
-    // 집 프리팹. 기존 SM_Town_* 프리팹과 같은 방향(폭이 로컬 X, 바닥 Z=0)이어야 한다
+    // 집 프리팹. 폭이 로컬 X, 바닥 Z=0이어야 한다. 피벗 X·Y 위치는 상관없다
+    // (노드가 바운드로 X 가운데와 정면을 길 선에 맞춘다. 정면 방향은 bFlipFacing)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Town")
     TSoftObjectPtr<UStaticMesh> Mesh;
 
@@ -40,6 +41,15 @@ struct FEclipseTownHouseEntry
     // 0이면 메시 바운드의 X 폭을 쓴다. 바운드에 처마 등이 튀어나와 폭이 맞지 않을 때만 넣는다
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Town", meta = (ClampMin = "0"))
     float WidthOverride = 0.0f;
+
+    // 켜면 메시 정면이 로컬 +Y인 집으로 보고 180도 돌려 세운다. 로컬 -Y 쪽이 뚫려 있거나 뒷면인 메시(예: SM_JVK_Shop_02)에 켠다
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Town")
+    bool bFlipFacing = false;
+
+    // 집 정면은 메시 바운드 끝(처마·간판 포함)을 길 선에 맞춘다. 처마가 튀어나와 벽이 너무 뒤로 물러나 보이면
+    // 그만큼(cm) 넣어 벽 쪽을 길에 붙인다
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Town", meta = (Units = "cm"))
+    float FrontInset = 0.0f;
 };
 
 /**

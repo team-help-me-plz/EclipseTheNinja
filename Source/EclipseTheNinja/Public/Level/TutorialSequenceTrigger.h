@@ -10,6 +10,7 @@
 class UArrowComponent;
 class UBoxComponent;
 class ALevelSequenceActor;
+class ULevelSequence;
 class UUserWidget;
 class UWidgetComponent;
 class UInputAction;
@@ -56,6 +57,14 @@ public:
     // 지금 재생 중인지
     UFUNCTION(BlueprintPure, Category = "Tutorial")
     bool IsPlaying() const;
+
+    // 재생 전에 시퀀스 액터가 재생할 시퀀스 에셋을 바꾼다 (예: 플레이어가 반대쪽을 볼 때 좌우 대칭 엔딩)
+    UFUNCTION(BlueprintCallable, Category = "Tutorial")
+    void SetSequenceAsset(ULevelSequence* InSequence);
+
+    // 시퀀스 액터에 지금 지정된 시퀀스 에셋
+    UFUNCTION(BlueprintPure, Category = "Tutorial")
+    ULevelSequence* GetSequenceAsset() const;
 
     // 시퀀스가 끝나 조작을 돌려준 직후 호출된다
     UPROPERTY(BlueprintAssignable, Category = "Tutorial")

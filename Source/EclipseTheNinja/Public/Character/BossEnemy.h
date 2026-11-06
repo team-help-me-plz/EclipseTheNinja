@@ -44,6 +44,10 @@ class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
 public:
 	ABossEnemy();
 
+	/** 컷신·그로기처럼 보스가 패턴을 쓰면 안 되는 동안 켠다. 켜져 있으면 패턴 어빌리티가 발동하지 않는다. */
+	void SetCinematicLocked(bool bLocked) { bCinematicLocked = bLocked; }
+	bool IsCinematicLocked() const { return bCinematicLocked; }
+
 	/** Also callable by an arena trigger/cinematic. Detection of combat starts the UI automatically. */
 	UFUNCTION(BlueprintCallable, Category = "Boss|UI")
 	void ShowBossHealthBar();
@@ -431,4 +435,6 @@ protected:
 	bool bEnergyLinkActive = false;
 
 	FTimerHandle EnergyLinkTimer;
+
+	bool bCinematicLocked = false;
 };

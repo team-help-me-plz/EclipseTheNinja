@@ -301,7 +301,12 @@ bool UGAWallAttach::FindWall(const ACharacter* Player, FHitResult& OutHit, bool*
 
 	if (!GetWorld()->LineTraceSingleByChannel(BodyHit, BodyStart, BodyEnd, ECC_WallAttach, Params))
 	{
-		return false;
+		// 몸통 높이가 창문·틈에 걸려 빗나가도 허리 아래에 벽이 있으면 매달린다
+		const FVector LowStart = BodyStart - FVector(0.f, 0.f, Player->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * LowProbeHeightRatio);
+		if (!GetWorld()->LineTraceSingleByChannel(BodyHit, LowStart, LowStart + ForwardVector * WallSearchDist, ECC_WallAttach, Params))
+		{
+			return false;
+		}
 	}
 
 	if (!GetWorld()->LineTraceSingleByChannel(HeadHit, HeadStart, HeadEnd, ECC_WallAttach, Params))

@@ -30,6 +30,9 @@ ABossEnemy::ABossEnemy()
 {
 	DefaultStatsEffect = UGEBossEnemyDefaultStats::StaticClass();
 
+	// 처치 후 엔딩 컷신에서도 쓰러진 보스가 보여야 한다.
+	bHideCorpseAfterDeath = false;
+
 	// 보스는 덩치가 커서 일반 적보다 먼 거리에서 발도를 시작한다.
 	AttackDistance = 250.0f;
 

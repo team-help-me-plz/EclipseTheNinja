@@ -10,6 +10,7 @@ class ABossEnemy;
 class ABossGimmickPortal;
 class ATutorialSequenceTrigger;
 class UAnimSequenceBase;
+class UAnimMontage;
 
 /**
  * 보스 스테이지 컷신 연결 액터. 보스 맵에 하나 배치해 보스의 이벤트에 맞춰 컷신 트리거를 재생한다.
@@ -84,7 +85,25 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss Cinematic|Groggy", meta = (ClampMin = "0.01"))
     float GroggyPlayRate = 1.0f;
 
+    // 그로기 컷신이 끝난 뒤에도 쓰러진 자세로 멈춰 있는 시간. 이 시간이 지나야 일어나 패턴을 다시 쓴다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss Cinematic|Groggy", meta = (ClampMin = "0.0", Units = "s"))
+    float GroggyHoldTime = 3.0f;
+
+    // 쓰러진 자세에서 일어설 때 원래 자세로 블렌드하는 시간
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss Cinematic|Groggy", meta = (ClampMin = "0.0", Units = "s"))
+    float GroggyRecoverBlendTime = 0.6f;
+
+    // 그로기 유지 시간이 끝나 보스를 일으키고 AI를 다시 켠다
+    void FinishGroggy();
+
 private:
+    static constexpr float GroggyBlendOutTime = 0.3f;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UAnimMontage> GroggyMontage = nullptr;
+
+    FTimerHandle GroggyHoldTimer;
+
     // 링크를 끊은 뒤 아직 보스 스테이지로 돌아오지 않았다
     bool bGroggyPending = false;
 

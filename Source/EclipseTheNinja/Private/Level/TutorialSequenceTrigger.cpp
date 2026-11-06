@@ -17,6 +17,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/ArrowComponent.h"
 #include "Components/TextBlock.h"
+#include "Components/SizeBox.h"
 #include "Components/BoxComponent.h"
 #include "Components/WidgetComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -28,6 +29,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "DefaultLevelSequenceInstanceData.h"
 #include "LevelSequenceActor.h"
+#include "LevelSequence.h"
 #include "LevelSequencePlayer.h"
 #include "TimerManager.h"
 
@@ -133,6 +135,23 @@ void ATutorialSequenceTrigger::PlaySequenceAt(APlayerController* PlayerControlle
     this->bOriginOverridden = true;
     PlaySequence(PlayerController);
     this->bOriginOverridden = false;
+}
+
+void ATutorialSequenceTrigger::SetSequenceAsset(ULevelSequence* InSequence)
+{
+    if (!IsValid(this->SequenceActor) || !IsValid(InSequence) || IsPlaying())
+    {
+        return;
+    }
+    if (this->SequenceActor->GetSequence() != InSequence)
+    {
+        this->SequenceActor->SetSequence(InSequence);
+    }
+}
+
+ULevelSequence* ATutorialSequenceTrigger::GetSequenceAsset() const
+{
+    return IsValid(this->SequenceActor) ? Cast<ULevelSequence>(this->SequenceActor->GetSequence()) : nullptr;
 }
 
 bool ATutorialSequenceTrigger::IsPlaying() const
@@ -310,6 +329,25 @@ void ATutorialSequenceTrigger::BeginQTE()
         if (KeyTextBlock)
         {
             KeyTextBlock->SetText(this->QTEKeyText);
+
+            // 키 상자는 한 글자 폭으로 고정돼 있다. "좌클릭"처럼 긴 글자는 상자를 글자 폭에 맞춰 늘린다
+            if (this->QTEKeyText.ToString().Len() > 1)
+            {
+                // 배경 이미지는 원본 크기가 커서 고정 폭을 풀면 상자가 화면만큼 넓어진다.
+                // 처음 표시 전에는 글자 크기를 잴 수 없으므로 한 글자 폭을 기준으로 글자 수만큼 늘린다
+                USizeBox* KeyBox = Cast<USizeBox>(PromptWidget->WidgetTree->RootWidget);
+                if (IsValid(KeyBox) && KeyBox->GetWidthOverride() > 0.0f)
+                {
+                    // 다시 재생할 때 넓힌 폭이 또 늘지 않도록 원래 한 글자 폭을 최소 폭에 기억해 둔다
+                    if (KeyBox->GetMinDesiredWidth() <= 0.0f)
+                    {
+                        KeyBox->SetMinDesiredWidth(KeyBox->GetWidthOverride());
+                    }
+                    const float BaseWidth = KeyBox->GetMinDesiredWidth();
+                    const int32 CharCount = this->QTEKeyText.ToString().Len();
+                    KeyBox->SetWidthOverride(BaseWidth * (0.35f + 0.65f * CharCount));
+                }
+            }
         }
     }
     this->QTEPrompt->SetHiddenInGame(false);

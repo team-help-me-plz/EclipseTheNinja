@@ -414,7 +414,11 @@ void AEnemy::DeactivateAfterDeath()
 	ASC->RemoveGameplayCue(EclipseGameplayTags::GameplayCue_Enemy_Burn);
 	
 	// 충돌, 이동, 틱, AI는 Die()에서 이미 정지했으므로 외형만 숨긴다.
-	SetActorHiddenInGame(true);
+	// 처치 후 컷신에 시체가 남아야 하는 적(보스)은 숨기지 않고 마지막 자세로 둔다.
+	if (bHideCorpseAfterDeath)
+	{
+		SetActorHiddenInGame(true);
+	}
 	GetMesh()->bPauseAnims = true;
 }
 

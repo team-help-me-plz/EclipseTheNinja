@@ -12,6 +12,29 @@
 #include "GAS/Ability/GABaseAttack.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
 #include "GAS/Animation/AnimNotify_BossAttackHit.h"
+#include "Character/BossEnemy.h"
+#include "EngineUtils.h"
+#include "LevelSequenceActor.h"
+#include "LevelSequencePlayer.h"
+
+bool UGABossPatternBase::IsAnyCinematicPlaying(const UWorld* World)
+{
+	if (!World)
+	{
+		return false;
+	}
+
+	// 컷신 트리거, 보스 컷신 연결 액터, 엔딩 등 어떤 경로로 재생했든 레벨 시퀀스가 돌고 있으면 컷신 중으로 본다.
+	for (TActorIterator<ALevelSequenceActor> It(World); It; ++It)
+	{
+		const ULevelSequencePlayer* SequencePlayer = It->GetSequencePlayer();
+		if (SequencePlayer && SequencePlayer->IsPlaying())
+		{
+			return true;
+		}
+	}
+	return false;
+}
 
 UGABossPatternBase::UGABossPatternBase()
 {
@@ -49,6 +72,17 @@ bool UGABossPatternBase::CanActivateAbility(
 
 	// 피격·패링 경직 중에는 새 패턴을 시작하지 않는다.
 	if (Enemy->IsPlayingHitReaction())
+	{
+		return false;
+	}
+
+	// 컷신·시퀀스가 나오는 동안(그로기 유지 시간 포함)에는 패턴을 시작하지 않는다.
+	// 비헤이비어 트리를 멈춰도 놓친 대상 난사(BossLostTargetComponent)처럼 트리 밖에서 부르는 경로가 있다.
+	if (const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy); Boss && Boss->IsCinematicLocked())
+	{
+		return false;
+	}
+	if (IsAnyCinematicPlaying(Enemy->GetWorld()))
 	{
 		return false;
 	}
