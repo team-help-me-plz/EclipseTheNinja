@@ -28,6 +28,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "DefaultLevelSequenceInstanceData.h"
 #include "LevelSequenceActor.h"
+#include "LevelSequence.h"
 #include "LevelSequencePlayer.h"
 #include "TimerManager.h"
 
@@ -133,6 +134,23 @@ void ATutorialSequenceTrigger::PlaySequenceAt(APlayerController* PlayerControlle
     this->bOriginOverridden = true;
     PlaySequence(PlayerController);
     this->bOriginOverridden = false;
+}
+
+void ATutorialSequenceTrigger::SetSequenceAsset(ULevelSequence* InSequence)
+{
+    if (!IsValid(this->SequenceActor) || !IsValid(InSequence) || IsPlaying())
+    {
+        return;
+    }
+    if (this->SequenceActor->GetSequence() != InSequence)
+    {
+        this->SequenceActor->SetSequence(InSequence);
+    }
+}
+
+ULevelSequence* ATutorialSequenceTrigger::GetSequenceAsset() const
+{
+    return IsValid(this->SequenceActor) ? Cast<ULevelSequence>(this->SequenceActor->GetSequence()) : nullptr;
 }
 
 bool ATutorialSequenceTrigger::IsPlaying() const

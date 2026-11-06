@@ -12,6 +12,7 @@ class UGameEndCountdownWidget;
 class AEnemy;
 class ABossEnemy;
 class ATutorialSequenceTrigger;
+class ULevelSequence;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLevelCleared);
 
@@ -42,6 +43,9 @@ protected:
 
     // 지정한 보스의 사망 연출이 끝나면 기존 클리어/종료 흐름을 실행한다.
     void OnBossDeathFinished(AEnemy* Enemy);
+
+    // 보스를 처치한 순간 플레이어가 보던 방향을 기억한다. 사망 연출이 끝나 클리어할 때는 이미 돌아서 있을 수 있다
+    void OnBossDied(AEnemy* Enemy, bool bAssassinated);
 
     UFUNCTION()
     void OnTriggerBeginOverlap(
@@ -86,6 +90,15 @@ protected:
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending")
     TObjectPtr<ATutorialSequenceTrigger> EndingSequence = nullptr;
 
+    // EndingSequence의 시퀀스는 플레이어가 +X(오른쪽)를 볼 때 기준으로 만든다.
+    // 클리어 순간 플레이어가 -X(왼쪽)를 보고 있으면 대신 이 좌우 대칭 시퀀스를 재생해, 원래 바라보던 방향을 그대로 잇는다
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending")
+    TObjectPtr<ULevelSequence> EndingSequenceFacingLeft = nullptr;
+
+    // 오른쪽을 볼 때 재생할 원래 시퀀스. 처음 클리어할 때 EndingSequence 액터에 지정된 시퀀스를 기억해 둔다
+    UPROPERTY(Transient)
+    TObjectPtr<ULevelSequence> EndingSequenceFacingRight = nullptr;
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<USceneComponent> SceneRoot = nullptr;
 
@@ -122,6 +135,10 @@ protected:
 
 private:
     bool bIsCleared = false;
+
+    // 보스 처치 순간의 플레이어 방향을 기록했는지, 그때 -X(왼쪽)를 보고 있었는지
+    bool bHasDefeatFacing = false;
+    bool bDefeatFacingLeft = false;
 
     FTimerHandle TravelTimerHandle;
 

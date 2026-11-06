@@ -6,6 +6,7 @@
 
 #include "Character/BossEnemy.h"
 #include "Level/TutorialSequenceTrigger.h"
+#include "LevelSequence.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Pawn.h"
@@ -44,6 +45,7 @@ void ALevelClearTrigger::BeginPlay()
         this->ClearTrigger->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         this->ClearTrigger->SetGenerateOverlapEvents(false);
         this->BossToDefeat->OnDeathFinished.AddUObject(this, &ALevelClearTrigger::OnBossDeathFinished);
+        this->BossToDefeat->OnDied.AddUObject(this, &ALevelClearTrigger::OnBossDied);
     }
     else
     {
@@ -57,6 +59,7 @@ void ALevelClearTrigger::EndPlay(const EEndPlayReason::Type EndPlayReason)
     if (IsValid(this->BossToDefeat))
     {
         this->BossToDefeat->OnDeathFinished.RemoveAll(this);
+        this->BossToDefeat->OnDied.RemoveAll(this);
     }
 
     GetWorldTimerManager().ClearTimer(this->TravelTimerHandle);
@@ -74,6 +77,16 @@ void ALevelClearTrigger::OnBossDeathFinished(AEnemy* Enemy)
     if (Enemy == this->BossToDefeat && IsValid(Enemy) && Enemy->IsDead())
     {
         ClearLevel();
+    }
+}
+
+void ALevelClearTrigger::OnBossDied(AEnemy* Enemy, bool bAssassinated)
+{
+    const APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
+    if (Enemy == this->BossToDefeat && IsValid(PlayerPawn))
+    {
+        this->bHasDefeatFacing = true;
+        this->bDefeatFacingLeft = Enemy->GetActorLocation().X < PlayerPawn->GetActorLocation().X;
     }
 }
 
@@ -134,6 +147,30 @@ void ALevelClearTrigger::ClearLevel()
         if (const UCapsuleComponent* Capsule = PlayerPawn->FindComponentByClass<UCapsuleComponent>())
         {
             Origin.Z -= Capsule->GetScaledCapsuleHalfHeight();
+        }
+
+        // 시퀀스는 오른쪽(+X)의 보스 시체를 바라보며 납도한 뒤 왼쪽(-X)으로 뒤돌아 퇴장하는 기준이다.
+        // 컷신 시작 시점에 보스 시체가 플레이어보다 왼쪽(-X)에 있으면 좌우 대칭본을 재생해,
+        // 항상 보스 시체를 먼저 바라본 뒤 반대쪽으로 뒤돌아 퇴장하게 한다
+        if (IsValid(this->EndingSequenceFacingLeft))
+        {
+            if (!IsValid(this->EndingSequenceFacingRight))
+            {
+                this->EndingSequenceFacingRight = this->EndingSequence->GetSequenceAsset();
+            }
+            bool bCorpseOnLeft = false;
+            if (IsValid(this->BossToDefeat))
+            {
+                const float DeltaX = this->BossToDefeat->GetActorLocation().X - PlayerPawn->GetActorLocation().X;
+                bCorpseOnLeft = FMath::IsNearlyZero(DeltaX, 1.0f)
+                    ? (this->bHasDefeatFacing ? this->bDefeatFacingLeft : PlayerPawn->GetActorForwardVector().X < 0.0)
+                    : (DeltaX < 0.0f);
+            }
+            else
+            {
+                bCorpseOnLeft = this->bHasDefeatFacing ? this->bDefeatFacingLeft : PlayerPawn->GetActorForwardVector().X < 0.0;
+            }
+            this->EndingSequence->SetSequenceAsset(bCorpseOnLeft ? this->EndingSequenceFacingLeft.Get() : this->EndingSequenceFacingRight.Get());
         }
 
         this->EndingSequence->OnSequenceEnded.AddUniqueDynamic(this, &ALevelClearTrigger::OnEndingSequenceEnded);
