@@ -6,6 +6,9 @@
 #include "Level/BossGimmickPortal.h"
 #include "Level/TutorialSequenceTrigger.h"
 
+#include "GAS/Tags/EclipseGameplayTags.h"
+
+#include "AbilitySystemComponent.h"
 #include "AIController.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
@@ -208,6 +211,14 @@ void ABossCinematicDirector::PauseBoss()
         return;
     }
 
+    // 컷신 동안 어떤 경로로도 패턴을 시작하지 못하게 하고, 이미 시작한 패턴(예고·공격 몽타주)은 끊는다
+    this->Boss->SetCinematicLocked(true);
+    if (UAbilitySystemComponent* ASC = this->Boss->GetAbilitySystemComponent())
+    {
+        const FGameplayTagContainer AttackTags(EclipseGameplayTags::Ability_Attack);
+        ASC->CancelAbilities(&AttackTags);
+    }
+
     AAIController* AI = Cast<AAIController>(this->Boss->GetController());
     UBrainComponent* Brain = AI ? AI->GetBrainComponent() : nullptr;
     if (!IsValid(Brain))
@@ -223,6 +234,10 @@ void ABossCinematicDirector::PauseBoss()
 
 void ABossCinematicDirector::ResumeBoss()
 {
+    if (IsValid(this->Boss))
+    {
+        this->Boss->SetCinematicLocked(false);
+    }
     if (!this->bPausedBoss || !IsValid(this->Boss))
     {
         return;

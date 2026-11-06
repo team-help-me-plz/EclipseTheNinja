@@ -27,6 +27,9 @@ class ECLIPSETHENINJA_API UGABossPatternBase : public UGameplayAbility
 public:
 	UGABossPatternBase();
 
+	// 월드에서 레벨 시퀀스(컷신)가 재생 중인지. 재생 중에는 보스 패턴을 시작하지 않는다.
+	static bool IsAnyCinematicPlaying(const UWorld* World);
+
 	virtual bool CanActivateAbility(
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
