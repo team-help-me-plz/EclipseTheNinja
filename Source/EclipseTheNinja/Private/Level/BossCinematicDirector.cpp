@@ -7,6 +7,7 @@
 #include "Level/TutorialSequenceTrigger.h"
 
 #include "AIController.h"
+#include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimSequenceBase.h"
 #include "BrainComponent.h"
@@ -140,7 +141,17 @@ void ABossCinematicDirector::HandlePortalArrived(ABossGimmickPortal* Portal, APa
     {
         if (UAnimInstance* AnimInstance = this->Boss->GetMesh()->GetAnimInstance())
         {
-            AnimInstance->PlaySlotAnimationAsDynamicMontage(this->GroggyAnimation, this->GroggySlot, 0.2f, 0.3f, this->GroggyPlayRate);
+            this->GroggyMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
+                this->GroggyAnimation, this->GroggySlot, 0.2f, GroggyBlendOutTime, this->GroggyPlayRate);
+
+            // 쓰러지는 애니메이션이 끝나도 바로 일어서지 않게 자동 블렌드 아웃을 끈다. 몽타주는 마지막 자세로 멈춰 있고,
+            // 컷신이 끝나고 GroggyHoldTime이 지나면 FinishGroggy에서 멈추며 원래 자세로 블렌드해 일어선다.
+            // (끝나기 직전에 타이머로 멈추면 프레임이 낮을 때 블렌드 아웃이 먼저 시작돼 일어서 버린다)
+            // 재생 중인 인스턴스는 재생 시점에 몽타주 값을 복사해 두므로 인스턴스 쪽을 끈다
+            if (FAnimMontageInstance* MontageInstance = IsValid(this->GroggyMontage) ? AnimInstance->GetActiveInstanceForMontage(this->GroggyMontage) : nullptr)
+            {
+                MontageInstance->bEnableAutoBlendOut = false;
+            }
         }
     }
 
@@ -159,6 +170,33 @@ void ABossCinematicDirector::HandleSequenceEnded(ATutorialSequenceTrigger* Trigg
     {
         this->Boss->CustomTimeDilation = 1.0f;
     }
+
+    // 그로기는 컷신이 끝난 뒤에도 GroggyHoldTime 동안 쓰러진 채로 멈춰 있다가 일어선다
+    if (Trigger == this->GroggySequence && this->GroggyHoldTime > 0.0f)
+    {
+        GetWorldTimerManager().SetTimer(this->GroggyHoldTimer, this, &ABossCinematicDirector::FinishGroggy, this->GroggyHoldTime, false);
+        return;
+    }
+
+    ResumeBoss();
+}
+
+void ABossCinematicDirector::FinishGroggy()
+{
+    // 쓰러져 있는 동안 처치됐으면 사망 연출을 그대로 둔다
+    if (!IsValid(this->Boss) || this->Boss->IsDead())
+    {
+        this->GroggyMontage = nullptr;
+        return;
+    }
+
+    UAnimInstance* AnimInstance = this->Boss->GetMesh()->GetAnimInstance();
+    if (AnimInstance && IsValid(this->GroggyMontage))
+    {
+        // 멈춰 둔 쓰러진 자세에서 원래 자세로 블렌드하며 일어선다
+        AnimInstance->Montage_Stop(this->GroggyRecoverBlendTime, this->GroggyMontage);
+    }
+    this->GroggyMontage = nullptr;
 
     ResumeBoss();
 }
