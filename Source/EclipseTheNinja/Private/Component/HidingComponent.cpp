@@ -15,7 +15,9 @@
 
 UHidingComponent::UHidingComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	// 은신 지점 앞까지 걸어가는 동안에만 틱을 켠다
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
 }
 
 void UHidingComponent::BeginPlay()
@@ -62,6 +64,76 @@ bool UHidingComponent::TryEnter(const AStealthZone* InZone)
 	this->SavedObstacleResponse = Capsule->GetCollisionResponseToChannel(this->ObstacleChannel);
 	Capsule->SetCollisionResponseToChannel(this->ObstacleChannel, ECR_Ignore);
 
+	// 대각선으로 파고들지 않도록 먼저 은신 지점 앞(X)까지 평소처럼 걸어간 뒤(앉아 있으면 앉은 채로) 숨는 연출과 함께 안쪽(Y)으로 들어간다
+	const FVector StartLocation = OwnerPlayer->GetActorLocation();
+	const double DistX = FMath::Abs(this->HideLocation.X - StartLocation.X);
+	if (DistX > this->WalkTolerance)
+	{
+		// 걷는 방향을 바라보고 실제 이동 입력으로 걷는다. 지금 상태(서 있음/앉음) 그대로 이동하므로
+		// 로코모션도 평소의 걷기·앉아 걷기로 나온다
+		OwnerPlayer->SetAssassinationFacing(this->HideLocation.X >= StartLocation.X ? 0.f : 180.f);
+		StartWalk(0);
+		return true;
+	}
+
+	BeginEnterDepth();
+	return true;
+}
+
+void UHidingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	APlayerCharacter* OwnerPlayer = this->Player.Get();
+	if (!this->bWalkingToFront || this->Phase != EHidingPhase::Entering || !IsValid(OwnerPlayer))
+	{
+		SetComponentTickEnabled(false);
+		return;
+	}
+
+	// 목표 축(X: 은신 지점 앞, Y: 은신 지점)에 닿았거나 지나쳤으면 그 값에 맞추고 다음 단계로 넘어간다
+	FVector Location = OwnerPlayer->GetActorLocation();
+	const double Remaining = (this->HideLocation[this->WalkAxis] - Location[this->WalkAxis]) * this->WalkDirection;
+	this->WalkTimeLeft -= DeltaTime;
+	if (Remaining <= this->WalkTolerance || this->WalkTimeLeft <= 0.f)
+	{
+		Location[this->WalkAxis] = this->HideLocation[this->WalkAxis];
+		OwnerPlayer->SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
+		// 걷던 속도가 남으면 다음 축으로 걷는 동안 이 축으로 계속 미끄러져 지나친다
+		OwnerPlayer->GetCharacterMovement()->StopMovementImmediately();
+		BeginEnterDepth();
+		return;
+	}
+	FVector Input = FVector::ZeroVector;
+	Input[this->WalkAxis] = this->WalkDirection;
+	// 은신 중에는 컨트롤러 이동 입력이 막혀 있을 수 있으므로 강제로 넣는다
+	OwnerPlayer->AddMovementInput(Input, 1.f, true);
+}
+
+void UHidingComponent::StartWalk(int32 InAxis)
+{
+	APlayerCharacter* OwnerPlayer = this->Player.Get();
+	UCharacterMovementComponent* Movement = OwnerPlayer->GetCharacterMovement();
+	const double Distance = this->HideLocation[InAxis] - OwnerPlayer->GetActorLocation()[InAxis];
+	this->WalkAxis = InAxis;
+	this->WalkDirection = Distance >= 0.0 ? 1.f : -1.f;
+	const float WalkSpeed = FMath::Max(Movement->GetMaxSpeed(), 50.f);
+	// 막혀서 도착하지 못해도 갇히지 않도록 예상 시간의 두 배가 지나면 그 자리에서 다음 단계로 넘어간다
+	this->WalkTimeLeft = static_cast<float>(FMath::Abs(Distance)) / WalkSpeed * 2.f + 0.5f;
+	this->bWalkingToFront = true;
+	SetComponentTickEnabled(true);
+}
+
+void UHidingComponent::BeginEnterDepth()
+{
+	this->bWalkingToFront = false;
+	SetComponentTickEnabled(false);
+	APlayerCharacter* OwnerPlayer = this->Player.Get();
+	if (this->Phase != EHidingPhase::Entering || !IsValid(OwnerPlayer)) return;
+
+	// 걸어온 끝에서 남은 속도로 미끄러지지 않게 멈춘다
+	OwnerPlayer->GetCharacterMovement()->StopMovementImmediately();
+
 	// +X를 바라보면 왼쪽이 -Y다
 	UAnimMontage* Montage = OwnerPlayer->GetActorForwardVector().X >= 0.f ? this->LeftMontage : this->RightMontage;
 	UAnimInstance* AnimInstance = OwnerPlayer->GetMesh() ? OwnerPlayer->GetMesh()->GetAnimInstance() : nullptr;
@@ -77,31 +149,10 @@ bool UHidingComponent::TryEnter(const AStealthZone* InZone)
 		AnimInstance->Montage_SetEndDelegate(EndDelegate, Montage);
 	}
 
-	// 대각선으로 파고들지 않도록 먼저 X(좌우)로 은신 지점 앞까지 간 뒤 Y(안쪽)로 들어간다.
-	// 두 구간 시간은 거리 비율로 나눠 전체 시간은 Start 섹션 길이와 같게 둔다
+	// 은신 지점 앞에 도착했으니 TakeCover Start 섹션을 재생하는 동안 안쪽(Y)으로 들어간다
 	const float Duration = GetSectionTime(this->StartSection);
-	const FVector StartLocation = OwnerPlayer->GetActorLocation();
-	const double DistX = FMath::Abs(this->HideLocation.X - StartLocation.X);
-	const double DistY = FMath::Abs(this->HideLocation.Y - StartLocation.Y);
-	if (DistX > 1.0 && DistY > 1.0)
-	{
-		const float XDuration = Duration * static_cast<float>(DistX / (DistX + DistY));
-		const FVector FrontLocation(this->HideLocation.X, StartLocation.Y, this->HideLocation.Z);
-		MoveTo(FrontLocation, XDuration);
-		GetWorld()->GetTimerManager().SetTimer(this->EnterDepthTimer, FTimerDelegate::CreateWeakLambda(this, [this, Duration, XDuration]()
-		{
-			if (this->Phase == EHidingPhase::Entering)
-			{
-				MoveTo(this->HideLocation, FMath::Max(Duration - XDuration, 0.05f));
-			}
-		}), XDuration, false);
-	}
-	else
-	{
-		MoveTo(this->HideLocation, Duration);
-	}
+	MoveTo(this->HideLocation, Duration);
 	GetWorld()->GetTimerManager().SetTimer(this->PhaseTimer, this, &UHidingComponent::OnEnterFinished, Duration, false);
-	return true;
 }
 
 void UHidingComponent::RequestExit()
@@ -171,8 +222,9 @@ void UHidingComponent::EndHiding(bool bStopMontage)
 	// 몽타주 종료 알림이 다시 들어오지 않도록 단계부터 되돌린다
 	this->Phase = EHidingPhase::None;
 	this->bExitAfterEnter = false;
+	this->bWalkingToFront = false;
+	SetComponentTickEnabled(false);
 	GetWorld()->GetTimerManager().ClearTimer(this->PhaseTimer);
-	GetWorld()->GetTimerManager().ClearTimer(this->EnterDepthTimer);
 
 	APlayerCharacter* OwnerPlayer = this->Player.Get();
 	if (!IsValid(OwnerPlayer)) return;
@@ -296,6 +348,12 @@ void UHidingComponent::OnPlayerConditionChanged(EPlayerCondition InCondition)
 	switch (this->Phase)
 	{
 	case EHidingPhase::Entering:
+		// 아직 은신 지점 앞으로 걸어가는 중이면 숨는 연출 없이 그 자리에서 멈춘다
+		if (this->bWalkingToFront)
+		{
+			EndHiding(false);
+			break;
+		}
 		this->bExitAfterEnter = true;
 		break;
 	case EHidingPhase::Hidden:
