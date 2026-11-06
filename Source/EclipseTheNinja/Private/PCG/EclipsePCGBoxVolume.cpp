@@ -3,20 +3,21 @@
 #include "PCG/EclipsePCGBoxVolume.h"
 
 #include "EclipsePCGParams.h"
-#include "Engine/Polys.h"
-#include "Model.h"
 #include "PCGComponent.h"
 #include "PCGGraph.h"
 
 #if WITH_EDITOR
 #include "ActorFactories/ActorFactory.h"
 #include "Builders/CubeBuilder.h"
+#include "Engine/Polys.h"
+#include "Model.h"
 #endif
 
 namespace EclipsePCGBoxVolume
 {
     const double MinSize = 10.0;
 
+#if WITH_EDITOR
     // 브러시 폴리곤 꼭짓점으로 로컬 크기를 잰다. 브러시가 없으면 0
     FVector MeasureBrushSize(const AVolume* Volume)
     {
@@ -37,6 +38,7 @@ namespace EclipsePCGBoxVolume
 
         return Box.IsValid ? Box.GetSize() : FVector::ZeroVector;
     }
+#endif
 }
 
 AEclipsePCGBoxVolume::AEclipsePCGBoxVolume(const FObjectInitializer& ObjectInitializer)
@@ -72,6 +74,7 @@ void AEclipsePCGBoxVolume::Regenerate()
 
 void AEclipsePCGBoxVolume::ConvertScaleToSize()
 {
+#if WITH_EDITOR
     const FVector Scale = this->GetActorScale3D().GetAbs();
     if (Scale.Equals(FVector::OneVector, 1e-3))
     {
@@ -88,6 +91,7 @@ void AEclipsePCGBoxVolume::ConvertScaleToSize()
     this->Modify();
     this->SetActorScale3D(FVector::OneVector);
     this->SetBoxSize(BrushSize * Scale);
+#endif
 }
 
 void AEclipsePCGBoxVolume::OnConstruction(const FTransform& Transform)

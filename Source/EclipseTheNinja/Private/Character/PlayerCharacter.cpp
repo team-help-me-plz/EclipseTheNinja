@@ -735,6 +735,13 @@ void APlayerCharacter::DoBasicAttack()
 	if (!ASC) return;
 	if (IsAssassinating()) return;
 
+	// 조준 중이 아니면 벽에 매달린 상태에서도 현재 대상에 맞는 암살을 시도한다.
+	if (!bIsExploring && CanAssassinateCurrentTarget())
+	{
+		DoAssassinate();
+		return;
+	}
+
 	if (!FindAbilitySpecByInputID(EAbilityInputID::BasicAttack)) return;
 	if (!BasicAttackMontage) return;
 
@@ -747,12 +754,6 @@ void APlayerCharacter::DoBasicAttack()
 	if (bIsExploring)
 	{
 		DoThrowKunai();
-		return;
-	}
-	// 상호작용보다 암살을 우선하고, 실패하더라도 같은 입력으로 상호작용하지 않는다.
-	if (CanAssassinateCurrentTarget())
-	{
-		DoAssassinate();
 		return;
 	}
 	// 첫 공격 전에만 방향을 확정하고, 콤보 추가 입력은 기존 공격 방향을 유지한다.
