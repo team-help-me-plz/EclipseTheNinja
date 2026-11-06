@@ -112,4 +112,6 @@ private:
 	bool			bExitAfterEnter = false;
 	uint16			MoveSourceID = 0;
 	FTimerHandle	PhaseTimer;
+	// 들어갈 때 X 이동을 마치고 안쪽(Y)으로 들어가기 시작하는 타이머
+	FTimerHandle	EnterDepthTimer;
 };

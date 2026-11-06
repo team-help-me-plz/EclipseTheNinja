@@ -77,8 +77,29 @@ bool UHidingComponent::TryEnter(const AStealthZone* InZone)
 		AnimInstance->Montage_SetEndDelegate(EndDelegate, Montage);
 	}
 
+	// 대각선으로 파고들지 않도록 먼저 X(좌우)로 은신 지점 앞까지 간 뒤 Y(안쪽)로 들어간다.
+	// 두 구간 시간은 거리 비율로 나눠 전체 시간은 Start 섹션 길이와 같게 둔다
 	const float Duration = GetSectionTime(this->StartSection);
-	MoveTo(this->HideLocation, Duration);
+	const FVector StartLocation = OwnerPlayer->GetActorLocation();
+	const double DistX = FMath::Abs(this->HideLocation.X - StartLocation.X);
+	const double DistY = FMath::Abs(this->HideLocation.Y - StartLocation.Y);
+	if (DistX > 1.0 && DistY > 1.0)
+	{
+		const float XDuration = Duration * static_cast<float>(DistX / (DistX + DistY));
+		const FVector FrontLocation(this->HideLocation.X, StartLocation.Y, this->HideLocation.Z);
+		MoveTo(FrontLocation, XDuration);
+		GetWorld()->GetTimerManager().SetTimer(this->EnterDepthTimer, FTimerDelegate::CreateWeakLambda(this, [this, Duration, XDuration]()
+		{
+			if (this->Phase == EHidingPhase::Entering)
+			{
+				MoveTo(this->HideLocation, FMath::Max(Duration - XDuration, 0.05f));
+			}
+		}), XDuration, false);
+	}
+	else
+	{
+		MoveTo(this->HideLocation, Duration);
+	}
 	GetWorld()->GetTimerManager().SetTimer(this->PhaseTimer, this, &UHidingComponent::OnEnterFinished, Duration, false);
 	return true;
 }
@@ -151,6 +172,7 @@ void UHidingComponent::EndHiding(bool bStopMontage)
 	this->Phase = EHidingPhase::None;
 	this->bExitAfterEnter = false;
 	GetWorld()->GetTimerManager().ClearTimer(this->PhaseTimer);
+	GetWorld()->GetTimerManager().ClearTimer(this->EnterDepthTimer);
 
 	APlayerCharacter* OwnerPlayer = this->Player.Get();
 	if (!IsValid(OwnerPlayer)) return;
