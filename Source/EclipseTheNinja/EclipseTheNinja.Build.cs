@@ -27,7 +27,14 @@ public class EclipseTheNinja : ModuleRules
             "PCG"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		// 배경 산맥 액터(능선 메시 생성)
+		PrivateDependencyModuleNames.AddRange(new string[] { "GeometryCore", "GeometryFramework" });
+
+		// PCG 볼륨 크기 조절(브러시 재생성)에 에디터 모듈이 필요하다
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
 
 		PublicIncludePaths.AddRange(new string[] {
 			"EclipseTheNinja",
