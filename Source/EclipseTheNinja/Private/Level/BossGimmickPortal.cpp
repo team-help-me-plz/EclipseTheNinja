@@ -40,10 +40,7 @@ ABossGimmickPortal::ABossGimmickPortal()
 	PortalVFX->SetRelativeScale3D(FVector(0.3f));
 	PortalVFX->SetAutoActivate(false);
 
-	PortalSystem = TSoftObjectPtr<UNiagaraSystem>(
-		FSoftObjectPath(TEXT("/Game/VFX/SpatialDistortionVFX/Niagara/NS_SpatialDistortion7.NS_SpatialDistortion7"))
-	);
-	LaserSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(UBossEnemyGimmickComponent::DefaultLaserSystemPath));
+	// 포탈과 레이저 에셋은 Blueprint 기본값 또는 레벨 인스턴스에서 지정한다.
 }
 
 void ABossGimmickPortal::BeginPlay()

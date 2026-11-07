@@ -86,7 +86,7 @@ protected:
 
 	// 조작키 탭에 표시할 입력 매핑 (키 변경 기능은 추후 구현)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Controls")
-	TSoftObjectPtr<UInputMappingContext>	DisplayMappingContext = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/Game/Input/IMC_Character.IMC_Character")));
+	TSoftObjectPtr<UInputMappingContext>	DisplayMappingContext;
 
 	// 볼륨 조절에 사용할 사운드 믹스 / 클래스 (지정되지 않으면 값만 저장)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Audio")

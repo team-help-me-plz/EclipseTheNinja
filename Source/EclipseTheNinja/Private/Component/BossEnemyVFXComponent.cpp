@@ -15,29 +15,13 @@
 #include "NiagaraSystem.h"
 #include "TimerManager.h"
 
-namespace BossVFXDefaults
-{
-	// 시트(에셋 탭)의 보스 VFX 지정
-	const TCHAR* Shield = TEXT("/Game/VFX/SpatialDistortionVFX/Niagara/NS_SpatialDistortion7.NS_SpatialDistortion7");
-	const TCHAR* Blood = TEXT("/Game/VFX/Vefects/Blood_VFX/VFX/Performance_Versions/Slashes/Looped/Looped_NS_Slash_Large.Looped_NS_Slash_Large");
-	const TCHAR* ShieldHit = TEXT("/Game/VFX/SlashFX_SoftTofu/Niagara/Basic/NS_Hit_Parrying.NS_Hit_Parrying");
-	const TCHAR* Trail = TEXT("/Game/VFX/SwordEffects/Particles/NS_SwordEffect5_Trails.NS_SwordEffect5_Trails");
-	const TCHAR* TrailMaterial = TEXT("/Game/VFX/SwordEffects/Materials/MI_trail5_Inst.MI_trail5_Inst");
-	const TCHAR* Gust = TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/LitSandPuff/Looped/NS_SandPuff_Small_Looped.NS_SandPuff_Small_Looped");
-}
-
 UBossEnemyVFXComponent::UBossEnemyVFXComponent()
 {
 	// 트레일 디버그 표시(bDrawDebugTrail)를 켰을 때만 Tick에서 그린다.
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = true;
 
-	ShieldSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(BossVFXDefaults::Shield));
-	BloodSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(BossVFXDefaults::Blood));
-	ShieldHitSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(BossVFXDefaults::ShieldHit));
-	TrailSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(BossVFXDefaults::Trail));
-	TrailMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(BossVFXDefaults::TrailMaterial));
-	GustSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(BossVFXDefaults::Gust));
+	// 사용할 에셋은 보스 Blueprint의 VFXComp 기본값에서 지정한다.
 }
 
 void UBossEnemyVFXComponent::BeginPlay()
