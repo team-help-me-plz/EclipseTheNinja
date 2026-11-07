@@ -2,6 +2,11 @@
 
 
 #include "Widgets/AbilityCooldownWidget.h"
+#include "Widgets/InputGlyphWidget.h"
+#include "Character/PlayerCharacter.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "GAS/Ability/GACooldownBase.h"
 #include "Character/BaseCharacter.h"
 #include "Save/GameSaveSubsystem.h"
@@ -79,6 +84,13 @@ void	UAbilityCooldownWidget::InitWidget(APawn* InPawn)
 {
 	this->UnbindAbility();
 	this->StopWaitingForGrant();
+
+	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(InPawn))
+	{
+		const UInputAction* Action = Player->GetAbilityInputAction(TargetAbilityInputID);
+		if (AbilityKeyGlyph) AbilityKeyGlyph->SetInputAction(Action);
+		else AbilityKeyGlyph = InstallKeyGlyph(TEXT("AbilityKeyText"), TEXT("AbilityKeyBackground"), Action);
+	}
 	if (!InPawn)
 	{
 		return ;
@@ -122,6 +134,31 @@ void	UAbilityCooldownWidget::InitWidget(APawn* InPawn)
 	}
 	Ability->OnAbilityCooldownStart.AddUObject(this, &UAbilityCooldownWidget::StartCooldown);
 	this->ObservedAbility = Ability;
+}
+
+UInputGlyphWidget* UAbilityCooldownWidget::InstallKeyGlyph(FName TextName, FName BackgroundName, const UInputAction* Action)
+{
+	if (!Action) return nullptr;
+	if (!WidgetTree) return nullptr;
+
+	UWidget* Text = WidgetTree->FindWidget(TextName);
+	if (!Text) return nullptr;
+
+	UOverlay* Parent = Cast<UOverlay>(Text->GetParent());
+	if (!Parent) return nullptr;
+
+	UInputGlyphWidget* Glyph = CreateWidget<UInputGlyphWidget>(this);
+	if (!Glyph) return nullptr;
+
+	// 기존 슬롯의 순서를 유지해 사용 불가/분신 교대 표시가 키 위에 그려지게 한다.
+	if (!Parent->ReplaceOverlayChildAt(Parent->GetChildIndex(Text), Glyph)) return nullptr;
+	UOverlaySlot* GlyphSlot = CastChecked<UOverlaySlot>(Glyph->Slot);
+	GlyphSlot->SetHorizontalAlignment(HAlign_Fill);
+	GlyphSlot->SetVerticalAlignment(VAlign_Fill);
+	Glyph->SetInputAction(Action);
+	Text->SetVisibility(ESlateVisibility::Collapsed);
+	if (UWidget* Background = WidgetTree->FindWidget(BackgroundName)) Background->SetVisibility(ESlateVisibility::Collapsed);
+	return Glyph;
 }
 
 void UAbilityCooldownWidget::NativeConstruct()

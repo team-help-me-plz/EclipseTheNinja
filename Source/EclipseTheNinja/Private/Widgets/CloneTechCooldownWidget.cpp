@@ -5,6 +5,8 @@
 #include "GAS/Ability/GACloneTech.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
+#include "Character/PlayerCharacter.h"
+#include "Widgets/InputGlyphWidget.h"
 
 void UCloneTechCooldownWidget::NativeConstruct()
 {
@@ -14,6 +16,11 @@ void UCloneTechCooldownWidget::NativeConstruct()
 void UCloneTechCooldownWidget::InitWidget(APawn* InPawn)
 {
 	Super::InitWidget(InPawn);
+	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(InPawn))
+	{
+		if (RecallKeyGlyph) RecallKeyGlyph->SetInputAction(Player->GetCloneRecallInputAction());
+		else RecallKeyGlyph = InstallKeyGlyph(TEXT("CloneTechRecallKeyText"), TEXT("CloneTechRecallKeyBackground"), Player->GetCloneRecallInputAction());
+	}
 
 	UGACooldownBase*	Ability = this->ObservedAbility.Get();
 	if (!Ability)
@@ -45,6 +52,7 @@ void UCloneTechCooldownWidget::StartCooldown()
 	Super::StartCooldown();
 
 	this->AbilityKeyText->SetVisibility(ESlateVisibility::Collapsed);
+	if (AbilityKeyGlyph) AbilityKeyGlyph->SetVisibility(ESlateVisibility::Collapsed);
 	this->CloneTechSwapImage->SetVisibility(ESlateVisibility::Visible);
 	this->CloneTechRecallUsable->SetVisibility(ESlateVisibility::Collapsed);
 }
@@ -53,7 +61,8 @@ void UCloneTechCooldownWidget::EndCooldown()
 {
 	Super::EndCooldown();
 
-	this->AbilityKeyText->SetVisibility(ESlateVisibility::Visible);
+	this->AbilityKeyText->SetVisibility(AbilityKeyGlyph ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	if (AbilityKeyGlyph) AbilityKeyGlyph->SetVisibility(ESlateVisibility::HitTestInvisible);
 	this->CloneTechSwapImage->SetVisibility(ESlateVisibility::Collapsed);
 	this->CloneTechSwapRecallUsable->SetVisibility(ESlateVisibility::Collapsed);
 	this->CloneTechRecallUsable->SetVisibility(ESlateVisibility::Visible);

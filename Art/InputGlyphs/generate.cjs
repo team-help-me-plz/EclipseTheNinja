@@ -117,6 +117,15 @@ async function makeKeyboard() {
         ['Unknown', '?'],
     ];
     for (const [id, label] of extras) await key(id, label, { category: 'extended', engineKey: null, width: label.length > 6 ? 320 : 256 });
+    for (const [id, label] of [['LeftMouseButton', 'LMB'], ['RightMouseButton', 'RMB'], ['MiddleMouseButton', 'MMB'], ['ThumbMouseButton', 'M4'], ['ThumbMouseButton2', 'M5'], ['MouseScrollUp', 'Wheel\nUp'], ['MouseScrollDown', 'Wheel\nDown'], ['MouseWheelAxis', 'Wheel']]) {
+        const sourcePath = `Sources/MouseFlat/${id}.png`;
+        if (fs.existsSync(path.join(root, sourcePath))) {
+            const imageBody = `<image href="../${sourcePath}" width="256" height="256"/>`;
+            await save('Keyboard', id, label, imageBody, 256, id, 'mouse', sourcePath);
+        } else {
+            await key(id, label, { category: 'mouse' });
+        }
+    }
 }
 
 function circle(body) {
@@ -243,8 +252,9 @@ async function main() {
         ...['Escape', 'A', 'W', 'J', 'SpaceBar', 'LeftShift', 'Left', 'NumPadOne'].map(id => entries.find(entry => entry.family === 'Keyboard' && entry.id === id)),
         ...['Xbox', 'PlayStation'].flatMap(family => ['Gamepad_FaceButton_Bottom', 'Gamepad_FaceButton_Right', 'Gamepad_FaceButton_Left', 'Gamepad_FaceButton_Top', 'Gamepad_LeftShoulder', 'Gamepad_LeftTrigger', 'Gamepad_DPad_Left', 'Gamepad_LeftThumbstick'].map(id => entries.find(entry => entry.family === family && entry.id === id))),
     ];
-    await board('Overview', 'ECLIPSE / INPUT GLYPHS', '146 KEYBOARD / 28 XBOX / 30 PLAYSTATION / INDIVIDUAL TRANSPARENT PNG', sample, 8);
+    await board('Overview', 'ECLIPSE / INPUT GLYPHS', '146 KEYBOARD + 8 MOUSE / 28 XBOX / 30 PLAYSTATION / TRANSPARENT PNG', sample, 8);
     await board('DPadGold', 'ECLIPSE / D-PAD', 'GOLD TACTILE / UP / DOWN / LEFT / RIGHT', entries.filter(entry => entry.family === 'Xbox' && entry.category === 'dpad'), 4);
+    await board('Mouse', 'ECLIPSE / MOUSE', 'LEFT / RIGHT / MIDDLE / BACK / FORWARD', entries.filter(entry => entry.category === 'mouse' && entry.source), 5);
     console.log(JSON.stringify({ total: entries.length, counts: ['Keyboard', 'Xbox', 'PlayStation'].map(family => ({ family, count: entries.filter(entry => entry.family === family).length })) }));
 }
 
