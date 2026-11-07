@@ -49,15 +49,16 @@ function keyboardBody(label, width, options) {
     return body;
 }
 
-async function save(family, id, label, body, width, engineKey, category) {
+async function save(family, id, label, body, width, engineKey, category, rasterSource = null) {
     const relative = `${family}/${id}`;
     const source = svg(body, width);
     fs.mkdirSync(path.join(root, family), { recursive: true });
     fs.writeFileSync(path.join(root, relative + '.svg'), source);
-    const png = await sharp(Buffer.from(source)).png().toBuffer();
+    const renderer = rasterSource ? sharp(path.join(root, rasterSource)).resize(width, 256) : sharp(Buffer.from(source));
+    const png = await renderer.png().toBuffer();
     fs.writeFileSync(path.join(root, relative + '.png'), png);
     images.set(relative, { png, width, height: 256 });
-    entries.push({ id, family, label: label.replaceAll('\n', ' '), engine_key: engineKey, category, png: relative + '.png', svg: relative + '.svg', width, height: 256 });
+    entries.push({ id, family, label: label.replaceAll('\n', ' '), engine_key: engineKey, category, png: relative + '.png', svg: relative + '.svg', width, height: 256, source: rasterSource || undefined });
 }
 
 async function key(id, label, options = {}) {
@@ -134,11 +135,7 @@ function shapeSymbol(symbol, color) {
 }
 
 function dpad(direction) {
-    let body = `<path d="M99 43h58v51h51v58h-51v51H99v-51H48V94h51Z" fill="${palette.ink}" stroke="${palette.edge}" stroke-width="3"/>`;
-    const arms = { Up: [102, 46, 52, 48], Right: [157, 97, 48, 52], Down: [102, 152, 52, 48], Left: [51, 97, 48, 52] };
-    const [x, y, width, height] = arms[direction];
-    body += `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="2" fill="${palette.light}"/>`;
-    return circle(body);
+    return `<image href="../Sources/DPadGold/${direction}.png" width="256" height="256"/>`;
 }
 
 async function makeGamepad(family) {
@@ -169,7 +166,7 @@ async function makeGamepad(family) {
     }
     for (const direction of ['Up', 'Down', 'Left', 'Right']) {
         const id = 'Gamepad_DPad_' + direction;
-        await save(family, id, 'D-pad ' + direction, dpad(direction), 256, id, 'dpad');
+        await save(family, id, 'D-pad ' + direction, dpad(direction), 256, id, 'dpad', `Sources/DPadGold/${direction}.png`);
     }
     for (const [side, label] of [['Left', ps ? 'Touchpad' : 'View'], ['Right', ps ? 'Options' : 'Menu']]) {
         const id = 'Gamepad_Special_' + side;
@@ -234,7 +231,7 @@ async function main() {
             lookup[family][`Gamepad_${side}TriggerAxis`] = `${family}/Gamepad_${side}Trigger.png`;
         }
     }
-    const manifest = { version: 1, style: 'Eclipse', padding_px: 14, color_space: 'sRGB', alpha: 'straight', fallback: 'Keyboard/Unknown.png', lookup, entries };
+    const manifest = { version: 1, style: 'Eclipse', dpad_style: 'gold-tactile', padding_px: 14, color_space: 'sRGB', alpha: 'straight', fallback: 'Keyboard/Unknown.png', lookup, entries };
     fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
     const keyboard = entries.filter(entry => entry.family === 'Keyboard' && entry.category === 'standard_106');
     if (keyboard.length !== 106) throw new Error(`Expected 106 standard keys, got ${keyboard.length}`);
@@ -247,6 +244,7 @@ async function main() {
         ...['Xbox', 'PlayStation'].flatMap(family => ['Gamepad_FaceButton_Bottom', 'Gamepad_FaceButton_Right', 'Gamepad_FaceButton_Left', 'Gamepad_FaceButton_Top', 'Gamepad_LeftShoulder', 'Gamepad_LeftTrigger', 'Gamepad_DPad_Left', 'Gamepad_LeftThumbstick'].map(id => entries.find(entry => entry.family === family && entry.id === id))),
     ];
     await board('Overview', 'ECLIPSE / INPUT GLYPHS', '146 KEYBOARD / 28 XBOX / 30 PLAYSTATION / INDIVIDUAL TRANSPARENT PNG', sample, 8);
+    await board('DPadGold', 'ECLIPSE / D-PAD', 'GOLD TACTILE / UP / DOWN / LEFT / RIGHT', entries.filter(entry => entry.family === 'Xbox' && entry.category === 'dpad'), 4);
     console.log(JSON.stringify({ total: entries.length, counts: ['Keyboard', 'Xbox', 'PlayStation'].map(family => ({ family, count: entries.filter(entry => entry.family === family).length })) }));
 }
 
