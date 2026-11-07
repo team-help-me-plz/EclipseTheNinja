@@ -196,6 +196,7 @@ void APlayerCharacterController::ApplyDefaultMappingContexts(bool bAdd)
     // 다시 넣을 때 눌려 있던 키(분신 확정 좌클릭 등)가 바로 다른 행동으로 이어지지 않게 한다
     FModifyContextOptions Options;
     Options.bIgnoreAllPressedKeysUntilRelease = true;
+    Options.bNotifyUserSettings = bAdd;
     for (UInputMappingContext* CurrentContext : Contexts)
     {
         if (!CurrentContext) continue;

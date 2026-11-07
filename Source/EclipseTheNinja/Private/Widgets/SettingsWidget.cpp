@@ -23,7 +23,11 @@
 #include "Components/WidgetSwitcher.h"
 #include "GameFramework/GameUserSettings.h"
 #include "Framework/Application/SlateApplication.h"
-#include "InputAction.h"
+#include "EnhancedInputSubsystems.h"
+#include "Engine/LocalPlayer.h"
+#include "GameFramework/InputSettings.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
+#include "Widgets/KeyBindingSelector.h"
 #include "InputMappingContext.h"
 #include "Engine/World.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -90,6 +94,10 @@ FReply USettingsWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, cons
 {
 	if (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::Gamepad_FaceButton_Right)
 	{
+		for (const UKeyBindingSelector* Selector : KeyBindingSelectors)
+		{
+			if (Selector->GetIsSelectingKey()) return FReply::Unhandled();
+		}
 		if (InKeyEvent.IsRepeat()) return FReply::Handled();
 
 		// 목록을 닫고 설정으로 포커스를 돌려 PIE 단축키로 빠지지 않게 한다.
@@ -247,7 +255,7 @@ void USettingsWidget::BuildDefaultLayout()
 
 	// 조작키
 	{
-		UVerticalBox*	Page = this->MakePage(FText::FromString(TEXT("현재 키 배치 (키 변경 기능은 추후 추가 예정)")));
+		UVerticalBox*	Page = this->MakePage(FText::FromString(TEXT("키를 클릭한 뒤 새 키를 누르세요. ESC로 변경을 취소합니다.")));
 
 		UScrollBox*	Scroll = this->WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass());
 		if (UVerticalBoxSlot* ScrollSlot = Page->AddChildToVerticalBox(Scroll))
@@ -257,6 +265,19 @@ void USettingsWidget::BuildDefaultLayout()
 		this->KeyBindingList = this->WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("KeyBindingList"));
 		Scroll->AddChild(this->KeyBindingList);
 
+		UHorizontalBox* ControlsFooter = WidgetTree->ConstructWidget<UHorizontalBox>();
+		Page->AddChildToVerticalBox(ControlsFooter)->SetPadding(FMargin(0.f, 8.f, 0.f, 0.f));
+
+		KeyBindingStatus = MakeText(FText::GetEmpty(), 13, EclipseMenuStyle::Mist);
+		KeyBindingStatus->SetAutoWrapText(true);
+		UHorizontalBoxSlot* StatusSlot = ControlsFooter->AddChildToHorizontalBox(KeyBindingStatus);
+		StatusSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		StatusSlot->SetVerticalAlignment(VAlign_Center);
+		StatusSlot->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f));
+
+		UButton* ResetButton = MakeTextButton(FText::FromString(TEXT("기본값 복원")), 155.f);
+		ResetButton->OnClicked.AddUniqueDynamic(this, &USettingsWidget::ResetKeyBindings);
+		ControlsFooter->AddChildToHorizontalBox(ResetButton);
 	}
 
 	PanelContent->AddChildToVerticalBox(EclipseMenuStyle::Rule(*WidgetTree, EclipseMenuStyle::Edge))
@@ -541,33 +562,156 @@ void USettingsWidget::LoadCurrentSettings()
 	}
 }
 
+UEnhancedInputUserSettings* USettingsWidget::GetInputUserSettings() const
+{
+	const UEnhancedInputLocalPlayerSubsystem* Subsystem =
+		ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetOwningLocalPlayer());
+	if (!Subsystem) return nullptr;
+
+	return Subsystem->GetUserSettings();
+}
+
 void USettingsWidget::RefreshKeyBindingList()
 {
-	if (!this->KeyBindingList)
+	if (!KeyBindingList) return;
+
+	KeyBindingList->ClearChildren();
+	KeyBindingSelectors.Reset();
+	SetKeyBindingStatus(FText::GetEmpty(), false);
+
+	UEnhancedInputUserSettings* Settings = GetInputUserSettings();
+	if (!Settings)
 	{
+		SetKeyBindingStatus(FText::FromString(TEXT("입력 설정을 불러올 수 없습니다.")), true);
 		return;
 	}
-	this->KeyBindingList->ClearChildren();
 
-	const UInputMappingContext*	MappingContext = this->DisplayMappingContext.LoadSynchronous();
-	if (!MappingContext)
+	// 메인 메뉴에는 활성 게임플레이 IMC가 없으므로 표시할 매핑을 먼저 등록한다.
+	const UInputMappingContext* Contexts[] = {DisplayMappingContext.LoadSynchronous(), TutorialMappingContext.LoadSynchronous()};
+	TSet<FName> ListedMappings;
+	for (const UInputMappingContext* Context : Contexts)
 	{
-		this->KeyBindingList->AddChildToVerticalBox(this->MakeText(FText::FromString(TEXT("표시할 입력 매핑이 없습니다")), 16, EclipseMenuStyle::Mist));
-		return;
-	}
+		if (!Context) continue;
 
-	for (const FEnhancedActionKeyMapping& Mapping : MappingContext->GetMappings())
-	{
-		if (!Mapping.Action)
+		Settings->RegisterInputMappingContext(Context);
+		for (const FEnhancedActionKeyMapping& Mapping : Context->GetMappings())
 		{
-			continue;
-		}
-		const FText	ActionName = Mapping.Action->ActionDescription.IsEmpty()
-			? FText::FromString(Mapping.Action->GetName())
-			: Mapping.Action->ActionDescription;
+			if (!Mapping.IsPlayerMappable()) continue;
 
-		this->AddRow(this->KeyBindingList, ActionName, this->MakeText(Mapping.Key.GetDisplayName(), 18, this->AccentColor));
+			const FName Name = Mapping.GetMappingName();
+			if (ListedMappings.Contains(Name)) continue;
+
+			const FPlayerKeyMapping* PlayerMapping = Settings->FindCurrentMappingForSlot(Name, EPlayerMappableKeySlot::First);
+			if (!PlayerMapping) continue;
+			ListedMappings.Add(Name);
+
+			UKeyBindingSelector* Selector = WidgetTree->ConstructWidget<UKeyBindingSelector>();
+			Selector->MappingName = Name;
+			Selector->ActionLabel = PlayerMapping->GetDisplayName();
+			Selector->SetAllowGamepadKeys(false);
+			Selector->SetAllowModifierKeys(false);
+			Selector->SetKeySelectionText(FText::FromString(TEXT("새 키 입력…")));
+			Selector->SetButtonStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Ink, AccentColor));
+
+			FTextBlockStyle TextStyle;
+			TextStyle.SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 15));
+			TextStyle.SetColorAndOpacity(FSlateColor(EclipseMenuStyle::Paper));
+			Selector->SetTextStyle(TextStyle);
+			Selector->SetDisplayedKey(PlayerMapping->GetCurrentKey());
+			Selector->OnBindingKeyChanged.BindUObject(this, &USettingsWidget::HandleBindingKeyChanged);
+			KeyBindingSelectors.Add(Selector);
+			AddRow(KeyBindingList, Selector->ActionLabel, Selector);
+		}
 	}
+
+	if (KeyBindingSelectors.IsEmpty())
+	{
+		SetKeyBindingStatus(FText::FromString(TEXT("변경할 수 있는 단축키가 없습니다.")), true);
+	}
+}
+
+void USettingsWidget::HandleBindingKeyChanged(UKeyBindingSelector& Selector, const FKey& NewKey)
+{
+	UEnhancedInputUserSettings* Settings = GetInputUserSettings();
+	if (!Settings) return;
+
+	const FPlayerKeyMapping* Mapping = Settings->FindCurrentMappingForSlot(Selector.MappingName, EPlayerMappableKeySlot::First);
+	if (!Mapping) return;
+
+	const FKey PreviousKey = Mapping->GetCurrentKey();
+	if (PreviousKey == NewKey) return;
+
+	if (!NewKey.IsValid() || NewKey == EKeys::Escape || NewKey == EKeys::F11 || GetDefault<UInputSettings>()->ConsoleKeys.Contains(NewKey))
+	{
+		Selector.SetDisplayedKey(PreviousKey);
+		SetKeyBindingStatus(FText::FromString(TEXT("이 키는 단축키로 지정할 수 없습니다.")), true);
+		return;
+	}
+
+	for (const UKeyBindingSelector* Other : KeyBindingSelectors)
+	{
+		if (Other == &Selector) continue;
+		if (Other->GetSelectedKey().Key != NewKey) continue;
+
+		Selector.SetDisplayedKey(PreviousKey);
+		SetKeyBindingStatus(FText::Format(FText::FromString(TEXT("{0} 키는 이미 ‘{1}’에 사용 중입니다.")),
+			NewKey.GetDisplayName(), Other->ActionLabel), true);
+		return;
+	}
+
+	FMapPlayerKeyArgs Args;
+	Args.MappingName = Selector.MappingName;
+	Args.Slot = EPlayerMappableKeySlot::First;
+	Args.NewKey = NewKey;
+
+	FGameplayTagContainer FailureReason;
+	Settings->MapPlayerKey(Args, FailureReason);
+	if (!FailureReason.IsEmpty())
+	{
+		Selector.SetDisplayedKey(PreviousKey);
+		SetKeyBindingStatus(FText::FromString(TEXT("단축키를 변경할 수 없습니다.")), true);
+		return;
+	}
+
+	Settings->SaveSettings();
+	SetKeyBindingStatus(FText::FromString(TEXT("단축키를 변경하고 저장했습니다.")), false);
+}
+
+void USettingsWidget::ResetKeyBindings()
+{
+	UEnhancedInputUserSettings* Settings = GetInputUserSettings();
+	if (!Settings) return;
+	if (KeyBindingSelectors.IsEmpty()) return;
+
+	FGameplayTagContainer FailureReason;
+	for (UKeyBindingSelector* Selector : KeyBindingSelectors)
+	{
+		FMapPlayerKeyArgs Args;
+		Args.MappingName = Selector->MappingName;
+		Settings->ResetAllPlayerKeysInRow(Args, FailureReason);
+
+		if (const FPlayerKeyMapping* Mapping = Settings->FindCurrentMappingForSlot(Args.MappingName, EPlayerMappableKeySlot::First))
+		{
+			Selector->SetDisplayedKey(Mapping->GetCurrentKey());
+		}
+	}
+
+	Settings->SaveSettings();
+	if (!FailureReason.IsEmpty())
+	{
+		SetKeyBindingStatus(FText::FromString(TEXT("일부 단축키를 복원할 수 없습니다.")), true);
+		return;
+	}
+
+	SetKeyBindingStatus(FText::FromString(TEXT("기본 단축키를 복원했습니다.")), false);
+}
+
+void USettingsWidget::SetKeyBindingStatus(const FText& Message, bool bWarning)
+{
+	if (!KeyBindingStatus) return;
+
+	KeyBindingStatus->SetText(Message);
+	KeyBindingStatus->SetColorAndOpacity(FSlateColor(bWarning ? EclipseMenuStyle::Corona : EclipseMenuStyle::Mist));
 }
 
 void USettingsWidget::HandleWindowModeChanged(FString Option, ESelectInfo::Type)
