@@ -14,6 +14,9 @@
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "Character/PlayerCharacterCameraManager.h"
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "Components/InputComponent.h"
+#include "Widgets/PauseMenuWidget.h"
+#include "Widgets/SettingsWidget.h"
 
 
 void APlayerCharacterController::BeginPlay()
@@ -28,6 +31,12 @@ void APlayerCharacterController::BeginPlay()
 void APlayerCharacterController::SetupInputComponent()
 {
     Super::SetupInputComponent();
+
+    if (InputComponent)
+    {
+        // 게임플레이 IMC가 잠긴 상태에서도 ESC로 메뉴를 열 수 있다.
+        InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APlayerCharacterController::OpenPauseMenu);
+    }
 
     // add the input mapping context
     ApplyDefaultMappingContexts(true);
@@ -52,6 +61,121 @@ void APlayerCharacterController::SetupInputComponent()
         }
 
     }
+}
+
+void APlayerCharacterController::OpenPauseMenu()
+{
+    if (!IsLocalPlayerController()) return;
+    if (PauseMenuWidget) return;
+    if (IsPaused()) return;
+
+    UPauseMenuWidget* Menu = CreateWidget<UPauseMenuWidget>(this);
+    if (!Menu) return;
+    if (!SetPause(true)) return;
+
+    if (!Menu->AddToPlayerScreen(10))
+    {
+        SetPause(false);
+        return;
+    }
+
+    PauseMenuWidget = Menu;
+    bShowCursorBeforePause = ShouldShowMouseCursor();
+    FocusPauseWidget(*Menu);
+    SetShowMouseCursor(true);
+}
+
+void APlayerCharacterController::FocusPauseWidget(UUserWidget& Widget)
+{
+    // 게임플레이 IMC를 그대로 유지하면서 입력은 현재 모달에만 전달한다.
+    Widget.SetCursor(EMouseCursor::Default);
+    FInputModeUIOnly InputMode;
+    InputMode.SetWidgetToFocus(Widget.TakeWidget());
+    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    SetInputMode(InputMode);
+    Widget.SetUserFocus(this);
+}
+
+void APlayerCharacterController::ResumeFromPauseMenu()
+{
+    if (!PauseMenuWidget) return;
+    if (IsPaused() && !SetPause(false)) return;
+
+    RemovePauseWidgets();
+
+    // 게임플레이의 커서 조준과 기존 입력 잠금을 유지한다.
+    FInputModeGameAndUI InputMode;
+    InputMode.SetHideCursorDuringCapture(false);
+    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    SetInputMode(InputMode);
+    SetShowMouseCursor(bShowCursorBeforePause);
+    FlushPressedKeys();
+}
+
+void APlayerCharacterController::OpenPauseSettings()
+{
+    if (!PauseMenuWidget) return;
+    if (PauseSettingsWidget) return;
+
+    USettingsWidget* Settings = CreateWidget<USettingsWidget>(this);
+    if (!Settings) return;
+    if (!Settings->AddToPlayerScreen(11)) return;
+
+    PauseSettingsWidget = Settings;
+    Settings->OnSettingsClosed.AddUniqueDynamic(this, &APlayerCharacterController::HandlePauseSettingsClosed);
+    PauseMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+    FocusPauseWidget(*Settings);
+}
+
+void APlayerCharacterController::HandlePauseSettingsClosed()
+{
+    PauseSettingsWidget = nullptr;
+    if (!PauseMenuWidget) return;
+
+    PauseMenuWidget->SetVisibility(ESlateVisibility::Visible);
+    FocusPauseWidget(*PauseMenuWidget);
+}
+
+void APlayerCharacterController::HandlePauseMenuBack()
+{
+    if (PauseSettingsWidget)
+    {
+        PauseSettingsWidget->CloseSettings();
+        return;
+    }
+
+    ResumeFromPauseMenu();
+}
+
+void APlayerCharacterController::ReturnToMainMenu()
+{
+    if (!PauseMenuWidget) return;
+
+    ResumeFromPauseMenu();
+    if (PauseMenuWidget) return;
+
+    UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/Maps/Lv_MainMenu")));
+}
+
+void APlayerCharacterController::RemovePauseWidgets()
+{
+    if (PauseSettingsWidget)
+    {
+        PauseSettingsWidget->OnSettingsClosed.RemoveDynamic(this, &APlayerCharacterController::HandlePauseSettingsClosed);
+        PauseSettingsWidget->RemoveFromParent();
+        PauseSettingsWidget = nullptr;
+    }
+    if (PauseMenuWidget)
+    {
+        PauseMenuWidget->RemoveFromParent();
+        PauseMenuWidget = nullptr;
+    }
+}
+
+void APlayerCharacterController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    RemovePauseWidgets();
+    Super::EndPlay(EndPlayReason);
 }
 
 void APlayerCharacterController::ApplyDefaultMappingContexts(bool bAdd)
