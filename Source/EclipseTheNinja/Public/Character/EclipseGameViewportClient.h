@@ -9,6 +9,7 @@ class UEclipseGameViewportClient : public UGameViewportClient
 	GENERATED_BODY()
 
 public:
+	virtual ULocalPlayer* SetupInitialLocalPlayer(FString& OutError) override;
 	virtual bool InputKey(const FInputKeyEventArgs& EventArgs) override;
 
 #if WITH_EDITOR
