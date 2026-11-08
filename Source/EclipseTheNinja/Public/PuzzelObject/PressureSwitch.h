@@ -21,7 +21,8 @@ class ECLIPSETHENINJA_API APressureSwitch : public AActor, public IInteractable,
 	GENERATED_BODY()
 
 public:
-	APressureSwitch();
+	// 하위 클래스가 기본 컴포넌트 생성을 건너뛸 수 있도록 ObjectInitializer를 받는다
+	APressureSwitch(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	virtual void	Tick(float DeltaTime) override;
 

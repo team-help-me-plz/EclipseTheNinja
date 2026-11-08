@@ -30,7 +30,8 @@ namespace
 	}
 }
 
-APressureSwitch::APressureSwitch()
+APressureSwitch::APressureSwitch(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
