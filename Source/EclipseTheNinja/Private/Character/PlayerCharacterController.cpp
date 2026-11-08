@@ -17,6 +17,116 @@
 #include "Components/InputComponent.h"
 #include "Widgets/PauseMenuWidget.h"
 #include "Widgets/SettingsWidget.h"
+#include "Misc/App.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "InputKeyEventArgs.h"
+
+bool APlayerCharacterController::InputKey(const FInputKeyEventArgs& Params)
+{
+    if (Params.Key.IsGamepadKey())
+    {
+        if (Params.Event == IE_Pressed || (Params.Key.IsAnalog() && FMath::Abs(Params.AmountDepressed) > 0.25f))
+            bUsingGamepad = true;
+    }
+    else if (Params.Event == IE_Pressed
+        || (Params.Key.IsAnalog() && FMath::Abs(Params.AmountDepressed) > 0.5f
+            && FPlatformTime::Seconds() > IgnoreCursorWarpUntil))
+    {
+        bUsingGamepad = false;
+    }
+    return Super::InputKey(Params);
+}
+
+void APlayerCharacterController::SetGamepadCursorLocation(int32 X, int32 Y)
+{
+    // Warping the OS cursor for a stick must not count as physical mouse input.
+    IgnoreCursorWarpUntil = FPlatformTime::Seconds() + 0.1;
+    LastObservedMousePosition = FVector2D(X, Y);
+    bHasObservedMousePosition = true;
+    SetMouseLocation(X, Y);
+}
+
+void APlayerCharacterController::PlayerTick(float DeltaTime)
+{
+    Super::PlayerTick(DeltaTime);
+
+    if (!IsLocalPlayerController() || !GetPawn() || IsPaused()) return;
+
+    // An uncaptured, visible mouse may move without MouseX/MouseY axis events.
+    float ObservedX = 0.0f, ObservedY = 0.0f;
+    if (GetMousePosition(ObservedX, ObservedY))
+    {
+        const FVector2D ObservedPosition(ObservedX, ObservedY);
+        if (bHasObservedMousePosition && FPlatformTime::Seconds() > IgnoreCursorWarpUntil
+            && FVector2D::DistSquared(ObservedPosition, LastObservedMousePosition) > 1.0)
+            bUsingGamepad = false;
+        LastObservedMousePosition = ObservedPosition;
+        bHasObservedMousePosition = true;
+    }
+
+    // Move the existing cursor so aiming, camera exploration and clone targeting
+    // all use the same screen position. This remains available during input locks.
+    const bool bGamepadAiming = IsInputKeyDown(EKeys::Gamepad_LeftTrigger);
+    const APlayerCharacter* ControlledCharacter = Cast<APlayerCharacter>(GetPawn());
+    const bool bCloneTargeting = ControlledCharacter && ControlledCharacter->IsCloneTargeting();
+    const FKey CursorX = bCloneTargeting ? EKeys::Gamepad_LeftX : EKeys::Gamepad_RightX;
+    const FKey CursorY = bCloneTargeting ? EKeys::Gamepad_LeftY : EKeys::Gamepad_RightY;
+    FVector2D Stick(GetInputAnalogKeyState(CursorX), -GetInputAnalogKeyState(CursorY));
+    if ((bGamepadAiming || bCloneTargeting) && bInvertGamepadAimCursorY)
+    {
+        Stick.Y *= -1.0;
+    }
+    const float Magnitude = Stick.Size();
+    const float DeadZone = FMath::Clamp(GamepadCursorDeadZone, 0.0f, 0.95f);
+    if (Magnitude <= DeadZone)
+    {
+        GamepadCursorRemainder = FVector2D::ZeroVector;
+        return;
+    }
+    Stick = Stick / Magnitude * FMath::Clamp((Magnitude - DeadZone) / (1.0f - DeadZone), 0.0f, 1.0f);
+
+    int32 Width = 0, Height = 0;
+    GetViewportSize(Width, Height);
+    if (Width <= 0 || Height <= 0) return;
+
+    float MouseX = Width * 0.5f, MouseY = Height * 0.5f;
+    GetMousePosition(MouseX, MouseY);
+    // Clone selection slows the world; the cursor should retain its normal speed.
+    const float RealDeltaTime = FMath::Clamp(static_cast<float>(FApp::GetDeltaTime()), 0.0f, 0.05f);
+    const float SpeedMultiplier = bGamepadAiming ? FMath::Max(0.0f, GamepadAimCursorSpeedMultiplier) : 1.0f;
+    const FVector2D Position = FVector2D(MouseX, MouseY) + GamepadCursorRemainder
+        + Stick * FMath::Max(0.0f, GamepadCursorSpeed) * SpeedMultiplier * Height * RealDeltaTime;
+    const FIntPoint Pixel(FMath::Clamp(FMath::RoundToInt(Position.X), 0, Width - 1),
+        FMath::Clamp(FMath::RoundToInt(Position.Y), 0, Height - 1));
+    GamepadCursorRemainder = FVector2D(
+        FMath::Clamp(Position.X - Pixel.X, -0.5, 0.5),
+        FMath::Clamp(Position.Y - Pixel.Y, -0.5, 0.5));
+    SetGamepadCursorLocation(Pixel.X, Pixel.Y);
+}
+
+void APlayerCharacterController::InitializeGamepadAimCursor(bool bForCloneTargeting)
+{
+    if (!IsLocalPlayerController()
+        || (!bForCloneTargeting && !IsInputKeyDown(EKeys::Gamepad_LeftTrigger))) return;
+    const APlayerCharacter* ControlledCharacter = Cast<APlayerCharacter>(GetPawn());
+    if (!ControlledCharacter) return;
+
+    const USkeletalMeshComponent* Mesh = ControlledCharacter->GetMesh();
+    const FVector HeadLocation = Mesh && Mesh->DoesSocketExist(GamepadAimHeadSocket)
+        ? Mesh->GetSocketLocation(GamepadAimHeadSocket) : ControlledCharacter->GetPawnViewLocation();
+    // Use the intended facing, including while a turn animation is still blending.
+    const float ForwardOffset = bForCloneTargeting ? CloneTargetingStartForwardOffset : GamepadAimStartForwardOffset;
+    const FVector Target = HeadLocation + FVector(ControlledCharacter->GetLogicalFacingSign(), 0.0f, 0.0f)
+        * FMath::Max(0.0f, ForwardOffset);
+    FVector2D ScreenPosition;
+    int32 Width = 0, Height = 0;
+    GetViewportSize(Width, Height);
+    if (Width <= 0 || Height <= 0 || !ProjectWorldLocationToScreen(Target, ScreenPosition)) return;
+
+    GamepadCursorRemainder = FVector2D::ZeroVector;
+    SetGamepadCursorLocation(FMath::Clamp(FMath::RoundToInt(ScreenPosition.X), 0, Width - 1),
+        FMath::Clamp(FMath::RoundToInt(ScreenPosition.Y), 0, Height - 1));
+}
 
 
 void APlayerCharacterController::BeginPlay()
