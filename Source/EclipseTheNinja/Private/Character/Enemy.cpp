@@ -558,6 +558,12 @@ void AEnemy::RestartAI()
 
 	// 정지된 트리는 마지막으로 실행한 에셋으로 루트부터 다시 시작한다.
 	BTComp->RestartTree();
+
+	// 암살로 죽은 적은 PauseLogic 상태가 남는다. 트리 재시작만으로는 해제되지 않는다.
+	if (BTComp->IsPaused())
+	{
+		BTComp->ResumeLogic(TEXT("Enemy AI reset"));
+	}
 }
 
 void AEnemy::SuspendAIForScriptedMove()
