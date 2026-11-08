@@ -15,6 +15,7 @@ class USphereComponent;
 class UCheckpointBoundComponent;
 class UInteractHighlightComponent;
 class UWidgetComponent;
+class USoundBase;
 
 UCLASS()
 class ECLIPSETHENINJA_API AInteractSwitch : public AActor, public IInteractable, public ICheckpointResettable
@@ -84,6 +85,12 @@ protected:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact|Cooldown", meta = (ClampMin = "0.05"))
 	float	InteractInterval = 0.5f;
+
+	// 스위치(버튼·레버)를 작동시켰을 때 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	InteractSound = nullptr;
+
+	void	PlayInteractSound() const;
 
 	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신
 	void	RefreshInteractState();

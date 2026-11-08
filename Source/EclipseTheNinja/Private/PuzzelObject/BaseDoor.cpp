@@ -12,6 +12,7 @@
 #include "Components/WidgetComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/StaticMesh.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 
 ABaseDoor::ABaseDoor()
@@ -125,6 +126,7 @@ void ABaseDoor::Tick(float DeltaTime)
 void ABaseDoor::ToggleActivate_Implementation()
 {
 	this->bIsOpen = !this->bIsOpen;
+	this->PlayDoorSound();
 	this->SaveDoorState();
 }
 
@@ -166,6 +168,7 @@ void ABaseDoor::Interact_Implementation(AActor* InActor)
 		false
 	);
 	this->bIsOpen = !this->bIsOpen;
+	this->PlayDoorSound();
 	this->SaveDoorState();
 	this->RefreshInteractState();
 	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
@@ -245,6 +248,15 @@ void ABaseDoor::RemoveInteractLock_Implementation()
 bool ABaseDoor::IsInteractLocked_Implementation()
 {
 	return (this->LockedVineCount > 0);
+}
+
+void ABaseDoor::PlayDoorSound() const
+{
+	USoundBase*	Sound = this->bIsOpen ? this->OpenSound : this->CloseSound;
+	if (Sound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
+	}
 }
 
 void	ABaseDoor::ResetInteractionCooldown()

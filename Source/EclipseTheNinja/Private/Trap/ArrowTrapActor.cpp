@@ -9,6 +9,7 @@
 #include "Component/ActivateHighlightComponent.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 // Sets default values
 AArrowTrapActor::AArrowTrapActor()
@@ -137,6 +138,10 @@ void AArrowTrapActor::SpawnArrow()
 	if (SpawnedArrow)
 	{
 		SpawnedArrow->SetLaunch(this->ArrowSpeed, this->TrapDamage);
+		if (this->FireSound)
+		{
+			UGameplayStatics::SpawnSoundAttached(this->FireSound, SpawnedArrow->GetRootComponent());
+		}
 
 		// 체크포인트 리스폰 시 날아가던 화살 제거하기 위해
 		// 체크포인트 서브시스템에 등록

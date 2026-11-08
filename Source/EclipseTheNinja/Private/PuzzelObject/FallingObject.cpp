@@ -15,6 +15,7 @@
 #include "AbilitySystemComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
@@ -307,6 +308,10 @@ void AFallingObject::ObjectDrop()
 	this->bIsFalling = true;
 	this->FallSpeed = this->InitFallSpeed;
 	this->HitActors.Reset();
+	if (this->DropSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, this->DropSound, this->FallingBody->GetComponentLocation());
+	}
 	//SetActorTickEnabled(true);
 	// 매달려 있을 때는 Pawn을 Ignore하므로, 이미 겹쳐 있던 대상도 첫 이동 시 BeginOverlap이 발생한다
 	FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
@@ -331,6 +336,10 @@ void AFallingObject::ObjectLand()
 	const FVector	LandLocation(BodyLocation.X, BodyLocation.Y, BodyLocation.Z - this->FallingBody->GetScaledBoxExtent().Z);
 	this->LandEffect->SetWorldLocation(LandLocation);
 	this->LandEffect->Activate(true);
+	if (this->LandSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, this->LandSound, LandLocation);
+	}
 	GetWorldTimerManager().SetTimer(
 		this->LandEffectTimer,
 		this,

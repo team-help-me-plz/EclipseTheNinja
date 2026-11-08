@@ -14,6 +14,7 @@ class UBoxComponent;
 class UStaticMeshComponent;
 class UCheckpointBoundComponent;
 class UInteractHighlightComponent;
+class USoundBase;
 
 UCLASS()
 class ECLIPSETHENINJA_API APressureSwitch : public AActor, public IInteractable, public ICheckpointResettable
@@ -91,6 +92,10 @@ protected:
 	// 여러번 Interact 할 수 있는 액터인가
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|State")
 	bool	bIsReinteractable = false;
+
+	// 발판이 눌려 대상을 작동시켰을 때 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	PressSound = nullptr;
 
 private:
 	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신

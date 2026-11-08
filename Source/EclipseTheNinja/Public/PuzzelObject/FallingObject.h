@@ -15,6 +15,7 @@ class UBoxComponent;
 class AMeshAssembly;
 class UActivateHighlightComponent;
 class UNiagaraComponent;
+class USoundBase;
 
 UCLASS()
 class ECLIPSETHENINJA_API AFallingObject : public AActor, public IActivatable, public ICheckpointResettable
@@ -90,6 +91,14 @@ protected:
 	// 착지했을 때 바닥에서 재생할 이펙트
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|Effect")
 	TObjectPtr<UNiagaraComponent>	LandEffect = nullptr;
+
+	// 줄이 끊겨 떨어지기 시작할 때 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	DropSound = nullptr;
+
+	// 떨어진 물체가 바닥에 부딪혔을 때 착지 지점에서 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	LandSound = nullptr;
 
 	// 착지 이펙트를 재생할 시간. 루프 이펙트라서 이 시간이 지나면 새 파티클 생성을 멈춘다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|Effect", meta = (ClampMin = "0.01"))

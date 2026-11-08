@@ -12,6 +12,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/GameInstance.h"
+#include "Kismet/GameplayStatics.h"
 
 // Sets default values
 AInteractSwitch::AInteractSwitch()
@@ -176,8 +177,17 @@ void AInteractSwitch::Interact_Implementation(AActor* InActor)
 	);
 	this->RefreshInteractState();
 	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
+	this->PlayInteractSound();
 	this->ToggleTargets();
 	this->SaveSwitchState();
+}
+
+void AInteractSwitch::PlayInteractSound() const
+{
+	if (this->InteractSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, this->InteractSound, GetActorLocation());
+	}
 }
 
 FSavedActorState AInteractSwitch::MakeSaveState() const
