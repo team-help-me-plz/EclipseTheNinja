@@ -36,6 +36,7 @@
 #include "GAS/Tags/EclipseGameplayTags.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Component/EnemySpacingComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 // Sets default values
 AEnemy::AEnemy()
@@ -86,10 +87,75 @@ AEnemy::AEnemy()
 	NoiseDetectComponent->SetGenerateOverlapEvents(false);
 }
 
+void AEnemy::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	RefreshAppearance();
+}
+
+void AEnemy::UpdateAppearanceTableBinding()
+{
+	if (BoundAppearanceTable.Get() == AppearanceRow.DataTable)
+	{
+		return;
+	}
+	if (UDataTable* PreviousTable = BoundAppearanceTable.Get())
+	{
+		PreviousTable->OnDataTableChanged().Remove(AppearanceTableChangedHandle);
+	}
+	// RowHandle은 읽기 전용 테이블을 보관한다. 데이터 수정 없이 변경 알림만 구독한다.
+	BoundAppearanceTable = const_cast<UDataTable*>(AppearanceRow.DataTable.Get());
+	AppearanceTableChangedHandle.Reset();
+	if (UDataTable* Table = BoundAppearanceTable.Get())
+	{
+		AppearanceTableChangedHandle = Table->OnDataTableChanged().AddUObject(this, &AEnemy::RefreshAppearance);
+	}
+}
+
+void AEnemy::RefreshAppearance()
+{
+	if (IsTemplate())
+	{
+		return;
+	}
+	UpdateAppearanceTableBinding();
+	const FEnemyAppearanceRow* Row = AppearanceRow.IsNull()
+		? nullptr : AppearanceRow.GetRow<FEnemyAppearanceRow>(TEXT("Enemy appearance"));
+	if (!Row || ColorParameterName.IsNone())
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	for (const FName Slot : ColorMaterialSlots)
+	{
+		const int32 Index = MeshComp->GetMaterialIndex(Slot);
+		if (Index == INDEX_NONE)
+		{
+			continue;
+		}
+		// 이미 생성한 인스턴스를 재사용하여 테이블 편집 때마다 머티리얼을 늘리지 않는다.
+		if (UMaterialInstanceDynamic* Material = MeshComp->CreateDynamicMaterialInstance(Index))
+		{
+			Material->SetVectorParameterValue(ColorParameterName, Row->Color);
+		}
+	}
+}
+
+void AEnemy::BeginDestroy()
+{
+	if (UDataTable* Table = BoundAppearanceTable.Get())
+	{
+		Table->OnDataTableChanged().Remove(AppearanceTableChangedHandle);
+	}
+	Super::BeginDestroy();
+}
+
 // Called when the game starts or when spawned
 void AEnemy::BeginPlay()
 {
 	Super::BeginPlay();
+	RefreshAppearance();
 
 	InitializeBehaviorArea();
 
@@ -414,7 +480,11 @@ void AEnemy::DeactivateAfterDeath()
 	ASC->RemoveGameplayCue(EclipseGameplayTags::GameplayCue_Enemy_Burn);
 	
 	// 충돌, 이동, 틱, AI는 Die()에서 이미 정지했으므로 외형만 숨긴다.
-	SetActorHiddenInGame(true);
+	// 처치 후 컷신에 시체가 남아야 하는 적(보스)은 숨기지 않고 마지막 자세로 둔다.
+	if (bHideCorpseAfterDeath)
+	{
+		SetActorHiddenInGame(true);
+	}
 	GetMesh()->bPauseAnims = true;
 }
 
@@ -554,6 +624,12 @@ void AEnemy::RestartAI()
 
 	// 정지된 트리는 마지막으로 실행한 에셋으로 루트부터 다시 시작한다.
 	BTComp->RestartTree();
+
+	// 암살로 죽은 적은 PauseLogic 상태가 남는다. 트리 재시작만으로는 해제되지 않는다.
+	if (BTComp->IsPaused())
+	{
+		BTComp->ResumeLogic(TEXT("Enemy AI reset"));
+	}
 }
 
 void AEnemy::SuspendAIForScriptedMove()

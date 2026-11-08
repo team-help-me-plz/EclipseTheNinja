@@ -47,6 +47,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	// +X를 바라볼 때 재생한다
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hiding|Montage")
@@ -76,7 +77,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hiding|Move", meta = (ClampMin = "0.05", Units = "s"))
 	float	FallbackMoveTime = 0.5f;
 
+	// 은신 지점과 X 차이가 이보다 크면 숨기 전에 은신 지점 앞까지 평소처럼 걸어간다
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hiding|Move", meta = (ClampMin = "0.0", Units = "cm"))
+	float	WalkTolerance = 5.f;
+
 private:
+	// 은신 지점 앞(X)에 도착하면 숨는 몽타주(Start 섹션)를 재생하며 안쪽(Y)으로 들어간다
+	void	BeginEnterDepth();
+	// 은신 지점의 InAxis(0: X, 1: Y) 값까지 실제 이동 입력으로 걷기 시작한다
+	void	StartWalk(int32 InAxis);
 	void	OnEnterFinished();
 	void	OnExitFinished();
 	// End 섹션을 재생하며 원래 이동 평면으로 걸어 나온다
@@ -112,4 +121,11 @@ private:
 	bool			bExitAfterEnter = false;
 	uint16			MoveSourceID = 0;
 	FTimerHandle	PhaseTimer;
+	// 숨는 몽타주 전에 은신 지점 앞(X)이나 은신 지점(Y)까지 걸어가는 중인가
+	bool			bWalkingToFront = false;
+	// 걸어가는 축(0: X, 1: Y)과 방향(+1, -1)
+	int32			WalkAxis = 0;
+	float			WalkDirection = 1.f;
+	// 걸어가기를 포기하고 다음 단계로 넘어가기까지 남은 시간
+	float			WalkTimeLeft = 0.f;
 };

@@ -11,6 +11,8 @@ class UBoxComponent;
 class UGameEndCountdownWidget;
 class AEnemy;
 class ABossEnemy;
+class ATutorialSequenceTrigger;
+class ULevelSequence;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLevelCleared);
 
@@ -20,6 +22,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLevelCleared);
  *  - 클리어 시 플레이어 입력을 막고, TravelDelay 후 NextLevel로 이동한다
  *  - NextLevel은 레벨에 배치한 인스턴스의 디테일 패널에서 맵 에셋을 골라 설정
  *  - bQuitGameOnClear를 켜면 레벨 이동 대신 카운트다운 메시지를 띄운 뒤 게임을 종료한다
+ *  - EndingSequence를 지정하면 클리어 직후 엔딩 컷신을 플레이어 위치 기준으로 재생하고, 끝난 뒤에 이동·종료를 이어 간다
  */
 UCLASS()
 class ECLIPSETHENINJA_API ALevelClearTrigger : public AActor
@@ -41,6 +44,9 @@ protected:
     // 지정한 보스의 사망 연출이 끝나면 기존 클리어/종료 흐름을 실행한다.
     void OnBossDeathFinished(AEnemy* Enemy);
 
+    // 보스를 처치한 순간 플레이어가 보던 방향을 기억한다. 사망 연출이 끝나 클리어할 때는 이미 돌아서 있을 수 있다
+    void OnBossDied(AEnemy* Enemy, bool bAssassinated);
+
     UFUNCTION()
     void OnTriggerBeginOverlap(
         UPrimitiveComponent* OverlappedComponent,
@@ -49,6 +55,13 @@ protected:
         int32 OtherBodyIndex,
         bool bFromSweep,
         const FHitResult& SweepResult);
+
+    // 엔딩이 끝나면(또는 엔딩이 없으면) 다음 레벨 이동이나 게임 종료 카운트다운을 시작하는 함수
+    void FinishClear();
+
+    // 엔딩 컷신이 끝 프레임에 도달하면 호출된다
+    UFUNCTION()
+    void OnEndingSequenceEnded(ATutorialSequenceTrigger* Trigger);
 
     // NextLevel을 여는 함수
     void TravelToNextLevel();
@@ -72,6 +85,20 @@ protected:
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Boss")
     TObjectPtr<ABossEnemy> BossToDefeat = nullptr;
 
+    // 클리어 직후 재생할 엔딩 컷신. 원점 근처에 만든 시퀀스를 플레이어 발밑 기준으로 재생한다
+    // 비워 두거나 재생할 수 없으면 바로 이동·종료로 넘어간다
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending")
+    TObjectPtr<ATutorialSequenceTrigger> EndingSequence = nullptr;
+
+    // EndingSequence의 시퀀스는 플레이어가 +X(오른쪽)를 볼 때 기준으로 만든다.
+    // 클리어 순간 플레이어가 -X(왼쪽)를 보고 있으면 대신 이 좌우 대칭 시퀀스를 재생해, 원래 바라보던 방향을 그대로 잇는다
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending")
+    TObjectPtr<ULevelSequence> EndingSequenceFacingLeft = nullptr;
+
+    // 오른쪽을 볼 때 재생할 원래 시퀀스. 처음 클리어할 때 EndingSequence 액터에 지정된 시퀀스를 기억해 둔다
+    UPROPERTY(Transient)
+    TObjectPtr<ULevelSequence> EndingSequenceFacingRight = nullptr;
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<USceneComponent> SceneRoot = nullptr;
 
@@ -81,6 +108,10 @@ protected:
     // 클리어 후 이동할 레벨. 비어 있으면 클리어 처리만 하고 이동하지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (EditCondition = "!bQuitGameOnClear"))
     TSoftObjectPtr<UWorld> NextLevel = nullptr;
+
+    // 다음 레벨을 열 때 넘길 옵션 문자열 (예: "?Spawn=CastleGate?Stage=2"). 다음 레벨의 GameMode에서 OptionsString으로 읽는다
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LevelClear", meta = (EditCondition = "!bQuitGameOnClear"))
+    FString TravelOptions;
 
     // 클리어 후 다음 레벨로 이동하기까지의 대기 시간(초)
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (ClampMin = "0.0", EditCondition = "!bQuitGameOnClear"))
@@ -104,6 +135,10 @@ protected:
 
 private:
     bool bIsCleared = false;
+
+    // 보스 처치 순간의 플레이어 방향을 기록했는지, 그때 -X(왼쪽)를 보고 있었는지
+    bool bHasDefeatFacing = false;
+    bool bDefeatFacingLeft = false;
 
     FTimerHandle TravelTimerHandle;
 

@@ -2,7 +2,9 @@
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
+#include "GAS/Ability/GABossPatternBase.h"
 #include "Component/AllySummonComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/Ability/GABaseAttack.h"
@@ -43,6 +45,16 @@ bool UGASummonAllies::CanActivateAbility(
 		: nullptr;
 
 	if (!Enemy || Enemy->IsDead() || !Enemy->GetMesh()->GetAnimInstance())
+	{
+		return false;
+	}
+
+	// 컷신·시퀀스가 나오는 동안에는 보스 패턴과 같이 소환도 시작하지 않는다.
+	if (const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy); Boss && Boss->IsCinematicLocked())
+	{
+		return false;
+	}
+	if (UGABossPatternBase::IsAnyCinematicPlaying(Enemy->GetWorld()))
 	{
 		return false;
 	}

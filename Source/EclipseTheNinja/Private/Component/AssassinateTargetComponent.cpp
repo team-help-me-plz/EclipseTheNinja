@@ -417,30 +417,42 @@ void UAssassinateTargetComponent::InitializeOutlineMesh()
 		return;
 	}
 
-	OutlineMaterialInstance = UMaterialInstanceDynamic::Create(Material, this);
-	if (!IsValid(OutlineMaterialInstance)) return;
+	OutlineMesh = CreateOutlineMesh(SourceMesh, Material, OutlineThickness, OutlineColor);
+	OutlineMaterialInstance = IsValid(OutlineMesh) ? Cast<UMaterialInstanceDynamic>(OutlineMesh->GetMaterial(0)) : nullptr;
+}
 
-	OutlineMaterialInstance->SetScalarParameterValue(TEXT("OutlineThickness"), OutlineThickness);
-	OutlineMaterialInstance->SetVectorParameterValue(TEXT("OutlineColor"), OutlineColor);
+USkeletalMeshComponent* UAssassinateTargetComponent::CreateOutlineMesh(USkeletalMeshComponent* SourceMesh, UMaterialInterface* Material,
+	float Thickness, const FLinearColor& Color)
+{
+	if (!IsValid(SourceMesh) || !IsValid(SourceMesh->GetSkeletalMeshAsset()) || !IsValid(Material)) return nullptr;
+	AActor* Owner = SourceMesh->GetOwner();
+	if (!IsValid(Owner)) return nullptr;
 
 	// 원본의 포즈를 공유하므로 별도 AnimBP와 포즈 갱신이 필요 없다.
-	OutlineMesh = NewObject<USkeletalMeshComponent>(Character, TEXT("AssassinationOutline"));
-	OutlineMesh->SetupAttachment(SourceMesh);
-	OutlineMesh->SetSkeletalMeshAsset(SourceMesh->GetSkeletalMeshAsset());
-	OutlineMesh->SetLeaderPoseComponent(SourceMesh);
-	OutlineMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	OutlineMesh->SetGenerateOverlapEvents(false);
-	OutlineMesh->SetCastShadow(false);
-	OutlineMesh->SetCanEverAffectNavigation(false);
-	OutlineMesh->SetVisibility(false);
-	OutlineMesh->SetBoundsScale(1.2f);
+	USkeletalMeshComponent* Outline = NewObject<USkeletalMeshComponent>(Owner, TEXT("AssassinationOutline"));
+	UMaterialInstanceDynamic* MaterialInstance = UMaterialInstanceDynamic::Create(Material, Outline);
+	if (!IsValid(MaterialInstance)) return nullptr;
+
+	MaterialInstance->SetScalarParameterValue(TEXT("OutlineThickness"), Thickness);
+	MaterialInstance->SetVectorParameterValue(TEXT("OutlineColor"), Color);
+
+	Outline->SetupAttachment(SourceMesh);
+	Outline->SetSkeletalMeshAsset(SourceMesh->GetSkeletalMeshAsset());
+	Outline->SetLeaderPoseComponent(SourceMesh);
+	Outline->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Outline->SetGenerateOverlapEvents(false);
+	Outline->SetCastShadow(false);
+	Outline->SetCanEverAffectNavigation(false);
+	Outline->SetVisibility(false);
+	Outline->SetBoundsScale(1.2f);
 
 	for (int32 MaterialIndex = 0; MaterialIndex < SourceMesh->GetNumMaterials(); ++MaterialIndex)
 	{
-		OutlineMesh->SetMaterial(MaterialIndex, OutlineMaterialInstance);
+		Outline->SetMaterial(MaterialIndex, MaterialInstance);
 	}
 
-	OutlineMesh->RegisterComponent();
+	Outline->RegisterComponent();
+	return Outline;
 }
 
 

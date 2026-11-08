@@ -37,8 +37,7 @@ UGAAssassinateBase::UGAAssassinateBase()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalOnly;
-	ImpactVFX = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
-		TEXT("/Game/VFX/Blood_VFX_Pack/Particles/Parts/P_E_BloodSplash_Decal_02.P_E_BloodSplash_Decal_02")));
+	// 피격 이펙트는 암살 어빌리티 Blueprint의 기본값에서 지정한다.
 
 	// 암살 중일 때는 태그를 얻어서 중복 실행 방지
 	ActivationOwnedTags.AddTag(TAG_Assassinating);

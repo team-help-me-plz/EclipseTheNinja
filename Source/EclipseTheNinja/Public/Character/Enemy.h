@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
+#include "Character/EnemyAppearanceRow.h"
 #include "Interface/CheckpointResettable.h"
 #include "Interface/Poolable.h"
 #include "Enemy.generated.h"
@@ -59,10 +60,31 @@ class ECLIPSETHENINJA_API AEnemy : public ABaseCharacter, public ICheckpointRese
 
 private:
 	double ParryStunEndTime = 0.0;
+	TWeakObjectPtr<UDataTable> BoundAppearanceTable;
+	FDelegateHandle AppearanceTableChangedHandle;
+	void UpdateAppearanceTableBinding();
 
 public:
 	// Sets default values for this character's properties
 	AEnemy();
+
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void BeginDestroy() override;
+
+	/** 지정한 DataTable 행의 색상을 모든 색상 변경 대상 머티리얼에 적용한다. */
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Appearance")
+	void RefreshAppearance();
+
+	/** 적 종류에 대응하는 외형 데이터. 에셋과 행은 Blueprint 기본값에서 지정한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Appearance", meta = (RowType = "/Script/EclipseTheNinja.EnemyAppearanceRow"))
+	FDataTableRowHandle AppearanceRow;
+
+	/** 피부·눈·무기 등 원래 색을 유지할 부분은 목록에서 제외한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Appearance")
+	TArray<FName> ColorMaterialSlots;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Appearance")
+	FName ColorParameterName = TEXT("BaseColorFactor");
 
 
 	UFUNCTION(BlueprintPure, Category = "Combat|Death")
@@ -377,6 +399,10 @@ protected:
 	/** 사망 몽타주 종료 후 시체를 유지하는 시간(초). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Death", meta = (ClampMin = "0.0", Units = "s"))
 	float DeathDespawnDelay = 3.0f;
+
+	/** 시체 유지 시간이 끝나면 숨길지 여부. 보스처럼 처치 후 컷신에도 시체가 남아야 하면 끈다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Death")
+	bool bHideCorpseAfterDeath = true;
 
 	/** 이 적이 속한 체크포인트 구간. 해당 체크포인트에서 플레이어가 리스폰하면 적도 리스폰된다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

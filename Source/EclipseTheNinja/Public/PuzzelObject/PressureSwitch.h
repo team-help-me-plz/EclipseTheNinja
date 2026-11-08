@@ -102,6 +102,12 @@ private:
 	EInteractState	InteractState = EInteractState::Ready;
 	// 선택(강조)을 요청한 수. InteractBox 선택, 발판 강조, 분신 조준 커서가 각각 Show/Hide를 짝지어 호출한다
 	int32			SelectCount = 0;
+	// 지금 발판을 누르고 있는 컴포넌트(플레이어·분신·몬스터 캡슐). 첫 번째가 올라올 때와 마지막이 내려갈 때만 작동한다
+	TSet<TWeakObjectPtr<UPrimitiveComponent>>	PressingComponents;
+	// 사라진(회수된 분신 등) 컴포넌트를 빼고 남은 수를 돌려준다
+	int32			CountPressingComponents();
+	// 지금 눌린(대상을 작동시킨) 상태인가. 모두 내려가면 풀린다
+	bool			bPressedActive = false;
 	// TargetActors의 Activate 테두리를 켜 둔 상태인가 (Show/Hide를 짝지어 호출하기 위함)
 	bool			bIsShowingTargetIndicator = false;
 };

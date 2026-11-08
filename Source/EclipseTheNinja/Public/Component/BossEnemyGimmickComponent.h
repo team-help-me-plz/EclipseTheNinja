@@ -61,9 +61,6 @@ public:
 	/** 월드에서 LinkId 기믹을 가진 보스의 기믹 컴포넌트를 찾는다. 없으면 nullptr. */
 	static UBossEnemyGimmickComponent* FindByLinkId(const UObject* WorldContextObject, FName LinkId);
 
-	/** 기믹 레이저 기본 나이아가라 에셋. 기믹 포탈도 같은 레이저를 쓴다. */
-	static const TCHAR* DefaultLaserSystemPath;
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -86,7 +83,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick")
 	TArray<FBossGimmickLinkStep> LinkSteps;
 
-	/** 보스와 대상을 잇는 레이저. 기본은 NS_Laser_Twist_2. */
+	/** 보스와 대상을 잇는 레이저. 보스 Blueprint에서 지정한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Gimmick|Laser")
 	TSoftObjectPtr<UNiagaraSystem> LaserSystem;
 

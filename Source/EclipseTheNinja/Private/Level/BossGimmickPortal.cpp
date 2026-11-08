@@ -40,15 +40,15 @@ ABossGimmickPortal::ABossGimmickPortal()
 	PortalVFX->SetRelativeScale3D(FVector(0.3f));
 	PortalVFX->SetAutoActivate(false);
 
-	PortalSystem = TSoftObjectPtr<UNiagaraSystem>(
-		FSoftObjectPath(TEXT("/Game/VFX/SpatialDistortionVFX/Niagara/NS_SpatialDistortion7.NS_SpatialDistortion7"))
-	);
-	LaserSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(UBossEnemyGimmickComponent::DefaultLaserSystemPath));
+	// 포탈과 레이저 에셋은 Blueprint 기본값 또는 레벨 인스턴스에서 지정한다.
 }
 
 void ABossGimmickPortal::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 벽 붙기 트레이스(WallAttach)가 트리거 상자에 막히지 않게 한다. Trigger 프로필에는 WallAttach 채널이 없어 기본값 Block이 적용되므로 런타임에 지정한다.
+	Trigger->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Ignore);
 
 	Trigger->OnComponentBeginOverlap.AddDynamic(this, &ABossGimmickPortal::OnTriggerBeginOverlap);
 
@@ -247,6 +247,11 @@ void ABossGimmickPortal::FinishTeleport()
 				false
 			);
 		}
+	}
+
+	if (IsValid(Destination))
+	{
+		Destination->OnPlayerArrived.Broadcast(Destination, Player);
 	}
 }
 

@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('inspect','apply','regen','count','shots','save')][string]$Mode,
+    [Parameter(Mandatory=$true)][ValidateSet('inspect','apply','migrate','regen','count','shots','save')][string]$Mode,
     [string]$Layout = "",
     [string[]]$Labels = @(),
     [string]$Shots = "",
@@ -9,6 +9,8 @@ param(
 # 예: run.ps1 -Mode apply -Layout <레이아웃.json>
 #     run.ps1 -Mode shots -Shots "Preview_GameCam_A=a.png,Preview_GameCam_B=b.png" [-OutDir <폴더>]
 $ErrorActionPreference = 'Stop'
+# powershell -File 로 부르면 "A,B"가 문자열 하나로 들어오므로 쉼표로 나눈다
+$Labels = @($Labels | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
 $call = Join-Path $root ".claude\tools\editor-mcp\call.ps1"
 $tmp = Join-Path $env:TEMP "EclipseMcp"
@@ -62,7 +64,7 @@ if ($Labels.Count -gt 0) { $a.labels = $Labels }
 Invoke-Build $a
 
 # 생성은 비동기라 잠시 뒤 따로 센다
-if ($Mode -eq 'apply' -or $Mode -eq 'regen') {
+if ($Mode -eq 'apply' -or $Mode -eq 'migrate' -or $Mode -eq 'regen') {
     Start-Sleep 3
     "--- 생성 결과"
     $c = @{ mode = 'count' }

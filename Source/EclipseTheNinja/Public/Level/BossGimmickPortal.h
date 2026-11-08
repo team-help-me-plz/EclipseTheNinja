@@ -8,6 +8,9 @@
 class UBoxComponent;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class ABossGimmickPortal;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnGimmickPortalArrived, ABossGimmickPortal*, Portal, APawn*, Player);
 
 /** 기믹 포탈이 놓인 곳. 같은 LinkId의 반대쪽 포탈로 이동한다. */
 UENUM(BlueprintType)
@@ -53,6 +56,10 @@ public:
 
 	/** 도착 직후 잠시 동안 이 포탈로 들어가지 못하게 한다. */
 	void BlockEntry(float Duration);
+
+	/** 반대쪽 포탈에서 순간이동한 플레이어가 이 포탈에 도착하면(화면이 다시 밝아지기 시작할 때) 호출된다. */
+	UPROPERTY(BlueprintAssignable, Category = "Gimmick Portal")
+	FOnGimmickPortalArrived OnPlayerArrived;
 
 	// 스테이지 레버가 당겨지면 보스에게 링크 해제를 요청한다.
 	virtual void ToggleActivate_Implementation() override;

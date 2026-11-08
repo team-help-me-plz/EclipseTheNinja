@@ -44,6 +44,10 @@ class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
 public:
 	ABossEnemy();
 
+	/** 컷신·그로기처럼 보스가 패턴을 쓰면 안 되는 동안 켠다. 켜져 있으면 패턴 어빌리티가 발동하지 않는다. */
+	void SetCinematicLocked(bool bLocked) { bCinematicLocked = bLocked; }
+	bool IsCinematicLocked() const { return bCinematicLocked; }
+
 	/** Also callable by an arena trigger/cinematic. Detection of combat starts the UI automatically. */
 	UFUNCTION(BlueprintCallable, Category = "Boss|UI")
 	void ShowBossHealthBar();
@@ -105,6 +109,10 @@ public:
 	/** 제한시간 안에 실드를 해제하지 못해 플레이어를 처치할 때 호출된다. */
 	UPROPERTY(BlueprintAssignable, Category = "Boss|Energy Link")
 	FOnBossEnergyLinkEvent OnEnergyLinkFailed;
+
+	/** 처형 어빌리티가 보스를 플레이어 등 뒤로 옮기고 몽타주를 시작한 직후 호출된다. 처형 컷신을 이 시점에 맞춘다. */
+	UPROPERTY(BlueprintAssignable, Category = "Boss|Execution")
+	FOnBossEnergyLinkEvent OnExecutionStarted;
 
 	// 처형 어빌리티가 읽는 설정
 	const TSoftObjectPtr<UAnimMontage>& GetExecutionAttackMontage() const { return ExecutionAttackMontage; }
@@ -427,4 +435,6 @@ protected:
 	bool bEnergyLinkActive = false;
 
 	FTimerHandle EnergyLinkTimer;
+
+	bool bCinematicLocked = false;
 };

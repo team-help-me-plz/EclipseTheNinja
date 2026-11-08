@@ -114,6 +114,10 @@ protected:
 	TWeakObjectPtr<UBrainComponent> PausedBrain;
 	bool bIgnoringVictimCollision = false;
 
+	// 연출 동안 보스 중력을 끄기 전의 이동 모드
+	TEnumAsByte<EMovementMode> SavedBossMovementMode = MOVE_Walking;
+	bool bBossGravityDisabled = false;
+
 private:
 	UFUNCTION()
 	void OnImpactEvent(FGameplayEventData Payload);

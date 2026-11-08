@@ -8,15 +8,12 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 
-const TCHAR* UBossEnemyGimmickComponent::DefaultLaserSystemPath =
-	TEXT("/Game/VFX/LaserFX_BP/Niagara/NormalType/NS_Laser_Twist_2.NS_Laser_Twist_2");
-
 UBossEnemyGimmickComponent::UBossEnemyGimmickComponent()
 {
 	// 보스 델리게이트로만 구동한다. 레이저 시작점은 부착으로, 끝점은 고정값으로 따라가므로 Tick이 필요 없다.
 	PrimaryComponentTick.bCanEverTick = false;
 
-	LaserSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(DefaultLaserSystemPath));
+	// 레이저 에셋은 보스 Blueprint의 GimmickComp 기본값에서 지정한다.
 }
 
 void UBossEnemyGimmickComponent::BeginPlay()

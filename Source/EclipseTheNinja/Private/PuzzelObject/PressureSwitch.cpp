@@ -62,6 +62,9 @@ APressureSwitch::APressureSwitch()
 void APressureSwitch::ResetToInitial_Implementation()
 {
 	this->bIsInteracted = false;
+	// 대상도 처음 상태로 돌아가므로 눌림 상태를 비운다. 리스폰으로 내려간 캐릭터는 다시 밟으면 눌린다
+	this->bPressedActive = false;
+	this->PressingComponents.Reset();
 	this->RefreshInteractState();
 }
 
@@ -160,12 +163,25 @@ void APressureSwitch::OnPressureBeginOverlap(UPrimitiveComponent* OverlappedComp
 	{
 		return ;
 	}
+	// 이미 눌려 있으면 다시 작동하지 않는다. 플레이어와 분신이 함께 올라가도 한 번만 눌린다
+	this->PressingComponents.Add(OtherComp);
+	this->CountPressingComponents();
+	if (this->bPressedActive)
+	{
+		return ;
+	}
 	// 한 번만 눌리는 발판이고 이미 눌렸을 때 아무것도 하지 않는다
 	if (!this->bIsUnpressure && !this->bIsReinteractable && this->bIsInteracted)
 	{
 		return ;
 	}
+	// 발판을 작동시키는 것은 플레이어·분신(Interactor)이다. 몬스터는 올라가 있어도 무게만 더한다
+	if (!IsValid(OtherActor) || !OtherActor->Implements<UInteractor>() || !this->HasActivatableTarget())
+	{
+		return ;
+	}
 	IInteractable::Execute_Interact(this, OtherActor);
+	this->bPressedActive = true;
 }
 
 void APressureSwitch::OnPressureEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
@@ -174,11 +190,34 @@ void APressureSwitch::OnPressureEndOverlap(UPrimitiveComponent* OverlappedCompon
 	{
 		return ;
 	}
+	this->PressingComponents.Remove(OtherComp);
+	// 아직 누군가 올라가 있으면 그대로 눌린 상태를 유지한다
+	if (this->CountPressingComponents() > 0 || !this->bPressedActive)
+	{
+		return ;
+	}
+	this->bPressedActive = false;
 	if (!this->bIsUnpressure)
 	{
 		return;
 	}
-	IInteractable::Execute_Interact(this, OtherActor);
+	// 처음 누른 쪽이 먼저 내려가고 다른 캐릭터가 마지막으로 내려가도, 모두 내려간 순간 대상을 되돌린다
+	this->ToggleTargets();
+	this->RefreshInteractState();
+}
+
+int32 APressureSwitch::CountPressingComponents()
+{
+	for (auto It = this->PressingComponents.CreateIterator(); It; ++It)
+	{
+		const UPrimitiveComponent* Component = It->Get();
+		if (!IsValid(Component) || !IsValid(Component->GetOwner()) || Component->GetOwner()->IsActorBeingDestroyed()
+			|| !Component->IsCollisionEnabled())
+		{
+			It.RemoveCurrent();
+		}
+	}
+	return (this->PressingComponents.Num());
 }
 
 void APressureSwitch::Interact_Implementation(AActor* InActor)

@@ -30,6 +30,9 @@ ABossEnemy::ABossEnemy()
 {
 	DefaultStatsEffect = UGEBossEnemyDefaultStats::StaticClass();
 
+	// 처치 후 엔딩 컷신에서도 쓰러진 보스가 보여야 한다.
+	bHideCorpseAfterDeath = false;
+
 	// 보스는 덩치가 커서 일반 적보다 먼 거리에서 발도를 시작한다.
 	AttackDistance = 250.0f;
 
@@ -51,11 +54,8 @@ ABossEnemy::ABossEnemy()
 	// 실드·피격·공격 VFX
 	VFXComp = CreateDefaultSubobject<UBossEnemyVFXComponent>(TEXT("VFXComp"));
 
-	// 기믹 실패 시 처형 연출. 플레이어 피격 모션은 일반 암살의 피격자 몽타주를 그대로 쓴다.
+	// 기믹 실패 시 처형 연출. 피격자 몽타주는 보스 Blueprint에서 지정한다.
 	ExecutionAbilityClass = UGABossExecution::StaticClass();
-	ExecutionVictimMontage = TSoftObjectPtr<UAnimMontage>(
-		FSoftObjectPath(TEXT("/Game/Anims/Montage/AM_Assassination_Victim.AM_Assassination_Victim"))
-	);
 }
 
 void ABossEnemy::BeginPlay()

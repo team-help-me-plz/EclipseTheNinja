@@ -61,7 +61,7 @@ protected:
 
 	// 벽을 찾을 거리
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0", Units = "cm"))
-	float WallSearchDist = 50.f;
+	float WallSearchDist = 80.f;
 
 	// 벽을 찾을때 사용될 캡슐의 반지름
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0", Units = "cm"))
@@ -85,11 +85,15 @@ protected:
 
 	// 매달릴 수 있는 벽의 깊이 차이의 최대치
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0"))
-	float MaxWallDepthDiff = 5.f;
+	float MaxWallDepthDiff = 15.f;
 
 	// 벽에 매달릴 때 바닥과 떨어져야할 최소 높이
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0"))
-	float MinHeightAboveGround = 40.f;
+	float MinHeightAboveGround = 25.f;
+
+	// 몸통 트레이스가 빗나가면 캡슐 반 높이에 이 비율만큼 내려간 곳에서 한 번 더 벽을 찾는다
+	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float LowProbeHeightRatio = 0.5f;
 
 	// 메시 오프셋을 주고 되돌리는 시간. 이전 몽타주(모서리 내려가기 등)가 섞여 빠지는 동안 메시가 튀지 않게 한다. 0이면 즉시.
 	UPROPERTY(EditDefaultsOnly, Category = "WallAttach", meta = (ClampMin = "0.0", Units = "s"))
