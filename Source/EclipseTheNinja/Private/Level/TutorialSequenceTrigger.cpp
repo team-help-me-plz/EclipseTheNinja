@@ -13,6 +13,7 @@
 #include "AbilitySystemGlobals.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Widgets/InputPromptWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/ArrowComponent.h"
@@ -316,7 +317,11 @@ void ATutorialSequenceTrigger::BeginQTE()
 
     // 키 안내 위젯은 상호작용용(E)이라 다른 키를 기다릴 때는 첫 텍스트 블록의 글자를 바꾼다
     UUserWidget* PromptWidget = this->QTEPrompt->GetUserWidgetObject();
-    if (!this->QTEKeyText.IsEmpty() && IsValid(PromptWidget) && PromptWidget->WidgetTree)
+    if (UInputPromptWidget* InputPrompt = Cast<UInputPromptWidget>(PromptWidget))
+    {
+        InputPrompt->SetPromptAction(this->QTEAction, this->QTEKeyText);
+    }
+    else if (!this->QTEKeyText.IsEmpty() && IsValid(PromptWidget) && PromptWidget->WidgetTree)
     {
         UTextBlock* KeyTextBlock = nullptr;
         PromptWidget->WidgetTree->ForEachWidget([&KeyTextBlock](UWidget* Widget)
