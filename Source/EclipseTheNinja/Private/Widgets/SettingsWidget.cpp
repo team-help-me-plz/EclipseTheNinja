@@ -28,11 +28,44 @@
 #include "GameFramework/InputSettings.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
 #include "Widgets/KeyBindingSelector.h"
+#include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Engine/World.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Subsystem/UserAudioSettingsSubsystem.h"
 #include "EclipseMenuStyle.h"
+#include "Styling/CoreStyle.h"
+#include "Framework/Application/IInputProcessor.h"
+#include "Framework/Application/SlateUser.h"
+
+// Popup dropdowns can have a separate Slate focus path. Route the settings-level
+// controls before them so B and the shoulder buttons also work while a list is open.
+class FSettingsMenuInputProcessor : public IInputProcessor
+{
+public:
+	explicit FSettingsMenuInputProcessor(USettingsWidget* InWidget) : Widget(InWidget) {}
+	virtual void Tick(float, FSlateApplication&, TSharedRef<ICursor>) override {}
+	virtual bool HandleKeyDownEvent(FSlateApplication&, const FKeyEvent& Event) override
+	{
+		return Widget.IsValid() && Widget->OwnsGamepadFocus(Event.GetUserIndex()) && Widget->HandleGamepadKey(Event);
+	}
+	virtual bool HandleKeyUpEvent(FSlateApplication&, const FKeyEvent& Event) override
+	{
+		if (Widget.IsValid() && Event.GetKey() == EKeys::Gamepad_FaceButton_Bottom && Widget->bConsumeAcceptRelease)
+		{
+			Widget->bConsumeAcceptRelease = false;
+			return true;
+		}
+		return false;
+	}
+	virtual bool HandleAnalogInputEvent(FSlateApplication&, const FAnalogInputEvent& Event) override
+	{
+		return Widget.IsValid() && Widget->OwnsGamepadFocus(Event.GetUserIndex())
+			&& (Event.GetKey() == EKeys::Gamepad_LeftX || Event.GetKey() == EKeys::Gamepad_LeftY);
+	}
+private:
+	TWeakObjectPtr<USettingsWidget> Widget;
+};
 
 namespace SettingsStyle
 {
@@ -78,7 +111,48 @@ bool USettingsWidget::Initialize()
 		this->BuildDefaultLayout();
 		SetIsFocusable(true);
 	}
+	if (bResult) BindDesignerControls();
 	return bResult;
+}
+
+void USettingsWidget::BindDesignerControls()
+{
+	// The designed WBP owns layout and styles; C++ only connects existing controls.
+	if (!GetWidgetFromName(TEXT("DisplayTabButton"))) return;
+	SetIsFocusable(true);
+	TabSwitcher = Cast<UWidgetSwitcher>(GetWidgetFromName(TEXT("TabSwitcher")));
+	TabButtons = {Cast<UButton>(GetWidgetFromName(TEXT("DisplayTabButton"))), Cast<UButton>(GetWidgetFromName(TEXT("AudioTabButton"))),
+		Cast<UButton>(GetWidgetFromName(TEXT("GraphicsTabButton"))), Cast<UButton>(GetWidgetFromName(TEXT("ControlsTabButton")))};
+	if (TabButtons[0]) TabButtons[0]->OnClicked.AddUniqueDynamic(this, &USettingsWidget::HandleDisplayTabClicked);
+	if (TabButtons[1]) TabButtons[1]->OnClicked.AddUniqueDynamic(this, &USettingsWidget::HandleAudioTabClicked);
+	if (TabButtons[2]) TabButtons[2]->OnClicked.AddUniqueDynamic(this, &USettingsWidget::HandleGraphicsTabClicked);
+	if (TabButtons[3]) TabButtons[3]->OnClicked.AddUniqueDynamic(this, &USettingsWidget::HandleControlsTabClicked);
+	WindowModeComboBox = Cast<UComboBoxString>(GetWidgetFromName(TEXT("WindowModeComboBox")));
+	ResolutionComboBox = Cast<UComboBoxString>(GetWidgetFromName(TEXT("ResolutionComboBox")));
+	VSyncCheckBox = Cast<UCheckBox>(GetWidgetFromName(TEXT("VSyncCheckBox")));
+	MasterVolumeSlider = Cast<USlider>(GetWidgetFromName(TEXT("MasterVolumeSlider")));
+	MusicVolumeSlider = Cast<USlider>(GetWidgetFromName(TEXT("MusicVolumeSlider")));
+	SFXVolumeSlider = Cast<USlider>(GetWidgetFromName(TEXT("SFXVolumeSlider")));
+	MasterVolumeText = Cast<UTextBlock>(GetWidgetFromName(TEXT("MasterVolumeText")));
+	MusicVolumeText = Cast<UTextBlock>(GetWidgetFromName(TEXT("MusicVolumeText")));
+	SFXVolumeText = Cast<UTextBlock>(GetWidgetFromName(TEXT("SFXVolumeText")));
+	QualityComboBox = Cast<UComboBoxString>(GetWidgetFromName(TEXT("QualityComboBox")));
+	FrameLimitComboBox = Cast<UComboBoxString>(GetWidgetFromName(TEXT("FrameLimitComboBox")));
+	KeyBindingList = Cast<UVerticalBox>(GetWidgetFromName(TEXT("KeyBindingList")));
+	KeyBindingStatus = Cast<UTextBlock>(GetWidgetFromName(TEXT("KeyRebindStatusText")));
+	if (UButton* ResetButton = Cast<UButton>(GetWidgetFromName(TEXT("ResetKeyBindingsButton"))))
+		ResetButton->OnClicked.AddUniqueDynamic(this, &USettingsWidget::ResetKeyBindings);
+	FooterButtons = {Cast<UButton>(GetWidgetFromName(TEXT("ApplyButton"))), Cast<UButton>(GetWidgetFromName(TEXT("CloseButton")))};
+	if (FooterButtons[0]) FooterButtons[0]->OnClicked.AddUniqueDynamic(this, &USettingsWidget::HandleApplyClicked);
+	if (FooterButtons[1]) FooterButtons[1]->OnClicked.AddUniqueDynamic(this, &USettingsWidget::HandleCloseClicked);
+	if (MasterVolumeSlider) MasterVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleMasterVolumeChanged);
+	if (MusicVolumeSlider) MusicVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleMusicVolumeChanged);
+	if (SFXVolumeSlider) SFXVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleSFXVolumeChanged);
+	if (WindowModeComboBox) WindowModeComboBox->OnSelectionChanged.AddUniqueDynamic(this, &USettingsWidget::HandleWindowModeChanged);
+	if (ResolutionComboBox) ResolutionComboBox->OnSelectionChanged.AddUniqueDynamic(this, &USettingsWidget::HandleResolutionChanged);
+	if (VSyncCheckBox) VSyncCheckBox->OnCheckStateChanged.AddUniqueDynamic(this, &USettingsWidget::HandleVSyncChanged);
+	if (QualityComboBox) QualityComboBox->OnSelectionChanged.AddUniqueDynamic(this, &USettingsWidget::HandleQualityChanged);
+	if (FrameLimitComboBox) FrameLimitComboBox->OnSelectionChanged.AddUniqueDynamic(this, &USettingsWidget::HandleFrameLimitChanged);
 }
 
 void USettingsWidget::NativeConstruct()
@@ -88,11 +162,183 @@ void USettingsWidget::NativeConstruct()
 	this->LoadCurrentSettings();
 	this->RefreshKeyBindingList();
 	this->SelectTab(ESettingsTab::Display);
+	bTabFocus = true;
+	bConsumeAcceptRelease = false;
+	if (FSlateApplication::IsInitialized() && !GamepadInputProcessor)
+	{
+		GamepadInputProcessor = MakeShared<FSettingsMenuInputProcessor>(this);
+		FSlateApplication::Get().RegisterInputPreProcessor(GamepadInputProcessor, 0);
+	}
+	InputFeedback.Start();
+}
+
+void USettingsWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	InputFeedback.Update(this, FocusFeedbackBindings);
+	for (FName Name : {FName(TEXT("ApplyButtonAcceptIcon")), FName(TEXT("CloseButtonAcceptIcon"))})
+		if (UWidget* Icon = GetWidgetFromName(Name))
+			Icon->SetVisibility(FMenuInputFeedback::IsUsingGamepad() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	for (const UButton* Tab : TabButtons)
+		if (Tab && Tab->HasUserFocus(GetOwningPlayer())) bTabFocus = true;
+	for (const UWidget* Control : GetContentControls())
+		if (Control->HasUserFocus(GetOwningPlayer()) || Control->HasUserFocusedDescendants(GetOwningPlayer())) bTabFocus = false;
+	if (HasOpenCombo()) bTabFocus = false;
+	const bool bFooterFocus = FooterButtons.ContainsByPredicate([this](const UButton* Button)
+	{
+		return Button && Button->HasUserFocus(GetOwningPlayer());
+	});
+	if (UTextBlock* Hint = Cast<UTextBlock>(GetWidgetFromName(TEXT("BackHintText"))))
+		Hint->SetText(FText::FromString(bTabFocus || bFooterFocus ? TEXT("닫기") : TEXT("탭으로")));
+}
+
+void USettingsWidget::NativeDestruct()
+{
+	InputFeedback.Stop();
+	if (FSlateApplication::IsInitialized() && GamepadInputProcessor)
+		FSlateApplication::Get().UnregisterInputPreProcessor(GamepadInputProcessor);
+	GamepadInputProcessor.Reset();
+	Super::NativeDestruct();
+}
+
+FReply USettingsWidget::NativeOnFocusReceived(const FGeometry& InGeometry, const FFocusEvent& InFocusEvent)
+{
+	const int32 Index = static_cast<int32>(CurrentTab);
+	bTabFocus = true;
+	if (TabButtons.IsValidIndex(Index) && TabButtons[Index])
+	{
+		return FReply::Handled().SetUserFocus(TabButtons[Index]->TakeWidget(), EFocusCause::Navigation);
+	}
+	return Super::NativeOnFocusReceived(InGeometry, InFocusEvent);
+}
+
+bool USettingsWidget::HasOpenCombo() const
+{
+	for (const UComboBoxString* Combo : {WindowModeComboBox.Get(), ResolutionComboBox.Get(), QualityComboBox.Get(), FrameLimitComboBox.Get()})
+		if (Combo && Combo->IsOpen()) return true;
+	return false;
+}
+
+bool USettingsWidget::OwnsGamepadFocus(int32 UserIndex) const
+{
+	if (!IsInViewport() || !GetOwningLocalPlayer()) return false;
+	const TSharedPtr<const FSlateUser> User = GetOwningLocalPlayer()->GetSlateUser();
+	return User && User->GetUserIndex() == UserIndex
+		&& (HasUserFocus(GetOwningPlayer()) || HasUserFocusedDescendants(GetOwningPlayer()) || HasOpenCombo());
+}
+
+void USettingsWidget::FocusControl(UWidget* Widget)
+{
+	if (!Widget || !GetOwningLocalPlayer() || !Widget->GetIsEnabled()) return;
+	if (TSharedPtr<FSlateUser> User = GetOwningLocalPlayer()->GetSlateUser())
+	{
+		if (Widget->HasUserFocus(GetOwningPlayer())) User->ClearFocus(EFocusCause::SetDirectly);
+		User->SetFocus(Widget->TakeWidget(), EFocusCause::Navigation);
+	}
+}
+
+void USettingsWidget::FocusSelectedTab()
+{
+	bTabFocus = true;
+	const int32 Index = static_cast<int32>(CurrentTab);
+	if (TabButtons.IsValidIndex(Index)) FocusControl(TabButtons[Index]);
+}
+
+TArray<UWidget*> USettingsWidget::GetContentControls() const
+{
+	TArray<UWidget*> Controls;
+	switch (CurrentTab)
+	{
+	case ESettingsTab::Display: Controls = {WindowModeComboBox, ResolutionComboBox, VSyncCheckBox}; break;
+	case ESettingsTab::Audio: Controls = {MasterVolumeSlider, MusicVolumeSlider, SFXVolumeSlider}; break;
+	case ESettingsTab::Graphics: Controls = {QualityComboBox, FrameLimitComboBox}; break;
+	default: break;
+	}
+	for (UButton* Button : FooterButtons) Controls.Add(Button);
+	Controls.RemoveAll([](const UWidget* Widget) { return !Widget || !Widget->GetIsEnabled() || !Widget->IsVisible(); });
+	return Controls;
+}
+
+void USettingsWidget::MoveContentFocus(int32 Direction)
+{
+	const TArray<UWidget*> Controls = GetContentControls();
+	if (Controls.IsEmpty()) return;
+	const int32 Current = Controls.IndexOfByPredicate([this](const UWidget* Widget)
+	{
+		return Widget->HasUserFocus(GetOwningPlayer()) || Widget->HasUserFocusedDescendants(GetOwningPlayer());
+	});
+	const int32 Next = bTabFocus || Current == INDEX_NONE
+		? (Direction > 0 ? 0 : Controls.Num() - 1)
+		: (Current + Direction + Controls.Num()) % Controls.Num();
+	bTabFocus = false;
+	FocusControl(Controls[Next]);
+}
+
+bool USettingsWidget::HandleGamepadKey(const FKeyEvent& Event)
+{
+	const FKey Key = Event.GetKey();
+	if (!Key.IsGamepadKey()) return false;
+	if (Key == EKeys::Gamepad_FaceButton_Bottom && bConsumeAcceptRelease) return true;
+	for (const UButton* Tab : TabButtons)
+		if (Tab && Tab->HasUserFocus(GetOwningPlayer())) bTabFocus = true;
+	for (const UWidget* Control : GetContentControls())
+		if (Control->HasUserFocus(GetOwningPlayer()) || Control->HasUserFocusedDescendants(GetOwningPlayer())) bTabFocus = false;
+	if (HasOpenCombo()) bTabFocus = false;
+
+	if (Key == EKeys::Gamepad_LeftShoulder || Key == EKeys::Gamepad_RightShoulder)
+	{
+		if (!Event.IsRepeat() && !TabButtons.IsEmpty())
+		{
+			if (HasOpenCombo()) FSlateApplication::Get().DismissAllMenus();
+			const int32 Step = Key == EKeys::Gamepad_LeftShoulder ? -1 : 1;
+			SelectTab(static_cast<ESettingsTab>((static_cast<int32>(CurrentTab) + Step + TabButtons.Num()) % TabButtons.Num()));
+			FocusSelectedTab();
+		}
+		return true;
+	}
+	if (Key == EKeys::Gamepad_FaceButton_Right)
+	{
+		if (!Event.IsRepeat())
+		{
+			const bool bFooterFocus = FooterButtons.ContainsByPredicate([this](const UButton* Button)
+			{
+				return Button && Button->HasUserFocus(GetOwningPlayer());
+			});
+			if (bTabFocus || bFooterFocus) CloseSettings();
+			else
+			{
+				if (HasOpenCombo()) FSlateApplication::Get().DismissAllMenus();
+				FocusSelectedTab();
+			}
+		}
+		return true;
+	}
+	if (Key == EKeys::Gamepad_FaceButton_Bottom && bTabFocus)
+	{
+		if (!Event.IsRepeat()) MoveContentFocus(1);
+		bConsumeAcceptRelease = true;
+		return true;
+	}
+	if (Key == EKeys::Gamepad_DPad_Up || Key == EKeys::Gamepad_DPad_Down)
+	{
+		if (HasOpenCombo()) return false; // The open list owns option selection.
+		MoveContentFocus(Key == EKeys::Gamepad_DPad_Down ? 1 : -1);
+		return true;
+	}
+	if (bTabFocus && (Key == EKeys::Gamepad_DPad_Left || Key == EKeys::Gamepad_DPad_Right)) return true;
+	return false; // A and left/right are handled by the focused checkbox/combo/slider/button.
+}
+
+FNavigationReply USettingsWidget::NativeOnNavigation(const FGeometry& InGeometry, const FNavigationEvent& InNavigationEvent, const FNavigationReply& InDefaultReply)
+{
+	if (InNavigationEvent.GetNavigationGenesis() == ENavigationGenesis::Controller && !HasOpenCombo())
+		return FNavigationReply::Explicit(nullptr);
+	return Super::NativeOnNavigation(InGeometry, InNavigationEvent, InDefaultReply);
 }
 
 FReply USettingsWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
-	if (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::Gamepad_FaceButton_Right)
+	if (InKeyEvent.GetKey() == EKeys::Escape)
 	{
 		for (const UKeyBindingSelector* Selector : KeyBindingSelectors)
 		{
@@ -301,6 +547,7 @@ void USettingsWidget::BuildDefaultLayout()
 	UButton*	CloseButton = this->MakeTextButton(FText::FromString(TEXT("ESC   닫기")), 148.f);
 	CloseButton->OnClicked.AddUniqueDynamic(this, &USettingsWidget::HandleCloseClicked);
 	Footer->AddChildToHorizontalBox(CloseButton);
+	FooterButtons = {CloseButton};
 }
 
 UVerticalBox* USettingsWidget::MakePage(const FText& InHeader)
@@ -442,12 +689,19 @@ void USettingsWidget::SelectTab(ESettingsTab InTab)
 		return;
 	}
 	this->TabSwitcher->SetActiveWidgetIndex(TabIndex);
+	CurrentTab = InTab;
 
 	const FLinearColor SelectedColor = FMath::Lerp(EclipseMenuStyle::Tile, AccentColor, 0.18f);
 	const FLinearColor NormalColor = EclipseMenuStyle::Ink;
 
 	for (int32 i = 0; i < this->TabButtons.Num(); ++i)
 	{
+		if (!TabButtons[i]) continue;
+		if (GetWidgetFromName(TEXT("DisplayTabButton")))
+		{
+			TabButtons[i]->SetBackgroundColor(i == TabIndex ? SelectedTabColor : IdleTabColor);
+			continue;
+		}
 		FButtonStyle Style = EclipseMenuStyle::Button(NormalColor, AccentColor);
 		if (i == TabIndex)
 		{
@@ -587,13 +841,22 @@ void USettingsWidget::RefreshKeyBindingList()
 	}
 
 	// 메인 메뉴에는 활성 게임플레이 IMC가 없으므로 표시할 매핑을 먼저 등록한다.
-	const UInputMappingContext* Contexts[] = {DisplayMappingContext.LoadSynchronous(), TutorialMappingContext.LoadSynchronous()};
+	TArray<const UInputMappingContext*> Contexts;
+	if (const UInputMappingContext* Context = DisplayMappingContext.LoadSynchronous())
+	{
+		Settings->RegisterInputMappingContext(Context);
+		Contexts.Add(Context);
+	}
+	else
+	{
+		for (const UInputMappingContext* RegisteredContext : Settings->GetRegisteredInputMappingContexts())
+			Contexts.Add(RegisteredContext);
+	}
 	TSet<FName> ListedMappings;
 	for (const UInputMappingContext* Context : Contexts)
 	{
 		if (!Context) continue;
 
-		Settings->RegisterInputMappingContext(Context);
 		for (const FEnhancedActionKeyMapping& Mapping : Context->GetMappings())
 		{
 			if (!Mapping.IsPlayerMappable()) continue;
@@ -812,6 +1075,12 @@ bool USettingsWidget::IsPlayingInEditor() const
 void USettingsWidget::HandleCloseClicked()
 {
 	this->CloseSettings();
+}
+
+void USettingsWidget::HandleApplyClicked()
+{
+	if (UGameUserSettings* Settings = UGameUserSettings::GetGameUserSettings())
+		Settings->SaveSettings();
 }
 
 void USettingsWidget::CloseSettings()
