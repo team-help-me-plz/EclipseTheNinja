@@ -79,6 +79,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Interactable", meta = (ClampMin = "0.01"))
 	bool	bIsInteractable = true;
 
+	// 레벨 시작 시 열린 상태로 둘지. 체크포인트 리셋도 이 상태로 돌아간다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	bool	bStartOpen = false;
+
 	UPROPERTY(Transient)
 	double	OpenAlpha = 0.0;
 

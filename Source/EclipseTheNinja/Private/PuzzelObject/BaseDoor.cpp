@@ -48,7 +48,9 @@ void ABaseDoor::BeginPlay()
 
 	//this->CloseLocation = GetActorLocation();
 	//this->OpenLocation = GetActorLocation() + this->OpenOffset;
-	this->OpenAlpha = 0.0;
+	// 미리 열린 문은 여는 연출 없이 바로 열린 위치에서 시작한다
+	this->bIsOpen = this->bStartOpen;
+	this->OpenAlpha = this->bStartOpen ? 1.0 : 0.0;
 	this->bInitialIsOpen = this->bIsOpen;
 	if (IsValid(this->InteractHighlight))
 	{
