@@ -935,6 +935,7 @@ void APlayerCharacter::DoMove(float Forward)
 
 void APlayerCharacter::DoJumpStart()
 {
+	if (IsAttacking()) return;
 	if (IsParrying()) return;
 	if (IsAssassinating()) return;
 
