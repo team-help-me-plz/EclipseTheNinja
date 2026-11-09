@@ -1,6 +1,8 @@
 #include "Character/EclipseGameViewportClient.h"
 
 #include "Engine/World.h"
+#include "GameFramework/GameUserSettings.h"
+#include "Misc/ConfigCacheIni.h"
 
 #if WITH_EDITOR
 #include "Character/PlayerCharacterController.h"
@@ -9,6 +11,30 @@
 #include "Framework/Application/SlateApplication.h"
 #include "InputKeyEventArgs.h"
 #endif
+
+ULocalPlayer* UEclipseGameViewportClient::SetupInitialLocalPlayer(FString& OutError)
+{
+	ULocalPlayer* Player = Super::SetupInitialLocalPlayer(OutError);
+	if (!Player) return nullptr;
+
+	const UWorld* PlayWorld = GetWorld();
+	if (!PlayWorld) return Player;
+	if (PlayWorld->WorldType != EWorldType::Game) return Player;
+
+	UGameUserSettings* Settings = UGameUserSettings::GetGameUserSettings();
+	if (!Settings) return Player;
+
+	// 최초 실행의 창 크기는 엔진에 맡기고, 저장값이 있으면 시작 옵션보다 우선한다.
+	const FString Section = Settings->GetClass()->GetPathName();
+	int32 SavedWidth = 0;
+	int32 SavedHeight = 0;
+	if (!GConfig->GetInt(*Section, TEXT("ResolutionSizeX"), SavedWidth, GGameUserSettingsIni)) return Player;
+	if (!GConfig->GetInt(*Section, TEXT("ResolutionSizeY"), SavedHeight, GGameUserSettingsIni)) return Player;
+	if (SavedWidth <= 0 || SavedHeight <= 0) return Player;
+
+	Settings->ApplyResolutionSettings(false);
+	return Player;
+}
 
 bool UEclipseGameViewportClient::InputKey(const FInputKeyEventArgs& EventArgs)
 {
