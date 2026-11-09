@@ -5,7 +5,13 @@
 
 #include "Components/BoxComponent.h"
 #include "Components/ArrowComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
 ACheckpoint::ACheckpoint()
@@ -20,17 +26,98 @@ ACheckpoint::ACheckpoint()
     this->ActivationTrigger->SetBoxExtent(FVector(100.0f, 100.0f, 100.0f));
     this->ActivationTrigger->SetRelativeLocation(FVector(0.0f, 0.0f, 100.0f));
     this->ActivationTrigger->SetCollisionProfileName(TEXT("Trigger"));
-    this->ActivationTrigger->SetHiddenInGame(false);
+    this->ActivationTrigger->SetHiddenInGame(true);
+    this->ActivationTrigger->SetVisibility(false);
     this->ActivationTrigger->ShapeColor = FColor::Green;
 
     this->RespawnPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("RespawnPoint"));
     this->RespawnPoint->SetupAttachment(this->SceneRoot);
     this->RespawnPoint->SetRelativeLocation(FVector(0.0f, 0.0f, 100.0f));
+
+    LampMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LampMesh"));
+    LampMesh->SetupAttachment(SceneRoot);
+    LampMesh->SetRelativeLocation(FVector(0.0f, 60.0f, 0.0f));
+    // 감지 볼륨을 늘려도 가로등의 크기는 변하지 않게 한다.
+    LampMesh->SetAbsolute(false, false, true);
+    LampMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    LampMesh->SetGenerateOverlapEvents(false);
+    LampMesh->SetCanEverAffectNavigation(false);
+
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> LampAsset(
+        TEXT("/Game/_ExternalAssets/JapaneseVillageKit/Meshes/SM_JVK_Lamp_Street_01.SM_JVK_Lamp_Street_01"));
+    if (LampAsset.Succeeded())
+    {
+        LampMesh->SetStaticMesh(LampAsset.Object);
+    }
+
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> OffMaterialAsset(
+        TEXT("/Game/Materials/Checkpoint/MI_CheckpointLamp_Off.MI_CheckpointLamp_Off"));
+    if (OffMaterialAsset.Succeeded())
+    {
+        LampOffMaterial = OffMaterialAsset.Object;
+    }
+
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> OnMaterialAsset(
+        TEXT("/Game/Materials/Checkpoint/MI_CheckpointLamp_On.MI_CheckpointLamp_On"));
+    if (OnMaterialAsset.Succeeded())
+    {
+        LampOnMaterial = OnMaterialAsset.Object;
+    }
+
+    LampLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("LampLight"));
+    LampLight->SetupAttachment(LampMesh);
+    LampLight->SetRelativeLocation(FVector(0.0f, 0.0f, 98.0f));
+    LampLight->SetMobility(EComponentMobility::Movable);
+    LampLight->SetIntensityUnits(ELightUnits::Lumens);
+    LampLight->SetIntensity(600.0f);
+    LampLight->SetAttenuationRadius(450.0f);
+    LampLight->SetLightColor(FLinearColor(1.0f, 0.76f, 0.38f));
+    LampLight->SetCastShadows(false);
+
+    ApplyLampState();
+}
+
+void ACheckpoint::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+
+    // 기존 Blueprint와 배치 인스턴스에 저장된 볼륨 표시 설정도 숨긴다.
+    ActivationTrigger->SetHiddenInGame(true);
+    ActivationTrigger->SetVisibility(false);
+    ApplyLampState();
+}
+
+void ACheckpoint::SetCheckpointActive(bool bActive)
+{
+    bCheckpointActive = bActive;
+    ApplyLampState();
+}
+
+void ACheckpoint::ApplyLampState()
+{
+    UMaterialInterface* Material = LampOffMaterial;
+    if (bCheckpointActive)
+    {
+        Material = LampOnMaterial;
+    }
+
+    if (IsValid(LampMesh) && IsValid(Material))
+    {
+        LampMesh->SetMaterial(0, Material);
+    }
+
+    if (IsValid(LampLight))
+    {
+        LampLight->SetVisibility(bCheckpointActive);
+    }
 }
 
 void ACheckpoint::BeginPlay()
 {
     Super::BeginPlay();
+
+    ActivationTrigger->SetHiddenInGame(true);
+    ActivationTrigger->SetVisibility(false);
 
     // 몬스터가 체크포인트에 막히지 않게 한다. Trigger 프로필에는 Monster 채널이 없어 기본값 Block이 적용되므로 런타임에 지정한다.
     this->ActivationTrigger->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
