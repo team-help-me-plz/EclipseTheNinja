@@ -193,6 +193,60 @@ bool FKunaiRopePolishTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMovingPlatformReverseTest, "Eclipse.Polish.MovingPlatformReversesAtCharacter",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FMovingPlatformReverseTest::RunTest(const FString& Parameters)
+{
+    GameplayPolishTests::FTestWorld Fixture;
+    AMovingPlatform* Platform = Fixture.World->SpawnActor<AMovingPlatform>();
+    if (!TestNotNull(TEXT("이동 발판 생성"), Platform)) return false;
+
+    UBoxComponent* Box = NewObject<UBoxComponent>(Platform);
+    Box->SetupAttachment(Platform->GetRootComponent());
+    Box->SetBoxExtent(FVector(100, 100, 10));
+    Box->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+    Box->RegisterComponent();
+
+    ATargetPoint* Lower = Fixture.World->SpawnActor<ATargetPoint>();
+    ATargetPoint* Upper = Fixture.World->SpawnActor<ATargetPoint>(FVector(0, 0, 200), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("아래 경로 지점"), Lower)) return false;
+    if (!TestNotNull(TEXT("위 경로 지점"), Upper)) return false;
+
+    FArrayProperty* RouteProperty = FindFProperty<FArrayProperty>(Platform->GetClass(), TEXT("TargetPoint"));
+    FScriptArrayHelper Route(RouteProperty, RouteProperty->ContainerPtrToValuePtr<void>(Platform));
+    Route.AddValues(2);
+    FObjectProperty* RouteEntry = CastFieldChecked<FObjectProperty>(RouteProperty->Inner);
+    RouteEntry->SetObjectPropertyValue(Route.GetRawPtr(0), Lower);
+    RouteEntry->SetObjectPropertyValue(Route.GetRawPtr(1), Upper);
+    FindFProperty<FFloatProperty>(Platform->GetClass(), TEXT("TargetPointTravelTime"))->SetPropertyValue_InContainer(Platform, 2.0f);
+    Platform->DispatchBeginPlay();
+
+    Platform->Tick(1.8f);
+    Platform->Tick(0.4f);
+    const double BeforeCollisionZ = Platform->GetActorLocation().Z;
+
+    AEnemy* Below = Fixture.World->SpawnActor<AEnemy>();
+    if (!TestNotNull(TEXT("발판 아래 적 생성"), Below)) return false;
+    Below->SetActorLocation(FVector(0, 0, 150.0f - Below->GetCapsuleComponent()->GetScaledCapsuleHalfHeight()));
+    Platform->Tick(0.4f);
+    TestEqual(TEXT("아래 캐릭터를 누르는 이동은 적용하지 않음"), Platform->GetActorLocation().Z, BeforeCollisionZ, 0.01);
+    Platform->Tick(0.1f);
+    TestTrue(TEXT("캐릭터와 충돌한 다음 위로 반전"), Platform->GetActorLocation().Z > BeforeCollisionZ);
+
+    Below->SetActorLocation(FVector(1000, 0, 0));
+    APlayerCharacter* Rider = Fixture.World->SpawnActor<APlayerCharacter>();
+    if (!TestNotNull(TEXT("탑승 플레이어 생성"), Rider)) return false;
+    Rider->SetActorLocation(Platform->GetActorLocation() + FVector(0, 0, 102));
+    FMovementBaseInterfaceData BaseData = MovementBaseUtility::GetMovementBaseDataFromPhysicsOwner(Box);
+    Rider->SetBase(&BaseData);
+    Platform->Tick(0.2f);
+    const double BeforeDescentZ = Platform->GetActorLocation().Z;
+    Platform->Tick(0.2f);
+    TestTrue(TEXT("위에 탄 캐릭터는 정상 하강을 막지 않음"), Platform->GetActorLocation().Z < BeforeDescentZ);
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAllySummonPolishTest, "Eclipse.Polish.AllySummonClearance",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 

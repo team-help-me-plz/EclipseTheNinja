@@ -35,6 +35,7 @@ protected:
 	virtual void	BeginPlay() override;
 
 	void	PlatformMovement(float DeltaTime);
+	bool IsCharacterBlockingMove(const FVector& Delta) const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<USceneComponent>			RootScene = nullptr;
