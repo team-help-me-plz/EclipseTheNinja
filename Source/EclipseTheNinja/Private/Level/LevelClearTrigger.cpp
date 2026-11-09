@@ -121,7 +121,8 @@ void ALevelClearTrigger::ClearLevel()
     }
     this->bIsCleared = true;
 
-    GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->SaveStageClear(this->NextLevel, this->bQuitGameOnClear);
+    // 마지막 스테이지는 다음 레벨(메인 메뉴)을 이어하기 위치로 남기지 않고 게임 완료로 저장한다
+    GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->SaveStageClear(this->NextLevel, this->bQuitGameOnClear || this->bFinalStage);
 
     UE_LOG(LogTemp, Log, TEXT("[ALevelClearTrigger::ClearLevel()] 레벨 클리어 : %s -> %s"),
         *UGameplayStatics::GetCurrentLevelName(this),

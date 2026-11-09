@@ -117,6 +117,10 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (ClampMin = "0.0", EditCondition = "!bQuitGameOnClear"))
     float TravelDelay = 1.0f;
 
+    // 마지막 스테이지(보스)면 켠다. 클리어를 게임 완료로 저장하고, NextLevel(메인 메뉴 등)을 이어하기 위치로 저장하지 않는다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear")
+    bool bFinalStage = false;
+
     // 켜면 레벨 이동 대신 카운트다운 후 게임을 종료한다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit")
     bool bQuitGameOnClear = false;
