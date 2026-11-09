@@ -435,16 +435,46 @@ void ABossEnemy::ClearEnergyLinkState()
 
 bool ABossEnemy::CanBeAssassinated() const
 {
+	if (bIsDead) return false;
+	if (bReceivingAssassination) return false;
 	if (PendingEnergyLinkIndex != INDEX_NONE) return false;
-	return !bEnergyLinkActive;
+	if (bEnergyLinkActive) return false;
+
+	if (bUseAssassinationCooldown)
+	{
+		const UWorld* World = GetWorld();
+		if (!World) return false;
+		if (World->GetTimeSeconds() < AssassinationReadyTime) return false;
+	}
+	else if (bAssassinationBlockedUntilRoar)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+void ABossEnemy::NotifyLostTargetRoarStarted()
+{
+	// 암살 연출 중에는 해제하지 않고, 실제 놓침 포효 시작 시에만 해제한다.
+	if (IsBeingAssassinated()) return;
+	if (bReceivingAssassination) return;
+
+	bAssassinationBlockedUntilRoar = false;
 }
 
 void ABossEnemy::ReceiveAssassination(UAnimMontage* Montage)
 {
-	if (bIsDead || !IsValid(ASC) || bEnergyLinkActive)
-	{
-		return;
-	}
+	if (!CanBeAssassinated()) return;
+	if (!IsValid(ASC)) return;
+	if (!IsValid(StatAttributeSet)) return;
+
+	const UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 피해 알림이나 연타가 재진입하더라도 같은 암살을 다시 적용하지 않는다.
+	AssassinationReadyTime = World->GetTimeSeconds() + FMath::Max(0.0f, AssassinationCooldown);
+	bAssassinationBlockedUntilRoar = true;
 
 	// 암살 피해는 최대 체력의 AssassinationDamageRatio만큼이다.
 	TGuardValue<bool> AssassinationGuard(bReceivingAssassination, true);
@@ -477,6 +507,9 @@ void ABossEnemy::ToggleActivate_Implementation()
 
 void ABossEnemy::ResetToInitial_Implementation()
 {
+	AssassinationReadyTime = 0.0;
+	bAssassinationBlockedUntilRoar = false;
+
 	HideBossHealthBar();
 	ClearEnergyLinkState();
 	NextEnergyLinkIndex = 0;

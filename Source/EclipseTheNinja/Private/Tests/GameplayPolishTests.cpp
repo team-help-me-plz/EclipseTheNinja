@@ -9,6 +9,8 @@
 #include "Component/AssassinateTargetComponent.h"
 #include "Component/AllySummonComponent.h"
 #include "Component/CuttableComponent.h"
+#include "Component/EnemyDetectionComponent.h"
+#include "Component/BossLostTargetComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -345,6 +347,106 @@ bool FBossAssassinationEnergyLinkTest::RunTest(const FString& Parameters)
     NormalASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 50.0f);
     TestTrue(TEXT("일반 피해의 링크 활성화는 즉시 유지"), NormalBoss->IsEnergyLinkActive());
     TestEqual(TEXT("일반 피해도 임계 체력으로 보정"), NormalBoss->GetStatAttribute()->GetHealth(), 70.0f);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBossAssassinationRetryModesTest, "Eclipse.Polish.BossAssassinationRetryModes",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FBossAssassinationRetryModesTest::RunTest(const FString& Parameters)
+{
+    GameplayPolishTests::FTestWorld Fixture;
+    Fixture.World->InitializeActorsForPlay(FURL());
+    ABossEnemy* Boss = Fixture.World->SpawnActor<ABossEnemy>();
+    if (!TestNotNull(TEXT("보스 생성"), Boss)) return false;
+    Boss->DispatchBeginPlay();
+
+    UAbilitySystemComponent* ASC = Boss->GetAbilitySystemComponent();
+    if (!TestNotNull(TEXT("보스 ASC"), ASC)) return false;
+
+    UAssassinateTargetComponent* Target = Boss->FindComponentByClass<UAssassinateTargetComponent>();
+    if (!TestNotNull(TEXT("암살 대상 상태"), Target)) return false;
+
+    UEnemyDetectionComponent* Detection = Boss->GetEneymDetectionComponent();
+    if (!TestNotNull(TEXT("보스 감지"), Detection)) return false;
+
+    UBossLostTargetComponent* LostTarget = Boss->FindComponentByClass<UBossLostTargetComponent>();
+    if (!TestNotNull(TEXT("보스 놓침 처리"), LostTarget)) return false;
+
+    FBoolProperty* CooldownMode = FindFProperty<FBoolProperty>(Boss->GetClass(), TEXT("bUseAssassinationCooldown"));
+    if (!TestNotNull(TEXT("에디터 모드 옵션"), CooldownMode)) return false;
+
+    // 실드 임계값과 분리해 연속 암살 제한만 검증한다.
+    FArrayProperty* Thresholds = FindFProperty<FArrayProperty>(Boss->GetClass(), TEXT("EnergyLinkThresholds"));
+    if (!TestNotNull(TEXT("실드 임계값 설정"), Thresholds)) return false;
+    FScriptArrayHelper(Thresholds, Thresholds->ContainerPtrToValuePtr<void>(Boss)).EmptyValues();
+    ASC->SetNumericAttributeBase(UStatAttributeSet::GetMaxHealthAttribute(), 100.0f);
+    ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 100.0f);
+
+    TestTrue(TEXT("기본값은 쿨다운 방식"), CooldownMode->GetPropertyValue_InContainer(Boss));
+    Target->SetAssassinationInProgress(true);
+    Boss->ReceiveAssassination(nullptr);
+    TestEqual(TEXT("첫 암살 피해 적용"), Boss->GetStatAttribute()->GetHealth(), 80.0f);
+    Boss->ReceiveAssassination(nullptr);
+    TestEqual(TEXT("암살 중 재호출해도 중복 피해 없음"), Boss->GetStatAttribute()->GetHealth(), 80.0f);
+    Target->SetAssassinationInProgress(false);
+    TestFalse(TEXT("연출 종료 직후 재암살 차단"), Boss->CanBeAssassinated());
+
+    // 프레임 시간 보정이나 AI 갱신 없이 쿨다운 경계의 월드 시각만 이동한다.
+    Fixture.World->TimeSeconds += 9.9;
+    TestFalse(TEXT("10초 전에는 차단"), Boss->CanBeAssassinated());
+    Fixture.World->TimeSeconds += 0.2;
+    TestTrue(TEXT("10초 후에는 재암살 허용"), Boss->CanBeAssassinated());
+
+    CooldownMode->SetPropertyValue_InContainer(Boss, false);
+    TestFalse(TEXT("포효 방식으로 바꿔도 마지막 암살 이력 유지"), Boss->CanBeAssassinated());
+    Detection->AlertLevel = EEnemyAlertLevel::Combat;
+    Detection->bHasLineOfSight = false;
+    Detection->OnAwarenessChanged.Broadcast(1.0f, EEnemyAlertLevel::Combat);
+    Target->SetAssassinationInProgress(true);
+    Boss->NotifyLostTargetRoarStarted();
+    Detection->TickComponent(0.1f, LEVELTICK_All, nullptr);
+    TestFalse(TEXT("암살 중 감지 중단으로 제한이 풀리지 않음"), Boss->CanBeAssassinated());
+    Target->SetAssassinationInProgress(false);
+    Detection->TickComponent(0.1f, LEVELTICK_All, nullptr);
+    TestFalse(TEXT("시야만 잃으면 재암살 제한 유지"), Boss->CanBeAssassinated());
+
+    // 마지막 목격 위치에 도착한 놓침 처리가 실제 포효 시작 경로를 타도록 한다.
+    FEnumProperty* LostState = FindFProperty<FEnumProperty>(LostTarget->GetClass(), TEXT("LostTargetState"));
+    if (!TestNotNull(TEXT("놓침 진행 단계"), LostState)) return false;
+    LostState->GetUnderlyingProperty()->SetIntPropertyValue(
+        LostState->ContainerPtrToValuePtr<void>(LostTarget), static_cast<int64>(EBossLostTargetState::Approaching));
+    LostTarget->UpdateLostTarget(0.1f);
+    TestTrue(TEXT("포효 시작 시 재암살 허용"), Boss->CanBeAssassinated());
+    TestEqual(TEXT("완전한 망각이나 수색 종료는 기다리지 않음"), Detection->GetCurrentAlertLevel(), EEnemyAlertLevel::Combat);
+    LostTarget->StopLostTarget();
+
+    Boss->ReceiveAssassination(nullptr);
+    const float HealthAfterSecondHit = Boss->GetStatAttribute()->GetHealth();
+    Fixture.World->TimeSeconds += 11.0;
+    TestFalse(TEXT("포효 방식은 시간만 지나도 차단"), Boss->CanBeAssassinated());
+    Boss->ReceiveAssassination(nullptr);
+    TestEqual(TEXT("포효 전 재호출도 피해 없음"), Boss->GetStatAttribute()->GetHealth(), HealthAfterSecondHit);
+
+    // 포효가 없으면 경계 상태가 초기화되어도 재암살 제한은 유지한다.
+    Detection->AlertLevel = EEnemyAlertLevel::Normal;
+    Detection->AlertGauge = 0.0f;
+    Detection->ForgetTarget();
+    TestFalse(TEXT("망각만으로는 포효 제한을 해제하지 않음"), Boss->CanBeAssassinated());
+    Boss->NotifyLostTargetRoarStarted();
+    TestTrue(TEXT("새 포효가 시작되면 다시 암살 허용"), Boss->CanBeAssassinated());
+    Boss->ReceiveAssassination(nullptr);
+    TestFalse(TEXT("다시 암살하면 다음 포효까지 차단"), Boss->CanBeAssassinated());
+
+    Boss->ResetToInitial_Implementation();
+    TestTrue(TEXT("리스폰 시 포효 제한 초기화"), Boss->CanBeAssassinated());
+    CooldownMode->SetPropertyValue_InContainer(Boss, true);
+    Boss->ReceiveAssassination(nullptr);
+    TestFalse(TEXT("새 암살 후 쿨다운 시작"), Boss->CanBeAssassinated());
+    Boss->NotifyLostTargetRoarStarted();
+    TestFalse(TEXT("쿨다운 방식은 포효해도 10초 제한 유지"), Boss->CanBeAssassinated());
+    Boss->ResetToInitial_Implementation();
+    TestTrue(TEXT("리스폰 시 쿨다운도 초기화"), Boss->CanBeAssassinated());
     return true;
 }
 
