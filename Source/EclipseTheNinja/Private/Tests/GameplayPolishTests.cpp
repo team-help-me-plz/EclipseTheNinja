@@ -42,7 +42,26 @@ namespace GameplayPolishTests
         }
     };
 
+    class FFinishCloneTrapTest : public IAutomationLatentCommand
+    {
+    public:
+        FFinishCloneTrapTest(TSharedPtr<FTestWorld> InFixture, ACloneCharacter* InClone, FAutomationTestBase* InTest)
+            : Fixture(InFixture), Clone(InClone), Test(InTest) {}
 
+        virtual bool Update() override
+        {
+            Fixture->World->GetTimerManager().Tick(0.016f);
+            bool bCleanedUp = !Clone.IsValid();
+            if (Clone.IsValid()) bCleanedUp = Clone->IsActorBeingDestroyed();
+            Test->TestTrue(TEXT("중복 오버랩 후 다음 프레임에 분신 정리"), bCleanedUp);
+            return true;
+        }
+
+    private:
+        TSharedPtr<FTestWorld> Fixture;
+        TWeakObjectPtr<ACloneCharacter> Clone;
+        FAutomationTestBase* Test;
+    };
 
     class FFinishKunaiFlightTest : public IAutomationLatentCommand
     {
@@ -69,6 +88,35 @@ namespace GameplayPolishTests
         TWeakObjectPtr<AKunaiProjectile> Kunai;
         FAutomationTestBase* Test;
     };
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCloneTrapPolishTest, "Eclipse.Polish.CloneTrap",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FCloneTrapPolishTest::RunTest(const FString& Parameters)
+{
+    TSharedPtr<GameplayPolishTests::FTestWorld> Fixture = MakeShared<GameplayPolishTests::FTestWorld>();
+    Fixture->World->InitializeActorsForPlay(FURL());
+    ACloneCharacter* Clone = Fixture->World->SpawnActor<ACloneCharacter>();
+    if (!TestNotNull(TEXT("분신 생성"), Clone)) return false;
+
+    // 미설정 안전 지점이 들어와도 크래시 없이 무시해야 한다.
+    Clone->RegisterSafePoint_Implementation(nullptr);
+
+    ADamageTrap* Trap = Fixture->World->SpawnActor<ADamageTrap>();
+    if (!TestNotNull(TEXT("함정 생성"), Trap)) return false;
+
+    UBoxComponent* Box = Trap->FindComponentByClass<UBoxComponent>();
+    if (!TestNotNull(TEXT("함정 충돌 박스"), Box)) return false;
+    if (!TestTrue(TEXT("함정 오버랩 콜백 연결"), Box->OnComponentBeginOverlap.IsBound())) return false;
+
+    Box->OnComponentBeginOverlap.Broadcast(Box, Clone, Clone->GetCapsuleComponent(), 0, false, FHitResult());
+    Box->OnComponentBeginOverlap.Broadcast(Box, Clone, Clone->GetMesh(), 0, false, FHitResult());
+    TestFalse(TEXT("오버랩 처리 중에는 분신을 파괴하지 않음"), Clone->IsActorBeingDestroyed());
+
+    Fixture->World->GetTimerManager().Tick(0.016f);
+    ADD_LATENT_AUTOMATION_COMMAND(GameplayPolishTests::FFinishCloneTrapTest(Fixture, Clone, this));
+    return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FKunaiRopePolishTest, "Eclipse.Polish.KunaiMuzzleRopeHit",

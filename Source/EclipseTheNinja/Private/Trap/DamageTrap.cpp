@@ -4,6 +4,9 @@
 #include "Trap/DamageTrap.h"
 #include "Interface/Interactor.h"
 #include "Character/BaseCharacter.h"
+#include "Clone/CloneCharacter.h"
+#include "ObjectPool/ObjectPoolSubsystem.h"
+#include "TimerManager.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Effects/GEBasicAttackDamage.h"
 
@@ -42,6 +45,24 @@ void ADamageTrap::PostInitializeComponents()
 
 void ADamageTrap::OnCollisionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+    // 분신 반환은 오버랩 콜백 밖에서 처리해 충돌 목록 순회 중 액터가 사라지지 않게 한다.
+    ACloneCharacter* Clone = Cast<ACloneCharacter>(OtherActor);
+    if (IsValid(Clone))
+    {
+        if (LastHitTimes.Contains(Clone)) return;
+        LastHitTimes.Add(Clone, GetWorld()->GetTimeSeconds());
+        GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this,
+            [this, WeakClone = TWeakObjectPtr<ACloneCharacter>(Clone)]()
+            {
+                LastHitTimes.Remove(WeakClone);
+                ACloneCharacter* HitClone = WeakClone.Get();
+                if (!IsValid(HitClone)) return;
+                if (HitClone->IsHidden()) return;
+                UObjectPoolSubsystem::Release(HitClone);
+            }));
+        return;
+    }
+
     if (!OtherActor || !OtherActor->Implements<UInteractor>())
     {
         return;
