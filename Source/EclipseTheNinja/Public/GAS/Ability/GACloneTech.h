@@ -48,6 +48,7 @@ public:
 	void HandleCloneDespawned(ACloneCharacter* DespawnedClone);
 
 	void	OnRecallClone();
+	bool HasSpawnedClone() const;
 
 	FOnCloneSpawned		OnCloneSpawned;
 	FOnCloneCannotSwap	OnCloneCannotSwap;
