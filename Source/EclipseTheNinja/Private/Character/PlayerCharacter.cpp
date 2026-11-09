@@ -240,13 +240,20 @@ void APlayerCharacter::UpdateAimWidget()
 	APlayerController* PlayerController = Cast<APlayerController>(GetController());
 	float MouseX = 0.0f;
 	float MouseY = 0.0f;
-	const bool bCanShow = AimWidgetClass
-		&& PlayerController && PlayerController->IsLocalPlayerController()
-		&& CanThrowKunai()
-		// 투척 어빌리티는 지상에서만, 벽에 붙지 않았을 때만 실행되므로 그때만 조준점을 보여준다.
-		&& GetCharacterMovement()->IsMovingOnGround()
-		&& !IsOnWall()
-		&& PlayerController->GetMousePosition(MouseX, MouseY);
+	const bool bCanShow = [&]()
+	{
+		if (!AimWidgetClass) return false;
+		if (!IsValid(PlayerController)) return false;
+		if (!PlayerController->IsLocalPlayerController()) return false;
+		if (!CanThrowKunai()) return false;
+
+		// 벽에서는 조준만 허용한다. 실제 투척은 입력과 어빌리티 양쪽에서 차단한다.
+		bool bCanAim = GetCharacterMovement()->IsMovingOnGround();
+		if (IsWallAttached()) bCanAim = true;
+		if (!bCanAim) return false;
+
+		return PlayerController->GetMousePosition(MouseX, MouseY);
+	}();
 
 	SetAimWidgetVisible(bCanShow);
 	if (bCanShow && AimWidget)
@@ -872,6 +879,7 @@ void APlayerCharacter::SetAssassinationFacing(float Yaw)
 
 void APlayerCharacter::DoThrowKunai()
 {
+	if (IsOnWall()) return;
 	if (!CanThrowKunai() || !ASC)
 	{
 		return;
