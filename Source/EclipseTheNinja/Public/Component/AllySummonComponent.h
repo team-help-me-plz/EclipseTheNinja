@@ -62,6 +62,7 @@ protected:
 
 	// 월드 X 위치의 등장 경로를 찾는다. 그 X의 플레이 평면에 바닥이 없으면 false다.
 	bool FindEntrance(float X, float BackgroundDirectionY, FEnemyClimbEntrance& OutEntrance) const;
+	bool IsEntranceClear(const FEnemyClimbEntrance& Entrance) const;
 
 	// 카메라 반대쪽(배경 쪽) Y 방향. 카메라를 찾지 못하면 +Y다.
 	float GetBackgroundDirectionY() const;
@@ -103,7 +104,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI|Summon|Animation", meta = (ClampMin = "0.01"))
 	float SummonPlayRate = 1.0f;
 
-	/** 플레이 평면에서 배경 쪽 가장자리를 찾을 최대 거리(cm). 못 찾으면 이 거리를 가장자리로 쓴다. */
+	/** 플레이 평면에서 배경 쪽 가장자리를 찾을 최대 거리(cm). 유효한 가장자리가 없으면 소환하지 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Summon|Location", meta = (ClampMin = "10.0", Units = "cm"))
 	float MaxEdgeSearchDistance = 800.0f;
 

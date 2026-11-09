@@ -153,4 +153,54 @@ bool FKunaiRopePolishTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAllySummonPolishTest, "Eclipse.Polish.AllySummonClearance",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FAllySummonPolishTest::RunTest(const FString& Parameters)
+{
+    GameplayPolishTests::FTestWorld Fixture;
+    AActor* Floor = Fixture.World->SpawnActor<AActor>();
+    if (!TestNotNull(TEXT("소환 바닥 생성"), Floor)) return false;
+
+    UBoxComponent* FloorBox = NewObject<UBoxComponent>(Floor);
+    FloorBox->SetBoxExtent(FVector(1000, 250, 20));
+    FloorBox->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+    Floor->SetRootComponent(FloorBox);
+    FloorBox->RegisterComponent();
+    Floor->SetActorLocation(FVector(0, 0, -20));
+
+    AEnemy* Owner = Fixture.World->SpawnActor<AEnemy>(FVector(0, 0, 100), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("소환자 생성"), Owner)) return false;
+
+    UAllySummonComponent* Summon = NewObject<UAllySummonComponent>(Owner);
+    Summon->RegisterComponent();
+    // BeginPlay를 실행하지 않는 격리 월드에서 소환 설정만 주입한다.
+    FindFProperty<FObjectProperty>(Summon->GetClass(), TEXT("OwnerEnemy"))->SetObjectPropertyValue_InContainer(Summon, Owner);
+    FindFProperty<FClassProperty>(Summon->GetClass(), TEXT("SummonClass"))->SetObjectPropertyValue_InContainer(Summon, AEnemy::StaticClass());
+    FindFProperty<FIntProperty>(Summon->GetClass(), TEXT("SummonCount"))->SetPropertyValue_InContainer(Summon, 1);
+
+    AddExpectedError(TEXT("EnemyClimbEntranceComponent"), EAutomationExpectedErrorFlags::Contains, 1);
+    TestEqual(TEXT("바닥과 공간이 충분하면 소환"), Summon->SummonAllies(nullptr), 1);
+
+    AActor* Wall = Fixture.World->SpawnActor<AActor>();
+    if (!TestNotNull(TEXT("소환 공간 장애물 생성"), Wall)) return false;
+
+    UBoxComponent* WallBox = NewObject<UBoxComponent>(Wall);
+    WallBox->SetBoxExtent(FVector(400, 250, 100));
+    WallBox->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+    Wall->SetRootComponent(WallBox);
+    WallBox->RegisterComponent();
+    Wall->SetActorLocation(FVector(0, 0, 100));
+
+    AddExpectedError(TEXT("동료를 세울 바닥"), EAutomationExpectedErrorFlags::Contains, 2);
+    Summon->ResetSummon();
+    TestEqual(TEXT("양쪽 공간이 막히면 소환하지 않음"), Summon->SummonAllies(nullptr), 0);
+
+    Wall->Destroy();
+    Floor->Destroy();
+    Summon->ResetSummon();
+    TestEqual(TEXT("지면이 없으면 소환하지 않음"), Summon->SummonAllies(nullptr), 0);
+    return true;
+}
+
 #endif

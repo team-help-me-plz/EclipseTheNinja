@@ -8,6 +8,8 @@
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Util/EclipseCollisionChannels.h"
 #include "Kismet/GameplayStatics.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 
@@ -144,6 +146,9 @@ int32 UAllySummonComponent::SummonAllies(AActor* CombatActor)
 
 AEnemy* UAllySummonComponent::SpawnAlly(const FEnemyClimbEntrance& InEntrance, AActor* CombatActor, float Delay) const
 {
+	// 앞서 소환한 동료나 이동 물체가 공간을 차지했으면 이번 자리는 사용하지 않는다.
+	if (!IsEntranceClear(InEntrance)) return nullptr;
+
 	UWorld* World = GetWorld();
 	UObjectPoolSubsystem* PoolSubsystem = World->GetSubsystem<UObjectPoolSubsystem>();
 	if (!PoolSubsystem)
@@ -217,12 +222,15 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 	{
 		return false;
 	}
+	if (Hit.bStartPenetrating) return false;
+	if (!AllyDefault->GetCharacterMovement()->IsWalkable(Hit)) return false;
 
 	const float FloorZ = Hit.ImpactPoint.Z;
 	const float ProbeZ = FloorZ + EdgeWallProbeHeight;
 
-	// 배경 쪽으로 나아가며 막는 벽이나 바닥이 끊긴 곳을 찾는다. 못 찾으면 최대 거리를 가장자리로 쓴다.
+	// 배경 쪽으로 나아가며 막는 벽이나 바닥이 끊긴 곳을 찾는다.
 	float EdgeDistance = MaxEdgeSearchDistance;
+	bool bFoundEdge = false;
 	for (float Distance = EdgeSearchStep; Distance <= MaxEdgeSearchDistance; Distance += EdgeSearchStep)
 	{
 		const float PrevY = OwnerLocation.Y + BackgroundDirectionY * (Distance - EdgeSearchStep);
@@ -239,6 +247,7 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 		if (bWallHit)
 		{
 			EdgeDistance = FMath::Abs(Hit.ImpactPoint.Y - OwnerLocation.Y);
+			bFoundEdge = true;
 			break;
 		}
 
@@ -253,9 +262,12 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 		if (!bFloorHit)
 		{
 			EdgeDistance = Distance - EdgeSearchStep;
+			bFoundEdge = true;
 			break;
 		}
 	}
+	// 끝없이 이어진 바닥을 절벽으로 가정해 지면 속에서 등장시키지 않는다.
+	if (!bFoundEdge) return false;
 
 	const float StandZ = FloorZ + AllyHalfHeight + 2.0f;
 	const float LedgeDistance = FMath::Max(0.0f, EdgeDistance - AllyRadius - LedgeInset);
@@ -265,9 +277,10 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 	OutEntrance.LedgeLocation = FVector(X, OwnerLocation.Y + BackgroundDirectionY * LedgeDistance, StandZ);
 	OutEntrance.StartLocation = FVector(
 		X,
-		EdgeY + BackgroundDirectionY * ClimbStartBehindEdge,
+		EdgeY + BackgroundDirectionY * FMath::Max(ClimbStartBehindEdge, AllyRadius + 2.0f),
 		StandZ - ClimbStartDepth
 	);
+	if (!IsEntranceClear(OutEntrance)) return false;
 
 	if (bDrawSummonDebug)
 	{
@@ -276,6 +289,62 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 		DrawDebugSphere(GetWorld(), FVector(X, EdgeY, FloorZ), 15.0f, 8, FColor::Red, false, 5.0f);
 	}
 
+	return true;
+}
+
+bool UAllySummonComponent::IsEntranceClear(const FEnemyClimbEntrance& Entrance) const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+	if (!SummonClass) return false;
+
+	const AEnemy* AllyDefault = SummonClass->GetDefaultObject<AEnemy>();
+	if (!IsValid(AllyDefault)) return false;
+
+	const UCapsuleComponent* Capsule = AllyDefault->GetCapsuleComponent();
+	if (!IsValid(Capsule)) return false;
+
+	const UCharacterMovementComponent* Movement = AllyDefault->GetCharacterMovement();
+	if (!IsValid(Movement)) return false;
+
+	const float Radius = Capsule->GetScaledCapsuleRadius();
+	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Radius, HalfHeight);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(AllySummonClearance), false);
+	FCollisionResponseParams Response(Capsule->GetCollisionResponseToChannels());
+	Response.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+	Response.CollisionResponse.SetResponse(ECC_Monster, ECR_Ignore);
+	const ECollisionChannel Channel = OwnerEnemy->GetCapsuleComponent()->GetCollisionObjectType();
+
+	FCollisionObjectQueryParams Characters;
+	Characters.AddObjectTypesToQuery(ECC_Pawn);
+	Characters.AddObjectTypesToQuery(ECC_Monster);
+	for (const FVector& Location : { Entrance.StartLocation, Entrance.LedgeLocation, Entrance.PlayLocation })
+	{
+		if (World->OverlapBlockingTestByChannel(Location, FQuat::Identity, Channel, Shape, Params, Response)) return false;
+		if (World->OverlapAnyTestByObjectType(Location, FQuat::Identity, Characters, Shape, Params)) return false;
+	}
+
+	// 중심 아래 한 점만 맞는 좁은 턱은 제외하고 캡슐 발밑 면적을 확인한다.
+	const float SupportRadius = Radius * 0.7f;
+	const FVector Offsets[] = { FVector::ZeroVector, FVector(SupportRadius, 0, 0), FVector(-SupportRadius, 0, 0),
+		FVector(0, SupportRadius, 0), FVector(0, -SupportRadius, 0) };
+	for (const FVector& Location : { Entrance.LedgeLocation, Entrance.PlayLocation })
+	{
+		for (const FVector& Offset : Offsets)
+		{
+			const FVector Feet = Location + Offset - FVector(0, 0, HalfHeight);
+			FHitResult FloorHit;
+			if (!World->LineTraceSingleByChannel(FloorHit, Feet + FVector(0, 0, EdgeWallProbeHeight),
+				Feet - FVector(0, 0, EdgeFloorTolerance), Channel, Params, Response)) return false;
+			if (FloorHit.bStartPenetrating) return false;
+			if (!Movement->IsWalkable(FloorHit)) return false;
+		}
+	}
+
+	FHitResult PathHit;
+	if (World->SweepSingleByChannel(PathHit, Entrance.LedgeLocation, Entrance.PlayLocation,
+		FQuat::Identity, Channel, Shape, Params, Response)) return false;
 	return true;
 }
 
