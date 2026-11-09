@@ -8,6 +8,8 @@
 
 class ASideScrollingCharacter;
 class UInputMappingContext;
+class UPauseMenuWidget;
+class USettingsWidget;
 
 /**
  * 
@@ -54,10 +56,17 @@ public:
 	void PopInputLock(FName InReason);
 	bool IsInputLocked() const { return !InputLocks.IsEmpty(); }
 
+	void ResumeFromPauseMenu();
+	void OpenPauseSettings();
+	void ReturnToMainMenu();
+	bool HasOpenPauseMenu() const { return PauseMenuWidget != nullptr; }
+	void HandlePauseMenuBack();
+
 protected:
 
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Initialize input bindings */
 	virtual void SetupInputComponent() override;
@@ -74,6 +83,21 @@ protected:
 	bool ShouldUseTouchControls() const;
 
 private:
+	void OpenPauseMenu();
+	void FocusPauseWidget(UUserWidget& Widget);
+	void RemovePauseWidgets();
+
+	UFUNCTION()
+	void HandlePauseSettingsClosed();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UPauseMenuWidget> PauseMenuWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USettingsWidget> PauseSettingsWidget;
+
+	bool bShowCursorBeforePause = false;
+
 	// DefaultMappingContexts와 (터치가 아니면) MobileExcludedMappingContexts를 넣거나 뺀다
 	void ApplyDefaultMappingContexts(bool bAdd);
 	// 잠긴 채로 캐릭터가 바뀌면 모든 잠금을 풀어 기본 입력으로 되돌린다
