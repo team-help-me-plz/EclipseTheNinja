@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Widgets/MenuInputFeedback.h"
 #include "SettingsWidget.generated.h"
 
 class UButton;
@@ -16,6 +17,8 @@ class UInputMappingContext;
 class UEnhancedInputUserSettings;
 class UKeyBindingSelector;
 class UUserAudioSettingsSubsystem;
+class IInputProcessor;
+class FSettingsMenuInputProcessor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSettingsClosed);
 
@@ -53,6 +56,12 @@ public:
 protected:
 	virtual void	NativeConstruct() override;
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Settings|Input")
+	TArray<FMenuFocusFeedbackBinding> FocusFeedbackBindings;
+	virtual FReply NativeOnFocusReceived(const FGeometry& InGeometry, const FFocusEvent& InFocusEvent) override;
+	virtual FNavigationReply NativeOnNavigation(const FGeometry& InGeometry, const FNavigationEvent& InNavigationEvent, const FNavigationReply& InDefaultReply) override;
 
 	UFUNCTION()
 	void	HandleDisplayTabClicked();
@@ -85,6 +94,9 @@ protected:
 	void	HandleCloseClicked();
 
 	UFUNCTION()
+	void HandleApplyClicked();
+
+	UFUNCTION()
 	void	HandleMasterVolumeChanged(float InValue);
 
 	UFUNCTION()
@@ -100,57 +112,57 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Controls")
 	TSoftObjectPtr<UInputMappingContext>	DisplayMappingContext;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Controls")
-	TSoftObjectPtr<UInputMappingContext> TutorialMappingContext = TSoftObjectPtr<UInputMappingContext>(
-		FSoftObjectPath(TEXT("/Game/Blueprint/Week_4/ParryTest/IMC_ParryTest.IMC_ParryTest")));
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Style")
 	FLinearColor	AccentColor = FLinearColor::FromSRGBColor(FColor(196, 150, 102));
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Settings|Style")
+	FLinearColor SelectedTabColor = FLinearColor(0.35f, 0.045f, 0.04f, 1.f);
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Settings|Style")
+	FLinearColor IdleTabColor = FLinearColor(0.04f, 0.04f, 0.045f, 1.f);
 
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher>	TabSwitcher = nullptr;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UButton>>	TabButtons;
 
 	// 디스플레이
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UComboBoxString>	WindowModeComboBox = nullptr;
 
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UComboBoxString>	ResolutionComboBox = nullptr;
 
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UCheckBox>		VSyncCheckBox = nullptr;
 
 	// 오디오
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<USlider>		MasterVolumeSlider = nullptr;
 
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<USlider>		MusicVolumeSlider = nullptr;
 
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<USlider>		SFXVolumeSlider = nullptr;
 
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UTextBlock>	MasterVolumeText = nullptr;
 
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UTextBlock>	MusicVolumeText = nullptr;
 
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UTextBlock>	SFXVolumeText = nullptr;
 
 	// 그래픽
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UComboBoxString>	QualityComboBox = nullptr;
 
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UComboBoxString>	FrameLimitComboBox = nullptr;
 
 	// 조작키
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UVerticalBox>	KeyBindingList = nullptr;
 
 private:
@@ -167,6 +179,22 @@ private:
 	UFUNCTION()
 	void ResetKeyBindings();
 
+	void BindDesignerControls();
+	FMenuInputFeedback InputFeedback;
+	friend class FSettingsMenuInputProcessor;
+	bool HandleGamepadKey(const FKeyEvent& Event);
+	bool OwnsGamepadFocus(int32 UserIndex) const;
+	bool HasOpenCombo() const;
+	void FocusControl(UWidget* Widget);
+	void FocusSelectedTab();
+	void MoveContentFocus(int32 Direction);
+	TArray<UWidget*> GetContentControls() const;
+	TSharedPtr<IInputProcessor> GamepadInputProcessor;
+	ESettingsTab CurrentTab = ESettingsTab::Display;
+	bool bTabFocus = true;
+	bool bConsumeAcceptRelease = false;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UButton>> FooterButtons;
 	void		BuildDefaultLayout();
 	UVerticalBox*	MakePage(const FText& InHeader);
 	void		AddRow(UVerticalBox* InPage, const FText& InLabel, UWidget* InValue);

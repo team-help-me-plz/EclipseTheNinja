@@ -68,6 +68,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* MoveAction;
 
+	/** Minimum downward movement value required to start hanging from a ledge. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Gamepad", meta = (ClampMin = "0.1", ClampMax = "1"))
+	float LedgeHangDownInputThreshold = 0.65f;
+
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* JumpAction;
@@ -465,6 +469,7 @@ public:
 
 	/** 분신술 타게팅 상태 설정. 타게팅 중에는 카메라 시점을 유지하고, 종료되면 중앙으로 복귀한다. */
 	void SetCloneTargeting(bool bTargeting);
+	bool IsCloneTargeting() const { return bIsCloneTargeting; }
 
 protected:
 

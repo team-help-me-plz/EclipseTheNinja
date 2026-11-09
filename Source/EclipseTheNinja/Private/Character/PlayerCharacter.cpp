@@ -646,7 +646,11 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	}
 	else
 	{
-		if (MoveVector.X < 0)
+		// Require a deliberate downward tilt (within about 39 degrees of down).
+		// Small downward drift while moving sideways must not trigger ledge hanging.
+		const float DownInput = -MoveVector.X;
+		if (DownInput >= FMath::Clamp(LedgeHangDownInputThreshold, 0.1f, 1.0f)
+			&& DownInput > FMath::Abs(MoveVector.Y) * 1.25f)
 			TryActivateAbilityByInputID(EAbilityInputID::LedgeHang);
 
 		DoMove(MoveVector.Y);
@@ -1028,6 +1032,10 @@ void APlayerCharacter::DoCameraMoveStart()
 		return;
 	}
 
+	if (!bIsExploring)
+	{
+		APC->InitializeGamepadAimCursor();
+	}
 	APC->StartCameraMove();
 	bIsExploring = true;
 }
@@ -1106,6 +1114,7 @@ void APlayerCharacter::SetCloneTargeting(bool bTargeting)
 		static const FName CloneTargetingLock(TEXT("CloneTargeting"));
 		if (bTargeting)
 		{
+			APC->InitializeGamepadAimCursor(true);
 			APC->PushInputLock(CloneTargetingLock);
 		}
 		else

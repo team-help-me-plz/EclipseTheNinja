@@ -20,6 +20,35 @@ class ECLIPSETHENINJA_API APlayerCharacterController : public APlayerController
 	GENERATED_BODY()
 
 protected:
+	/** Right stick cursor speed in viewport heights per second. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input|Gamepad", meta = (ClampMin = "0"))
+	float GamepadCursorSpeed = 0.8f;
+
+	/** Cursor speed multiplier while holding L2. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input|Gamepad", meta = (ClampMin = "0"))
+	float GamepadAimCursorSpeedMultiplier = 2.6f;
+
+	/** Reverse the right stick vertical direction during L2 aiming and clone targeting. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input|Gamepad")
+	bool bInvertGamepadAimCursorY = true;
+
+	/** Bone/socket used as the origin when aiming or clone targeting starts. Falls back to the pawn eye position. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input|Gamepad")
+	FName GamepadAimHeadSocket = TEXT("head");
+
+	/** Distance in front of the head at which the aim cursor starts. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input|Gamepad", meta = (ClampMin = "0", Units = "cm"))
+	float GamepadAimStartForwardOffset = 500.0f;
+
+	/** Distance in front of the head at which clone targeting starts. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input|Gamepad", meta = (ClampMin = "0", Units = "cm"))
+	float CloneTargetingStartForwardOffset = 100.0f;
+
+	/** Radial dead zone applied to the raw right stick axes. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input|Gamepad", meta = (ClampMin = "0", ClampMax = "0.95"))
+	float GamepadCursorDeadZone = 0.2f;
+
+	virtual void PlayerTick(float DeltaTime) override;
 
 	/** Input mapping context for this player */
 	UPROPERTY(EditAnywhere, Category = "Input|Input Mappings")
@@ -47,6 +76,10 @@ protected:
 
 
 public:
+	UFUNCTION(BlueprintPure, Category = "Input")
+	bool IsUsingGamepad() const { return bUsingGamepad; }
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+	void InitializeGamepadAimCursor(bool bForCloneTargeting = false);
 	void StartCameraMove();
 	void StopCameraMove();
 
@@ -104,6 +137,12 @@ private:
 	TObjectPtr<USettingsWidget> PauseSettingsWidget;
 
 	bool bShowCursorBeforePause = false;
+	bool bUsingGamepad = false;
+	double IgnoreCursorWarpUntil = 0.0;
+	FVector2D LastObservedMousePosition = FVector2D::ZeroVector;
+	bool bHasObservedMousePosition = false;
+	void SetGamepadCursorLocation(int32 X, int32 Y);
+	FVector2D GamepadCursorRemainder = FVector2D::ZeroVector;
 
 	// DefaultMappingContexts와 (터치가 아니면) MobileExcludedMappingContexts를 넣거나 뺀다
 	void ApplyDefaultMappingContexts(bool bAdd);
