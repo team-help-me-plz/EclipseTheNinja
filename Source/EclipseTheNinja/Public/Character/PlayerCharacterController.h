@@ -28,7 +28,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input|Gamepad", meta = (ClampMin = "0"))
 	float GamepadAimCursorSpeedMultiplier = 2.6f;
 
-	/** Reverse the right stick vertical direction during L2 aiming and clone targeting. */
+	/** Reverse the right stick vertical direction during L2 aiming relative to screen-space Y. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input|Gamepad")
 	bool bInvertGamepadAimCursorY = true;
 

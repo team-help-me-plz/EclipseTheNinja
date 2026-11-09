@@ -71,8 +71,14 @@ void APlayerCharacterController::PlayerTick(float DeltaTime)
     const bool bCloneTargeting = ControlledCharacter && ControlledCharacter->IsCloneTargeting();
     const FKey CursorX = bCloneTargeting ? EKeys::Gamepad_LeftX : EKeys::Gamepad_RightX;
     const FKey CursorY = bCloneTargeting ? EKeys::Gamepad_LeftY : EKeys::Gamepad_RightY;
-    FVector2D Stick(GetInputAnalogKeyState(CursorX), -GetInputAnalogKeyState(CursorY));
-    if ((bGamepadAiming || bCloneTargeting) && bInvertGamepadAimCursorY)
+    FVector2D Stick(GetInputAnalogKeyState(CursorX), GetInputAnalogKeyState(CursorY));
+
+    // 왼쪽 스틱은 화면 좌표에 맞추고, 오른쪽 스틱은 정상인 조준 방향을 기본으로 사용한다.
+    if (bCloneTargeting)
+    {
+        Stick.Y *= -1.0;
+    }
+    else if (bGamepadAiming && !bInvertGamepadAimCursorY)
     {
         Stick.Y *= -1.0;
     }
