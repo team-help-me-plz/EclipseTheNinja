@@ -338,8 +338,8 @@ private:
 	bool bMoveTurnActive = false;
 
     bool bParryMovementLocked = false;
-    uint8 SavedParryMovementMode = 0;
-    uint8 SavedParryCustomMovementMode = 0;
+    TWeakObjectPtr<UAnimInstance> ParryLockedAnimation;
+    uint8 SavedParryRootMotionMode = 0;
 
     // bDebugInvincible에 맞춰 무적 태그를 붙이거나 뗀다. 태그는 개수로 관리되므로 붙인 횟수를 따로 기억한다.
     void SyncDebugInvincibleTag();

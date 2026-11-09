@@ -1469,9 +1469,16 @@ void APlayerCharacter::SetParryMovementLocked(bool bLocked)
 
     if (bLocked)
     {
-        SavedParryMovementMode = Movement->MovementMode;
-        SavedParryCustomMovementMode = Movement->CustomMovementMode;
         bParryMovementLocked = true;
+
+        // 걷기 모드를 유지해야 정지 동작 중에도 이동 발판을 따라간다.
+        UAnimInstance* ParryAnimation = GetMesh()->GetAnimInstance();
+        if (IsValid(ParryAnimation))
+        {
+            ParryLockedAnimation = ParryAnimation;
+            SavedParryRootMotionMode = static_cast<uint8>(ParryAnimation->RootMotionMode);
+            ParryAnimation->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
+        }
 
         // 남아 있는 회전 동작과 커서 회전을 정리한 방향으로 고정한다.
         CancelMoveTurn();
@@ -1493,20 +1500,22 @@ void APlayerCharacter::SetParryMovementLocked(bool bLocked)
             return;
         }
 
-        // 입력뿐 아니라 관성과 몽타주 루트 모션에 의한 이동도 막는다.
+        // 입력과 루트 이동만 잠그고 바닥 추적과 발판 이동은 계속 처리한다.
         Movement->StopMovementImmediately();
-        Movement->DisableMovement();
         return;
     }
 
     bParryMovementLocked = false;
     ConsumeMovementInputVector();
 
-    // 사망 또는 다른 이동 상태 전환을 패링 종료가 덮어쓰지 않게 한다.
-    if (bIsDead) return;
-    if (Movement->MovementMode != MOVE_None) return;
-
-    Movement->SetMovementMode(static_cast<EMovementMode>(SavedParryMovementMode), SavedParryCustomMovementMode);
+    if (UAnimInstance* Animation = ParryLockedAnimation.Get())
+    {
+        if (Animation->RootMotionMode == ERootMotionMode::IgnoreRootMotion)
+        {
+            Animation->SetRootMotionMode(static_cast<ERootMotionMode::Type>(SavedParryRootMotionMode));
+        }
+    }
+    ParryLockedAnimation.Reset();
 }
 
 void APlayerCharacter::SetDebugInvincible(bool bEnable)

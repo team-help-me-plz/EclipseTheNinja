@@ -119,6 +119,46 @@ bool FCloneTrapPolishTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FParryPlatformPolishTest, "Eclipse.Polish.ParryMovingPlatform",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FParryPlatformPolishTest::RunTest(const FString& Parameters)
+{
+    GameplayPolishTests::FTestWorld Fixture;
+    AActor* Platform = Fixture.World->SpawnActor<AActor>();
+    if (!TestNotNull(TEXT("발판 생성"), Platform)) return false;
+
+    UBoxComponent* Box = NewObject<UBoxComponent>(Platform);
+    Box->SetMobility(EComponentMobility::Movable);
+    Box->SetBoxExtent(FVector(200, 200, 10));
+    Box->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+    Platform->SetRootComponent(Box);
+    Box->RegisterComponent();
+
+    APlayerCharacter* Player = Fixture.World->SpawnActor<APlayerCharacter>(FVector(0, 0, 102), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("플레이어 생성"), Player)) return false;
+
+    UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
+    Movement->bRunPhysicsWithNoController = true;
+    Movement->SetMovementMode(MOVE_Walking);
+    FMovementBaseInterfaceData BaseData = MovementBaseUtility::GetMovementBaseDataFromPhysicsOwner(Box);
+    Player->SetBase(&BaseData);
+    Movement->SaveBaseLocation();
+    const float StartZ = Player->GetActorLocation().Z;
+
+    Player->SetParryMovementLocked(true);
+    TestTrue(TEXT("패링 중 걷기 모드 유지"), Movement->IsMovingOnGround());
+    TestTrue(TEXT("패링 중 발판 연결 유지"), Player->GetMovementBaseObject() == Box);
+
+    Platform->SetActorLocation(FVector(0, 0, 20));
+    Movement->TickComponent(0.016f, LEVELTICK_All, nullptr);
+    TestTrue(TEXT("패링 중에도 발판 상승을 따라 이동"), Player->GetActorLocation().Z > StartZ + 15.0f);
+
+    Player->SetParryMovementLocked(false);
+    TestTrue(TEXT("패링 해제 후 걷기 유지"), Movement->IsMovingOnGround());
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FKunaiRopePolishTest, "Eclipse.Polish.KunaiMuzzleRopeHit",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
