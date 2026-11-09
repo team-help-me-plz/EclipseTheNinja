@@ -307,6 +307,7 @@ void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
             {
                 Possess(RespawnedCharacter);
                 Subsystem->RespawnAtCheckpoint(RespawnedCharacter);
+                FadeInAfterRespawn();
                 return;
             }
         }
@@ -326,7 +327,17 @@ void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
             UE_LOG(LogTemp, Display, TEXT("RespawnTest"));
             // possess the character
             Possess(RespawnedCharacter);
+            FadeInAfterRespawn();
         }
+    }
+}
+
+void APlayerCharacterController::FadeInAfterRespawn()
+{
+    // 사망 연출(보스 처형 등)이 화면을 어둡게 한 채 리스폰했으면 다시 밝힌다. 어둡지 않으면 아무것도 하지 않는다
+    if (IsValid(PlayerCameraManager) && PlayerCameraManager->FadeAmount > KINDA_SMALL_NUMBER)
+    {
+        PlayerCameraManager->StartCameraFade(PlayerCameraManager->FadeAmount, 0.0f, this->RespawnFadeInTime, FLinearColor::Black, false, false);
     }
 }
 

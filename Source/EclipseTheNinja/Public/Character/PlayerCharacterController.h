@@ -79,6 +79,13 @@ protected:
 	UFUNCTION()
 	void OnPawnDestroyed(AActor* DestroyedActor);
 
+	// 사망 연출이 화면을 어둡게 한 채 리스폰했으면 다시 밝힌다
+	void FadeInAfterRespawn();
+
+	/** 사망 연출로 어두워진 화면을 리스폰 뒤 다시 밝히는 시간 */
+	UPROPERTY(EditAnywhere, Category = "Respawn", meta = (ClampMin = "0.0", Units = "s"))
+	float RespawnFadeInTime = 0.5f;
+
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
 
