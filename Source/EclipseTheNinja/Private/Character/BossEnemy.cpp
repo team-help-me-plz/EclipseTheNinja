@@ -643,6 +643,9 @@ bool ABossEnemy::ActivatePatternAgainst(const FBossPatternRow& Row, APawn* Targe
 
 bool ABossEnemy::ActivatePatternAbility(const FBossPatternRow& Row)
 {
+	// BT 밖에서 요청한 패턴도 암살 접근·연출 중에는 시작하지 않는다.
+	if (IsBeingAssassinated()) return false;
+
 	if (!ASC || !Row.AbilityClass)
 	{
 		return false;

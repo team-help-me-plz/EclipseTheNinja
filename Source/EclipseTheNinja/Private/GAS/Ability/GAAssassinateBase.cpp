@@ -157,6 +157,9 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	bTargetReserved = true;
 	TargetComponent->SetTargetHighlighted(false);
 
+	// 이미 실행 중인 공격 태스크도 멈춘다. 예약 상태를 먼저 기록해 재진입을 막는다.
+	Enemy->CancelAIBaseAttack();
+
 	// 칼이 꽂히는 위치와 회복 오브 드롭 위치가 어긋나지 않게 메시를 캡슐 위치로 돌린다.
 	Enemy->SetMeshYOffsetSuppressed(true);
 
@@ -751,6 +754,12 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		}
 	}
 
+	// BT 재개가 즉시 실행되더라도 암살 예약이 남아 있지 않게 한다.
+	if (bTargetReserved && TargetComponent.IsValid())
+	{
+		TargetComponent->SetAssassinationInProgress(false);
+	}
+
 	// 암살 대상이 유효한 경우
 	AEnemy* Enemy = Victim.Get();
 	if (IsValid(Enemy))
@@ -770,12 +779,6 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 				PausedBrain->ResumeLogic(TEXT("Assassination cancelled"));
 			}
 		}
-	}
-
-	// 타겟의 암살이 끝났다고 표시
-	if (bTargetReserved && TargetComponent.IsValid())
-	{
-		TargetComponent->SetAssassinationInProgress(false);
 	}
 
 	// 각종 변수 초기화
