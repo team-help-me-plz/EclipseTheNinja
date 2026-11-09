@@ -13,8 +13,7 @@ class UTextBlock;
 class UVerticalBox;
 class UWidgetSwitcher;
 class UInputMappingContext;
-class USoundClass;
-class USoundMix;
+class UUserAudioSettingsSubsystem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSettingsClosed);
 
@@ -29,7 +28,7 @@ enum class ESettingsTab : uint8
 };
 
 /**
- * 설정 창 위젯 (초안)
+ * 환경설정 위젯
  * 디스플레이 / 오디오 / 그래픽 / 조작키 탭으로 구성되며, WBP 없이 C++ 레이아웃을 구성한다.
  */
 UCLASS()
@@ -51,7 +50,7 @@ public:
 
 protected:
 	virtual void	NativeConstruct() override;
-	virtual FReply	NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
 	UFUNCTION()
 	void	HandleDisplayTabClicked();
@@ -66,7 +65,19 @@ protected:
 	void	HandleControlsTabClicked();
 
 	UFUNCTION()
-	void	HandleApplyClicked();
+	void HandleWindowModeChanged(FString Option, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleResolutionChanged(FString Option, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleVSyncChanged(bool bChecked);
+
+	UFUNCTION()
+	void HandleQualityChanged(FString Option, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleFrameLimitChanged(FString Option, ESelectInfo::Type SelectionType);
 
 	UFUNCTION()
 	void	HandleCloseClicked();
@@ -82,27 +93,13 @@ protected:
 
 	// 현재 GameUserSettings 값을 UI에 반영
 	void	LoadCurrentSettings();
-	void	ApplyAudioSettings();
 
-	// 조작키 탭에 표시할 입력 매핑 (키 변경 기능은 추후 구현)
+	// 조작키 탭에 표시할 입력 매핑
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Controls")
 	TSoftObjectPtr<UInputMappingContext>	DisplayMappingContext;
 
-	// 볼륨 조절에 사용할 사운드 믹스 / 클래스 (지정되지 않으면 값만 저장)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Audio")
-	TObjectPtr<USoundMix>	VolumeSoundMix = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Audio")
-	TObjectPtr<USoundClass>	MasterSoundClass = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Audio")
-	TObjectPtr<USoundClass>	MusicSoundClass = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Audio")
-	TObjectPtr<USoundClass>	SFXSoundClass = nullptr;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Style")
-	FLinearColor	AccentColor = FLinearColor(0.6f, 0.015f, 0.025f, 1.f);
+	FLinearColor	AccentColor = FLinearColor::FromSRGBColor(FColor(196, 150, 102));
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWidgetSwitcher>	TabSwitcher = nullptr;
@@ -155,6 +152,10 @@ private:
 	UVerticalBox*	MakePage(const FText& InHeader);
 	void		AddRow(UVerticalBox* InPage, const FText& InLabel, UWidget* InValue);
 	USlider*	AddVolumeRow(UVerticalBox* InPage, const FText& InLabel, TObjectPtr<UTextBlock>& OutValueText);
+	UComboBoxString* MakeSettingsComboBox();
+
+	UFUNCTION()
+	UWidget* MakeComboOption(FString Option);
 	UButton*	MakeTextButton(const FText& InLabel, const float InWidth);
 	UTextBlock*	MakeText(const FText& InText, const int32 InSize, const FLinearColor& InColor = FLinearColor::White);
 	void		RefreshKeyBindingList();
@@ -162,7 +163,8 @@ private:
 
 	TArray<FIntPoint>	Resolutions;
 
-	float	MasterVolume = 1.f;
-	float	MusicVolume = 1.f;
-	float	SFXVolume = 1.f;
+	UUserAudioSettingsSubsystem* GetAudioSettings() const;
+	bool IsPlayingInEditor() const;
+	TArray<float> FrameLimits;
+	bool bRefreshingSettings = false;
 };
