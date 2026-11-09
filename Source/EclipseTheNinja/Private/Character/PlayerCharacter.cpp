@@ -466,6 +466,26 @@ void APlayerCharacter::SetCursorFacingActive(bool bActive)
 	bCursorFacingActive = bActive;
 }
 
+const UInputAction* APlayerCharacter::GetAbilityInputAction(EAbilityInputID InputID) const
+{
+    switch (InputID)
+    {
+    case EAbilityInputID::BasicAttack:
+    case EAbilityInputID::ThrowKunai:
+        return BasicAttackAction;
+    case EAbilityInputID::CloneTech:
+        return CloneTechAction;
+    case EAbilityInputID::ElementalFire:
+        return ElementalFireAction;
+    case EAbilityInputID::SwiftStrike:
+        return SwiftStrikeAction;
+    case EAbilityInputID::Parry:
+        return ParryAction;
+    default:
+        return nullptr;
+    }
+}
+
 void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);

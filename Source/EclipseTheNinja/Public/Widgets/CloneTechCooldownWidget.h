@@ -20,6 +20,9 @@ public:
 	virtual void	InitWidget(APawn* InPawn) override;
 
 protected:
+	UPROPERTY(Transient)
+	TObjectPtr<UInputGlyphWidget> RecallKeyGlyph;
+
 	void	CloneSpawnedUpdate();
 	void	CloneSwapCannotUpdate();
 

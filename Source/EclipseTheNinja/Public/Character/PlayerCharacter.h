@@ -170,6 +170,9 @@ protected:
 	EPlayerCondition	PlayerCondition = EPlayerCondition::Normal;
 
 public:
+    const UInputAction* GetAbilityInputAction(EAbilityInputID InputID) const;
+    const UInputAction* GetCloneRecallInputAction() const { return CloneRecallAction; }
+
     float GetLogicalFacingSign() const { return FMath::Cos(FMath::DegreesToRadians(FacingTargetYaw)) >= 0.0f ? 1.0f : -1.0f; }
     UFUNCTION(BlueprintCallable, Category="Parry")
     void DoParry();

@@ -13,6 +13,8 @@ class UImage;
 class UTextBlock;
 class UGACooldownBase;
 class ABaseCharacter;
+class UInputAction;
+class UInputGlyphWidget;
 
 /**
  * 
@@ -30,6 +32,11 @@ public:
 	virtual void	InitWidget(APawn* InPawn);
 
 protected:
+	UInputGlyphWidget* InstallKeyGlyph(FName TextName, FName BackgroundName, const UInputAction* Action);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputGlyphWidget> AbilityKeyGlyph;
+
 	/** 아직 갖지 않은 어빌리티면 위젯을 숨기고, 획득하는 순간 다시 보이게 한다. false면 항상 보인다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
 	bool	bHideUntilGranted = true;
