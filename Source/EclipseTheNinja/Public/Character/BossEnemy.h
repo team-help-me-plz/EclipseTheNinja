@@ -46,7 +46,11 @@ public:
 
 	/** 컷신·그로기처럼 보스가 패턴을 쓰면 안 되는 동안 켠다. 켜져 있으면 패턴 어빌리티가 발동하지 않는다. */
 	void SetCinematicLocked(bool bLocked) { bCinematicLocked = bLocked; }
-	bool IsCinematicLocked() const { return bCinematicLocked; }
+	bool IsCinematicLocked() const
+	{
+		if (PendingEnergyLinkIndex != INDEX_NONE) return true;
+		return bCinematicLocked;
+	}
 
 	/** Also callable by an arena trigger/cinematic. Detection of combat starts the UI automatically. */
 	UFUNCTION(BlueprintCallable, Category = "Boss|UI")
@@ -314,6 +318,7 @@ protected:
 
 	// 실드를 켜고 제한시간 타이머를 시작한다.
 	void ActivateEnergyLink(int32 LinkIndex);
+	void TryActivatePendingEnergyLink();
 
 	// 제한시간 안에 실드를 해제하지 못하면 플레이어 입력을 막고 처형을 시작한다.
 	void OnEnergyLinkTimeExpired();
@@ -433,6 +438,11 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Boss|Energy Link")
 	bool bEnergyLinkActive = false;
+
+	// 체력은 먼저 임계값에 고정하고, 암살 연출이 끝나면 링크를 켠다.
+	int32 PendingEnergyLinkIndex = INDEX_NONE;
+	bool bClampingEnergyLinkHealth = false;
+	bool bReceivingAssassination = false;
 
 	FTimerHandle EnergyLinkTimer;
 

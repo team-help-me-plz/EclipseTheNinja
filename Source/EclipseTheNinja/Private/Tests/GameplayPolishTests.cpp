@@ -297,4 +297,55 @@ bool FAllySummonPolishTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBossAssassinationEnergyLinkTest, "Eclipse.Polish.BossDefersEnergyLinkUntilAssassinationEnds",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FBossAssassinationEnergyLinkTest::RunTest(const FString& Parameters)
+{
+    GameplayPolishTests::FTestWorld Fixture;
+    Fixture.World->InitializeActorsForPlay(FURL());
+    ABossEnemy* Boss = Fixture.World->SpawnActor<ABossEnemy>();
+    if (!TestNotNull(TEXT("보스 생성"), Boss)) return false;
+    Boss->DispatchBeginPlay();
+
+    UAbilitySystemComponent* ASC = Boss->GetAbilitySystemComponent();
+    if (!TestNotNull(TEXT("보스 ASC"), ASC)) return false;
+    UAssassinateTargetComponent* Target = Boss->FindComponentByClass<UAssassinateTargetComponent>();
+    if (!TestNotNull(TEXT("암살 대상 상태"), Target)) return false;
+
+    ASC->SetNumericAttributeBase(UStatAttributeSet::GetMaxHealthAttribute(), 100.0f);
+    ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 75.0f);
+    Target->SetAssassinationInProgress(true);
+    Boss->ReceiveAssassination(nullptr);
+
+    TestEqual(TEXT("암살 피해를 첫 임계 체력에서 멈춤"), Boss->GetStatAttribute()->GetHealth(), 70.0f);
+    TestFalse(TEXT("암살 중 링크 비활성"), Boss->IsEnergyLinkActive());
+    TestFalse(TEXT("암살 중 쉴드 태그 미적용"), ASC->HasMatchingGameplayTag(EclipseGameplayTags::State_Invincible));
+    TestTrue(TEXT("활성화 대기 중 새 패턴 차단"), Boss->IsCinematicLocked());
+    TestEqual(TEXT("암살 중 링크 제한시간 미시작"), Boss->GetEnergyLinkTimeRemaining(), -1.0f);
+    static_cast<AActor*>(Boss)->Tick(0.016f);
+    TestFalse(TEXT("암살 상태가 유지되면 다음 프레임에도 링크 대기"), Boss->IsEnergyLinkActive());
+
+    ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 0.0f);
+    TestEqual(TEXT("대기 중 추가 피해도 예약한 임계 체력 유지"), Boss->GetStatAttribute()->GetHealth(), 70.0f);
+    TestFalse(TEXT("대기 중 큰 피해로 사망하지 않음"), Boss->IsDead());
+
+    Target->SetAssassinationInProgress(false);
+    static_cast<AActor*>(Boss)->Tick(0.016f);
+    TestTrue(TEXT("암살 종료 후 링크 활성화"), Boss->IsEnergyLinkActive());
+    TestTrue(TEXT("암살 종료 후 쉴드 태그 적용"), ASC->HasMatchingGameplayTag(EclipseGameplayTags::State_Invincible));
+    TestTrue(TEXT("링크 활성화 시점부터 제한시간 시작"), Boss->GetEnergyLinkTimeRemaining() > 0.0f);
+
+    ABossEnemy* NormalBoss = Fixture.World->SpawnActor<ABossEnemy>(FVector(1000, 0, 0), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("일반 피해 비교용 보스"), NormalBoss)) return false;
+    NormalBoss->DispatchBeginPlay();
+    UAbilitySystemComponent* NormalASC = NormalBoss->GetAbilitySystemComponent();
+    NormalASC->SetNumericAttributeBase(UStatAttributeSet::GetMaxHealthAttribute(), 100.0f);
+    NormalASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 75.0f);
+    NormalASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 50.0f);
+    TestTrue(TEXT("일반 피해의 링크 활성화는 즉시 유지"), NormalBoss->IsEnergyLinkActive());
+    TestEqual(TEXT("일반 피해도 임계 체력으로 보정"), NormalBoss->GetStatAttribute()->GetHealth(), 70.0f);
+    return true;
+}
+
 #endif

@@ -2,6 +2,7 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimInstance.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/AssassinationDropComponent.h"
 #include "Component/BossEnemyGimmickComponent.h"
@@ -92,6 +93,7 @@ void ABossEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ABossEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	TryActivatePendingEnergyLink();
 
 	UpdateTurning(DeltaTime);
 
@@ -188,6 +190,22 @@ float ABossEnemy::GetEnergyLinkTimeRemaining() const
 
 void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
+	// 임계 체력 복원이 발생시킨 재진입은 별도 피해로 처리하지 않는다.
+	if (bClampingEnergyLinkHealth) return;
+
+	if (!bIsDead && PendingEnergyLinkIndex != INDEX_NONE)
+	{
+		const float PendingHealth = GetEnergyLinkThresholdHealth(PendingEnergyLinkIndex);
+		if (Data.NewValue < PendingHealth)
+		{
+			TGuardValue<bool> ClampGuard(bClampingEnergyLinkHealth, true);
+			ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), PendingHealth);
+			return;
+		}
+		Super::OnHealthChanged(Data);
+		return;
+	}
+
 	// 실드 중이거나 체력이 늘어난 경우는 일반 처리만 한다.
 	if (bIsDead || bEnergyLinkActive || Data.NewValue >= Data.OldValue
 		|| !EnergyLinkThresholds.IsValidIndex(NextEnergyLinkIndex))
@@ -203,13 +221,24 @@ void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 		return;
 	}
 
-	// 아래의 체력 보정이 이 함수를 다시 호출하므로, 체력을 바꾸기 전에 실드를 먼저 켠다.
+	// 암살 중에는 체력 구간만 예약하고 쉴드·링크·시퀀스 알림을 미룬다.
 	const int32 LinkIndex = NextEnergyLinkIndex++;
-	ActivateEnergyLink(LinkIndex);
+	bool bDeferActivation = false;
+	if (IsBeingAssassinated()) bDeferActivation = true;
+	if (bReceivingAssassination) bDeferActivation = true;
+	if (bDeferActivation)
+	{
+		PendingEnergyLinkIndex = LinkIndex;
+	}
+	else
+	{
+		ActivateEnergyLink(LinkIndex);
+	}
 
 	// 큰 피해로 구간을 넘어가도 이번 구간 체력에서 멈춘다. 같은 이유로 이 피해로는 죽지 않는다.
 	if (Data.NewValue < ThresholdHealth)
 	{
+		TGuardValue<bool> ClampGuard(bClampingEnergyLinkHealth, true);
 		ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), ThresholdHealth);
 	}
 
@@ -217,6 +246,29 @@ void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 	FOnAttributeChangeData ClampedData = Data;
 	ClampedData.NewValue = ThresholdHealth;
 	Super::OnHealthChanged(ClampedData);
+}
+
+void ABossEnemy::TryActivatePendingEnergyLink()
+{
+	if (PendingEnergyLinkIndex == INDEX_NONE) return;
+	if (bIsDead)
+	{
+		PendingEnergyLinkIndex = INDEX_NONE;
+		return;
+	}
+	if (IsBeingAssassinated()) return;
+	if (bReceivingAssassination) return;
+
+	// 플레이어의 암살이 먼저 끝나도 보스의 반응 동작을 시퀀스로 끊지 않는다.
+	const UAnimInstance* Animation = GetMesh()->GetAnimInstance();
+	if (IsValid(Animation) && IsValid(AssassinationReactionMontage))
+	{
+		if (Animation->Montage_IsActive(AssassinationReactionMontage)) return;
+	}
+
+	const int32 LinkIndex = PendingEnergyLinkIndex;
+	PendingEnergyLinkIndex = INDEX_NONE;
+	ActivateEnergyLink(LinkIndex);
 }
 
 float ABossEnemy::GetEnergyLinkThresholdHealth(int32 LinkIndex) const
@@ -359,6 +411,7 @@ bool ABossEnemy::ActivateExecutionAbility()
 
 void ABossEnemy::ClearEnergyLinkState()
 {
+	PendingEnergyLinkIndex = INDEX_NONE;
 	bEnergyLinkActive = false;
 	GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
 
@@ -382,6 +435,7 @@ void ABossEnemy::ClearEnergyLinkState()
 
 bool ABossEnemy::CanBeAssassinated() const
 {
+	if (PendingEnergyLinkIndex != INDEX_NONE) return false;
 	return !bEnergyLinkActive;
 }
 
@@ -393,6 +447,7 @@ void ABossEnemy::ReceiveAssassination(UAnimMontage* Montage)
 	}
 
 	// 암살 피해는 최대 체력의 AssassinationDamageRatio만큼이다.
+	TGuardValue<bool> AssassinationGuard(bReceivingAssassination, true);
 	const float Health = StatAttributeSet->GetHealth();
 	const float Damage = AssassinationDamageRatio * StatAttributeSet->GetMaxHealth();
 
@@ -522,6 +577,7 @@ void ABossEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 
 bool ABossEnemy::CanStartAIAttack(AActor* Target) const
 {
+	if (PendingEnergyLinkIndex != INDEX_NONE) return false;
 	// 패턴 사이 휴식 중에는 공격 분기로 넘어가지 않고 추격 분기에서 대상을 바라보며 거리를 맞춘다.
 	if (IsRestingBetweenPatterns())
 	{
@@ -643,6 +699,7 @@ bool ABossEnemy::ActivatePatternAgainst(const FBossPatternRow& Row, APawn* Targe
 
 bool ABossEnemy::ActivatePatternAbility(const FBossPatternRow& Row)
 {
+	if (IsCinematicLocked()) return false;
 	// BT 밖에서 요청한 패턴도 암살 접근·연출 중에는 시작하지 않는다.
 	if (IsBeingAssassinated()) return false;
 
