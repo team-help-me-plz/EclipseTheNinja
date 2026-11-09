@@ -198,6 +198,7 @@ void ALevelClearTrigger::FinishClear()
 {
     if (this->bQuitGameOnClear)
     {
+        this->bCountdownTravels = false;
         StartQuitCountdown(UGameplayStatics::GetPlayerController(this, 0));
         return;
     }
@@ -206,6 +207,14 @@ void ALevelClearTrigger::FinishClear()
     {
         UE_LOG(LogTemp, Warning, TEXT("[ALevelClearTrigger::FinishClear()] %s 의 NextLevel이 비어 있어 레벨을 이동하지 않습니다."),
             *GetActorNameOrLabel());
+        return;
+    }
+
+    // 마지막 스테이지는 게임 종료 때와 같은 카운트다운 UI를 보여 준 뒤 다음 레벨(메인 메뉴)로 이동한다
+    if (this->bFinalStage)
+    {
+        this->bCountdownTravels = true;
+        StartQuitCountdown(UGameplayStatics::GetPlayerController(this, 0));
         return;
     }
 
@@ -239,7 +248,8 @@ void ALevelClearTrigger::StartQuitCountdown(APlayerController* PlayerController)
 
     if (this->CountdownWidget)
     {
-        this->CountdownWidget->SetMessage(FText::Format(this->QuitMessageFormat, this->QuitCountdownSeconds));
+        const FText& MessageFormat = this->bCountdownTravels ? this->TravelMessageFormat : this->QuitMessageFormat;
+        this->CountdownWidget->SetMessage(FText::Format(MessageFormat, this->QuitCountdownSeconds));
         this->CountdownWidget->SetCount(this->RemainingQuitSeconds);
         this->CountdownWidget->AddToViewport(100);
     }
@@ -264,7 +274,20 @@ bool ALevelClearTrigger::TickQuitCountdown(float DeltaTime)
     if (this->RemainingQuitSeconds <= 0)
     {
         this->QuitTickerHandle.Reset();
-        QuitGame();
+        if (this->bCountdownTravels)
+        {
+            // 일시정지를 풀고 다음 레벨로 이동한다
+            if (this->CountdownWidget)
+            {
+                this->CountdownWidget->RemoveFromParent();
+            }
+            UGameplayStatics::SetGamePaused(this, false);
+            TravelToNextLevel();
+        }
+        else
+        {
+            QuitGame();
+        }
 
         // false를 반환하면 티커가 제거된다
         return false;
