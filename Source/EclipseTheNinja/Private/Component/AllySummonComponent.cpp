@@ -8,6 +8,8 @@
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Util/EclipseCollisionChannels.h"
 #include "Kismet/GameplayStatics.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 
@@ -89,7 +91,7 @@ int32 UAllySummonComponent::SummonAllies(AActor* CombatActor)
 		return 0;
 	}
 
-	// 자리가 없어 하나도 못 불러도 다시 시도하지 않는다.
+	// 스폰 중 재진입을 막는다. 한 마리도 못 불렀으면 끝에서 소환 기회를 되돌린다.
 	bHasSummoned = true;
 
 	const FVector OwnerLocation = OwnerEnemy->GetActorLocation();
@@ -124,12 +126,15 @@ int32 UAllySummonComponent::SummonAllies(AActor* CombatActor)
 
 		// 대상 쪽에 바닥이 없으면 반대쪽에서 찾는다.
 		FEnemyClimbEntrance Entrance;
-		const bool bFound = FindEntrance(OwnerLocation.X + Side * Offset, BackgroundDirectionY, Entrance)
-			|| FindEntrance(OwnerLocation.X - Side * Offset, BackgroundDirectionY, Entrance);
+		bool bFound = FindEntrance(OwnerLocation.X + Side * Offset, BackgroundDirectionY, Entrance);
+		if (!bFound)
+		{
+			bFound = FindEntrance(OwnerLocation.X - Side * Offset, BackgroundDirectionY, Entrance);
+		}
 
 		if (!bFound)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("%s: %d번째 동료를 세울 바닥을 찾지 못했습니다."), *OwnerEnemy->GetName(), Index);
+			UE_LOG(LogTemp, Warning, TEXT("%s: %d번째 동료의 소환 위치를 확보하지 못했습니다. 바닥, 착지 공간, 걸어 나올 경로를 확인하세요."), *OwnerEnemy->GetName(), Index);
 			continue;
 		}
 
@@ -139,11 +144,19 @@ int32 UAllySummonComponent::SummonAllies(AActor* CombatActor)
 		}
 	}
 
+	if (SpawnedCount == 0)
+	{
+		bHasSummoned = false;
+	}
+
 	return SpawnedCount;
 }
 
 AEnemy* UAllySummonComponent::SpawnAlly(const FEnemyClimbEntrance& InEntrance, AActor* CombatActor, float Delay) const
 {
+	// 앞서 소환한 동료나 이동 물체가 공간을 차지했으면 이번 자리는 사용하지 않는다.
+	if (!IsEntranceClear(InEntrance)) return nullptr;
+
 	UWorld* World = GetWorld();
 	UObjectPoolSubsystem* PoolSubsystem = World->GetSubsystem<UObjectPoolSubsystem>();
 	if (!PoolSubsystem)
@@ -217,11 +230,13 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 	{
 		return false;
 	}
+	if (Hit.bStartPenetrating) return false;
+	if (!AllyDefault->GetCharacterMovement()->IsWalkable(Hit)) return false;
 
 	const float FloorZ = Hit.ImpactPoint.Z;
 	const float ProbeZ = FloorZ + EdgeWallProbeHeight;
 
-	// 배경 쪽으로 나아가며 막는 벽이나 바닥이 끊긴 곳을 찾는다. 못 찾으면 최대 거리를 가장자리로 쓴다.
+	// 실제 가장자리가 없으면 최대 탐색 거리 뒤의 지면 아래에서 등장 연출을 시작한다.
 	float EdgeDistance = MaxEdgeSearchDistance;
 	for (float Distance = EdgeSearchStep; Distance <= MaxEdgeSearchDistance; Distance += EdgeSearchStep)
 	{
@@ -265,9 +280,10 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 	OutEntrance.LedgeLocation = FVector(X, OwnerLocation.Y + BackgroundDirectionY * LedgeDistance, StandZ);
 	OutEntrance.StartLocation = FVector(
 		X,
-		EdgeY + BackgroundDirectionY * ClimbStartBehindEdge,
+		EdgeY + BackgroundDirectionY * FMath::Max(ClimbStartBehindEdge, AllyRadius + 2.0f),
 		StandZ - ClimbStartDepth
 	);
+	if (!IsEntranceClear(OutEntrance)) return false;
 
 	if (bDrawSummonDebug)
 	{
@@ -276,6 +292,57 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 		DrawDebugSphere(GetWorld(), FVector(X, EdgeY, FloorZ), 15.0f, 8, FColor::Red, false, 5.0f);
 	}
 
+	return true;
+}
+
+bool UAllySummonComponent::IsEntranceClear(const FEnemyClimbEntrance& Entrance) const
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+	if (!SummonClass) return false;
+
+	const AEnemy* AllyDefault = SummonClass->GetDefaultObject<AEnemy>();
+	if (!IsValid(AllyDefault)) return false;
+
+	const UCapsuleComponent* Capsule = AllyDefault->GetCapsuleComponent();
+	if (!IsValid(Capsule)) return false;
+
+	const UCharacterMovementComponent* Movement = AllyDefault->GetCharacterMovement();
+	if (!IsValid(Movement)) return false;
+
+	const float Radius = Capsule->GetScaledCapsuleRadius();
+	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Radius, HalfHeight);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(AllySummonClearance), false);
+	FCollisionResponseParams Response(Capsule->GetCollisionResponseToChannels());
+	Response.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
+	Response.CollisionResponse.SetResponse(ECC_Monster, ECR_Ignore);
+	const ECollisionChannel Channel = OwnerEnemy->GetCapsuleComponent()->GetCollisionObjectType();
+
+	FCollisionObjectQueryParams Characters;
+	Characters.AddObjectTypesToQuery(ECC_Pawn);
+	Characters.AddObjectTypesToQuery(ECC_Monster);
+	// 오르기 시작점은 충돌을 끄고 벽·지면을 통과하는 연출 구간이므로 검사하지 않는다.
+	for (const FVector& Location : { Entrance.LedgeLocation, Entrance.PlayLocation })
+	{
+		if (World->OverlapBlockingTestByChannel(Location, FQuat::Identity, Channel, Shape, Params, Response)) return false;
+		if (World->OverlapAnyTestByObjectType(Location, FQuat::Identity, Characters, Shape, Params)) return false;
+	}
+
+	// 캡슐 중심 아래의 걸을 수 있는 바닥을 확인한다. 좁은 발판도 일반 캐릭터처럼 허용한다.
+	for (const FVector& Location : { Entrance.LedgeLocation, Entrance.PlayLocation })
+	{
+		const FVector Feet = Location - FVector(0, 0, HalfHeight);
+		FHitResult FloorHit;
+		if (!World->LineTraceSingleByChannel(FloorHit, Feet + FVector(0, 0, EdgeWallProbeHeight),
+			Feet - FVector(0, 0, EdgeFloorTolerance), Channel, Params, Response)) return false;
+		if (FloorHit.bStartPenetrating) return false;
+		if (!Movement->IsWalkable(FloorHit)) return false;
+	}
+
+	FHitResult PathHit;
+	if (World->SweepSingleByChannel(PathHit, Entrance.LedgeLocation, Entrance.PlayLocation,
+		FQuat::Identity, Channel, Shape, Params, Response)) return false;
 	return true;
 }
 

@@ -184,6 +184,7 @@ void UBossLostTargetComponent::StartRoar()
 	ABossEnemy* Owner = Boss.Get();
 
 	LostTargetState = EBossLostTargetState::Roaring;
+	Owner->NotifyLostTargetRoarStarted();
 
 	// 이 위치를 찾아봤는데 없었다. 이후 마지막 목격 위치가 바뀌면 새 단서로 본다.
 	const UEnemyDetectionComponent* Detection = Owner->GetEneymDetectionComponent();

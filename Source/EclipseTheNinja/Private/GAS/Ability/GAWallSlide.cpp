@@ -12,6 +12,7 @@
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "TimerManager.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallSlide, "Ability.Movement.WallSlide");
 
@@ -65,6 +66,7 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
 	// InstancedPerActor이므로 이전 실행의 완료 상태를 초기화한다.
 	bSildeCompleted = false;
+	bSlideMovementStarted = false;
 
 	const ACharacter* Player = Cast<ACharacter>(ActorInfo->AvatarActor.Get());
 	if (!IsValid(Player))
@@ -126,6 +128,18 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
 	// 미끄러질 시간 계산 (벽 높이에 상관없이 동일한 속도로 떨어지기 때문에 Duration이 달라야함)
 	const float Duration = SlideDist / SlideSpeed;
+	if (Duration <= KINDA_SMALL_NUMBER)
+	{
+		OnSlideInterrupted();
+		return;
+	}
+
+	// 매달리기 종료가 Falling으로 바꾸므로 먼저 취소한 뒤 슬라이드 이동 모드를 적용한다.
+	FGameplayTagContainer CancelTags;
+	CancelTags.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	ASC->CancelAbilities(&CancelTags, nullptr, this);
+	bSlideMovementStarted = true;
 
 	// 아래로 미끄러지는 태스크 시작
 	UAbilityTask_ApplyRootMotionMoveToForce* MoveTask = UAbilityTask_ApplyRootMotionMoveToForce::ApplyRootMotionMoveToForce(
@@ -146,11 +160,10 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	MoveTask->OnTimedOut.AddDynamic(this, &UGAWallSlide::OnSlideInterrupted);
 	MoveTask->ReadyForActivation();
 
-	// 몽타주 재생과 같은 프레임(확실한 정보는 아님)에 어빌리티 취소 
-	FGameplayTagContainer CancelTags;
-	CancelTags.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	ASC->CancelAbilities(&CancelTags, nullptr, this);
+	// 내려가는 동안 벽이 끝나면 루트 모션을 끝내고 중력으로 낙하한다.
+	CheckSlideWall();
+	if (!IsActive()) return;
+	GetWorld()->GetTimerManager().SetTimer(WallCheckTimer, this, &UGAWallSlide::CheckSlideWall, 0.016f, true);
 
 	// 몽타주 재생
 	LodaedSlideMontage = SlideMontage.LoadSynchronous();
@@ -171,6 +184,7 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
 void UGAWallSlide::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	GetWorld()->GetTimerManager().ClearTimer(WallCheckTimer);
 	ACharacter* Player = nullptr;
 	if (ActorInfo)
 	{
@@ -178,12 +192,14 @@ void UGAWallSlide::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 	}
 
 	// 이번 실행의 결과만 사용하고 종료 전에 상태를 비운다.
-	const bool bCompleted = bSildeCompleted;
+	bool bShouldFall = bSildeCompleted;
+	if (bSlideMovementStarted) bShouldFall = true;
 	bSildeCompleted = false;
+	bSlideMovementStarted = false;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 
-	if (!bCompleted) return;
+	if (!bShouldFall) return;
 	if (!IsValid(Player)) return;
 
 	UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
@@ -191,6 +207,29 @@ void UGAWallSlide::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 
 	Movement->StopMovementImmediately();
 	Movement->SetMovementMode(MOVE_Falling);
+}
+
+void UGAWallSlide::CheckSlideWall()
+{
+	if (!IsActive()) return;
+
+	const ACharacter* Player = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	if (!IsValid(Player)) { OnSlideInterrupted(); return; }
+
+	const UCapsuleComponent* Capsule = Player->GetCapsuleComponent();
+	if (!IsValid(Capsule)) { OnSlideInterrupted(); return; }
+
+	// 몸통 높이에 실제 매달릴 벽이 있는지 확인한다. 바닥이나 완만한 경사는 제외한다.
+	const FVector Start = Player->GetActorLocation();
+	const FVector End = Start + Player->GetActorForwardVector() * (Capsule->GetScaledCapsuleRadius() + 60.0f);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(WallSlideWall), false, Player);
+	FHitResult Hit;
+	if (!GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_GameTraceChannel2, Params))
+	{
+		OnSlideInterrupted();
+		return;
+	}
+	if (FMath::Abs(Hit.ImpactNormal.Z) > 0.3f) OnSlideInterrupted();
 }
 
 void UGAWallSlide::OnSlideCompleted()

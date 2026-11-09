@@ -71,8 +71,14 @@ void APlayerCharacterController::PlayerTick(float DeltaTime)
     const bool bCloneTargeting = ControlledCharacter && ControlledCharacter->IsCloneTargeting();
     const FKey CursorX = bCloneTargeting ? EKeys::Gamepad_LeftX : EKeys::Gamepad_RightX;
     const FKey CursorY = bCloneTargeting ? EKeys::Gamepad_LeftY : EKeys::Gamepad_RightY;
-    FVector2D Stick(GetInputAnalogKeyState(CursorX), -GetInputAnalogKeyState(CursorY));
-    if ((bGamepadAiming || bCloneTargeting) && bInvertGamepadAimCursorY)
+    FVector2D Stick(GetInputAnalogKeyState(CursorX), GetInputAnalogKeyState(CursorY));
+
+    // 왼쪽 스틱은 화면 좌표에 맞추고, 오른쪽 스틱은 정상인 조준 방향을 기본으로 사용한다.
+    if (bCloneTargeting)
+    {
+        Stick.Y *= -1.0;
+    }
+    else if (bGamepadAiming && !bInvertGamepadAimCursorY)
     {
         Stick.Y *= -1.0;
     }
@@ -417,6 +423,7 @@ void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
             {
                 Possess(RespawnedCharacter);
                 Subsystem->RespawnAtCheckpoint(RespawnedCharacter);
+                FadeInAfterRespawn();
                 return;
             }
         }
@@ -436,7 +443,17 @@ void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
             UE_LOG(LogTemp, Display, TEXT("RespawnTest"));
             // possess the character
             Possess(RespawnedCharacter);
+            FadeInAfterRespawn();
         }
+    }
+}
+
+void APlayerCharacterController::FadeInAfterRespawn()
+{
+    // 사망 연출(보스 처형 등)이 화면을 어둡게 한 채 리스폰했으면 다시 밝힌다. 어둡지 않으면 아무것도 하지 않는다
+    if (IsValid(PlayerCameraManager) && PlayerCameraManager->FadeAmount > KINDA_SMALL_NUMBER)
+    {
+        PlayerCameraManager->StartCameraFade(PlayerCameraManager->FadeAmount, 0.0f, this->RespawnFadeInTime, FLinearColor::Black, false, false);
     }
 }
 

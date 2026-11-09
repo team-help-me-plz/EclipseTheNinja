@@ -71,6 +71,8 @@ bool UGABossPatternBase::CanActivateAbility(
 	}
 
 	// 피격·패링 경직 중에는 새 패턴을 시작하지 않는다.
+	if (Enemy->IsBeingAssassinated()) return false;
+
 	if (Enemy->IsPlayingHitReaction())
 	{
 		return false;

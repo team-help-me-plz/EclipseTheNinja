@@ -119,7 +119,8 @@ public:
 	FVector ChooseNextPatrolLocation();
 
 	UFUNCTION(BlueprintPure, Category = "AI")
-	bool IsReadyForAI() const { return HasActorBegunPlay() && !bIsDead; }
+	bool IsReadyForAI() const;
+	bool IsBeingAssassinated() const;
 
 	// 감지/추적/공격 판정용. 생존한 플레이어인지만 확인하고 활동 영역은 검사하지 않는다.
 	UFUNCTION(BlueprintPure, Category = "AI|Target")

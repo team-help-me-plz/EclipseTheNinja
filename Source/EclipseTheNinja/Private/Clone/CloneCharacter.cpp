@@ -438,6 +438,7 @@ void ACloneCharacter::RefreshHighlight()
 
 void ACloneCharacter::RegisterSafePoint_Implementation(const ATargetPoint* InSafePoint)
 {
+	if (!IsValid(InSafePoint)) return;
 	this->SafePointLocation = InSafePoint->GetActorLocation();
 	this->SafePointRotate = InSafePoint->GetActorRotation();
 }

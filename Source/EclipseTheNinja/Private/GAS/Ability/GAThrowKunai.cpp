@@ -224,8 +224,8 @@ void UGAThrowKunai::OnKunaiReleased(FGameplayEventData Payload)
         }
     }
 
-    // 손/오프셋이 벽 너머에 있으면 벽을 건너뛰어 발사하지 않는다.
-    // 몸과 손 사이에 캐릭터(Pawn)가 있으면 취소하지 않고, 아래에서 생성 직후 명중으로 처리한다.
+    // 손이 장애물 너머에 있으면 최초 접촉 위치에서 생성해 즉시 명중시킨다.
+    // 줄도 같은 경로로 처리해야 발사 직전 검사에서 표창만 사라지지 않는다.
     const bool bLaunchBlocked =
         ProjectileClass->GetDefaultObject<AKunaiProjectile>()->SweepLaunchPath(
             Character->GetWorld(),
@@ -234,10 +234,9 @@ void UGAThrowKunai::OnKunaiReleased(FGameplayEventData Payload)
             QueryParams,
             LaunchHit
         );
-    if (bLaunchBlocked && !Cast<APawn>(LaunchHit.GetActor()))
+    if (bLaunchBlocked)
     {
-        OnMontageInterrupted();
-        return;
+        SpawnLocation = LaunchHit.Location;
     }
 
     FVector Direction = GetThrowDirection(Character, SpawnLocation);

@@ -33,6 +33,7 @@ public:
 
 	// 현재 이 컴포넌트를 대상으로 암살이 진행중인지 세팅하는 함수
 	void SetAssassinationInProgress(bool bInProgress) { bAssassinationInProgress = bInProgress; }
+	bool IsAssassinationInProgress() const { return bAssassinationInProgress; }
 
 	/** 암살가능 상태를 표시하는 테두리를 켜고끄는 함수*/
 	UFUNCTION(BlueprintCallable, Category = "Assassinate|Outline")
