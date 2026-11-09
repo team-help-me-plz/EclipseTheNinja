@@ -47,6 +47,10 @@ protected:
 	TSoftObjectPtr<UAnimMontage> SlideMontage;
 
 private:
+	void CheckSlideWall();
+	FTimerHandle WallCheckTimer;
+	bool bSlideMovementStarted = false;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> LodaedSlideMontage;
 
