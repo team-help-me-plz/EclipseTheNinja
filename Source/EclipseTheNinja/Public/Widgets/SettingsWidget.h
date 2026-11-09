@@ -13,6 +13,8 @@ class UTextBlock;
 class UVerticalBox;
 class UWidgetSwitcher;
 class UInputMappingContext;
+class UEnhancedInputUserSettings;
+class UKeyBindingSelector;
 class UUserAudioSettingsSubsystem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSettingsClosed);
@@ -94,9 +96,13 @@ protected:
 	// 현재 GameUserSettings 값을 UI에 반영
 	void	LoadCurrentSettings();
 
-	// 조작키 탭에 표시할 입력 매핑
+	// 메인 메뉴에서도 플레이 중인 매핑을 등록할 수 있게 한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Controls")
 	TSoftObjectPtr<UInputMappingContext>	DisplayMappingContext;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Controls")
+	TSoftObjectPtr<UInputMappingContext> TutorialMappingContext = TSoftObjectPtr<UInputMappingContext>(
+		FSoftObjectPath(TEXT("/Game/Blueprint/Week_4/ParryTest/IMC_ParryTest.IMC_ParryTest")));
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings|Style")
 	FLinearColor	AccentColor = FLinearColor::FromSRGBColor(FColor(196, 150, 102));
@@ -148,6 +154,19 @@ protected:
 	TObjectPtr<UVerticalBox>	KeyBindingList = nullptr;
 
 private:
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> KeyBindingStatus;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UKeyBindingSelector>> KeyBindingSelectors;
+
+	UEnhancedInputUserSettings* GetInputUserSettings() const;
+	void HandleBindingKeyChanged(UKeyBindingSelector& Selector, const FKey& NewKey);
+	void SetKeyBindingStatus(const FText& Message, bool bWarning);
+
+	UFUNCTION()
+	void ResetKeyBindings();
+
 	void		BuildDefaultLayout();
 	UVerticalBox*	MakePage(const FText& InHeader);
 	void		AddRow(UVerticalBox* InPage, const FText& InLabel, UWidget* InValue);
