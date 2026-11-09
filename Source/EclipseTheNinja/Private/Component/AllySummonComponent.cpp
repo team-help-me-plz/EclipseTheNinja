@@ -91,7 +91,7 @@ int32 UAllySummonComponent::SummonAllies(AActor* CombatActor)
 		return 0;
 	}
 
-	// 자리가 없어 하나도 못 불러도 다시 시도하지 않는다.
+	// 스폰 중 재진입을 막는다. 한 마리도 못 불렀으면 끝에서 소환 기회를 되돌린다.
 	bHasSummoned = true;
 
 	const FVector OwnerLocation = OwnerEnemy->GetActorLocation();
@@ -126,12 +126,15 @@ int32 UAllySummonComponent::SummonAllies(AActor* CombatActor)
 
 		// 대상 쪽에 바닥이 없으면 반대쪽에서 찾는다.
 		FEnemyClimbEntrance Entrance;
-		const bool bFound = FindEntrance(OwnerLocation.X + Side * Offset, BackgroundDirectionY, Entrance)
-			|| FindEntrance(OwnerLocation.X - Side * Offset, BackgroundDirectionY, Entrance);
+		bool bFound = FindEntrance(OwnerLocation.X + Side * Offset, BackgroundDirectionY, Entrance);
+		if (!bFound)
+		{
+			bFound = FindEntrance(OwnerLocation.X - Side * Offset, BackgroundDirectionY, Entrance);
+		}
 
 		if (!bFound)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("%s: %d번째 동료를 세울 바닥을 찾지 못했습니다."), *OwnerEnemy->GetName(), Index);
+			UE_LOG(LogTemp, Warning, TEXT("%s: %d번째 동료의 소환 위치를 확보하지 못했습니다. 바닥, 착지 공간, 걸어 나올 경로를 확인하세요."), *OwnerEnemy->GetName(), Index);
 			continue;
 		}
 
@@ -139,6 +142,11 @@ int32 UAllySummonComponent::SummonAllies(AActor* CombatActor)
 		{
 			++SpawnedCount;
 		}
+	}
+
+	if (SpawnedCount == 0)
+	{
+		bHasSummoned = false;
 	}
 
 	return SpawnedCount;
@@ -228,9 +236,8 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 	const float FloorZ = Hit.ImpactPoint.Z;
 	const float ProbeZ = FloorZ + EdgeWallProbeHeight;
 
-	// 배경 쪽으로 나아가며 막는 벽이나 바닥이 끊긴 곳을 찾는다.
+	// 실제 가장자리가 없으면 최대 탐색 거리 뒤의 지면 아래에서 등장 연출을 시작한다.
 	float EdgeDistance = MaxEdgeSearchDistance;
-	bool bFoundEdge = false;
 	for (float Distance = EdgeSearchStep; Distance <= MaxEdgeSearchDistance; Distance += EdgeSearchStep)
 	{
 		const float PrevY = OwnerLocation.Y + BackgroundDirectionY * (Distance - EdgeSearchStep);
@@ -247,7 +254,6 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 		if (bWallHit)
 		{
 			EdgeDistance = FMath::Abs(Hit.ImpactPoint.Y - OwnerLocation.Y);
-			bFoundEdge = true;
 			break;
 		}
 
@@ -262,12 +268,9 @@ bool UAllySummonComponent::FindEntrance(float X, float BackgroundDirectionY, FEn
 		if (!bFloorHit)
 		{
 			EdgeDistance = Distance - EdgeSearchStep;
-			bFoundEdge = true;
 			break;
 		}
 	}
-	// 끝없이 이어진 바닥을 절벽으로 가정해 지면 속에서 등장시키지 않는다.
-	if (!bFoundEdge) return false;
 
 	const float StandZ = FloorZ + AllyHalfHeight + 2.0f;
 	const float LedgeDistance = FMath::Max(0.0f, EdgeDistance - AllyRadius - LedgeInset);
@@ -319,27 +322,22 @@ bool UAllySummonComponent::IsEntranceClear(const FEnemyClimbEntrance& Entrance) 
 	FCollisionObjectQueryParams Characters;
 	Characters.AddObjectTypesToQuery(ECC_Pawn);
 	Characters.AddObjectTypesToQuery(ECC_Monster);
-	for (const FVector& Location : { Entrance.StartLocation, Entrance.LedgeLocation, Entrance.PlayLocation })
+	// 오르기 시작점은 충돌을 끄고 벽·지면을 통과하는 연출 구간이므로 검사하지 않는다.
+	for (const FVector& Location : { Entrance.LedgeLocation, Entrance.PlayLocation })
 	{
 		if (World->OverlapBlockingTestByChannel(Location, FQuat::Identity, Channel, Shape, Params, Response)) return false;
 		if (World->OverlapAnyTestByObjectType(Location, FQuat::Identity, Characters, Shape, Params)) return false;
 	}
 
-	// 중심 아래 한 점만 맞는 좁은 턱은 제외하고 캡슐 발밑 면적을 확인한다.
-	const float SupportRadius = Radius * 0.7f;
-	const FVector Offsets[] = { FVector::ZeroVector, FVector(SupportRadius, 0, 0), FVector(-SupportRadius, 0, 0),
-		FVector(0, SupportRadius, 0), FVector(0, -SupportRadius, 0) };
+	// 캡슐 중심 아래의 걸을 수 있는 바닥을 확인한다. 좁은 발판도 일반 캐릭터처럼 허용한다.
 	for (const FVector& Location : { Entrance.LedgeLocation, Entrance.PlayLocation })
 	{
-		for (const FVector& Offset : Offsets)
-		{
-			const FVector Feet = Location + Offset - FVector(0, 0, HalfHeight);
-			FHitResult FloorHit;
-			if (!World->LineTraceSingleByChannel(FloorHit, Feet + FVector(0, 0, EdgeWallProbeHeight),
-				Feet - FVector(0, 0, EdgeFloorTolerance), Channel, Params, Response)) return false;
-			if (FloorHit.bStartPenetrating) return false;
-			if (!Movement->IsWalkable(FloorHit)) return false;
-		}
+		const FVector Feet = Location - FVector(0, 0, HalfHeight);
+		FHitResult FloorHit;
+		if (!World->LineTraceSingleByChannel(FloorHit, Feet + FVector(0, 0, EdgeWallProbeHeight),
+			Feet - FVector(0, 0, EdgeFloorTolerance), Channel, Params, Response)) return false;
+		if (FloorHit.bStartPenetrating) return false;
+		if (!Movement->IsWalkable(FloorHit)) return false;
 	}
 
 	FHitResult PathHit;

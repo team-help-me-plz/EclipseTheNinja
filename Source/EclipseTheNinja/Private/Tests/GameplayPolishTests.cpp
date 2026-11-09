@@ -275,8 +275,25 @@ bool FAllySummonPolishTest::RunTest(const FString& Parameters)
     FindFProperty<FClassProperty>(Summon->GetClass(), TEXT("SummonClass"))->SetObjectPropertyValue_InContainer(Summon, AEnemy::StaticClass());
     FindFProperty<FIntProperty>(Summon->GetClass(), TEXT("SummonCount"))->SetPropertyValue_InContainer(Summon, 1);
 
-    AddExpectedError(TEXT("EnemyClimbEntranceComponent"), EAutomationExpectedErrorFlags::Contains, 1);
+    AddExpectedError(TEXT("EnemyClimbEntranceComponent"), EAutomationExpectedErrorFlags::Contains, 4);
     TestEqual(TEXT("바닥과 공간이 충분하면 소환"), Summon->SummonAllies(nullptr), 1);
+
+    // 가장자리가 탐색 범위 밖에 있어도 충돌을 끈 등장 연출은 허용한다.
+    FloorBox->SetBoxExtent(FVector(1000, 2000, 20));
+    Floor->SetActorLocation(FVector(2000, 0, -20));
+    Owner->SetActorLocation(FVector(2000, 0, 100));
+    Summon->ResetSummon();
+    TestEqual(TEXT("넓은 평지에서도 소환"), Summon->SummonAllies(nullptr), 1);
+
+    FloorBox->SetBoxExtent(FVector(1000, 20, 20));
+    Floor->SetActorLocation(FVector(4000, 0, -20));
+    Owner->SetActorLocation(FVector(4000, 0, 100));
+    Summon->ResetSummon();
+    TestEqual(TEXT("중심 아래에 바닥이 있는 좁은 발판에서도 소환"), Summon->SummonAllies(nullptr), 1);
+
+    FloorBox->SetBoxExtent(FVector(1000, 250, 20));
+    Floor->SetActorLocation(FVector(0, 0, -20));
+    Owner->SetActorLocation(FVector(0, 0, 100));
 
     AActor* Wall = Fixture.World->SpawnActor<AActor>();
     if (!TestNotNull(TEXT("소환 공간 장애물 생성"), Wall)) return false;
@@ -288,14 +305,22 @@ bool FAllySummonPolishTest::RunTest(const FString& Parameters)
     WallBox->RegisterComponent();
     Wall->SetActorLocation(FVector(0, 0, 100));
 
-    AddExpectedError(TEXT("동료를 세울 바닥"), EAutomationExpectedErrorFlags::Contains, 2);
+    AddExpectedError(TEXT("동료의 소환 위치"), EAutomationExpectedErrorFlags::Contains, 2);
     Summon->ResetSummon();
     TestEqual(TEXT("양쪽 공간이 막히면 소환하지 않음"), Summon->SummonAllies(nullptr), 0);
+    TestFalse(TEXT("전부 실패하면 소환 기회를 소모하지 않음"), Summon->HasSummoned());
 
     Wall->Destroy();
+    Floor->SetActorLocation(FVector(6000, 0, -20));
+    Owner->SetActorLocation(FVector(6000, 0, 100));
+    TestEqual(TEXT("기회를 초기화하지 않아도 장애물 해소 후 재시도 성공"), Summon->SummonAllies(nullptr), 1);
+    TestTrue(TEXT("한 마리라도 성공하면 소환 기회 소모"), Summon->HasSummoned());
+    TestEqual(TEXT("성공한 소환은 반복하지 않음"), Summon->SummonAllies(nullptr), 0);
+
     Floor->Destroy();
     Summon->ResetSummon();
     TestEqual(TEXT("지면이 없으면 소환하지 않음"), Summon->SummonAllies(nullptr), 0);
+    TestFalse(TEXT("바닥이 없는 실패도 재시도 가능 상태 유지"), Summon->HasSummoned());
     return true;
 }
 
