@@ -16,6 +16,8 @@
 #include "Engine/World.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
+#include "Components/AudioComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
@@ -120,6 +122,7 @@ void ABurnableVine::ResetToInitial_Implementation()
 	}
 	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다.
 	this->BurnEffect->DeactivateImmediate();
+	this->StopBurnSound(true);
 	if (this->bIsBurned)
 	{
 		this->bIsBurned = false;
@@ -145,6 +148,10 @@ void ABurnableVine::Ignite()
 	}
 	this->bIsBurning = true;
 	this->BurnEffect->Activate(true);
+	if (this->BurnSound)
+	{
+		this->BurnAudio = UGameplayStatics::SpawnSoundAtLocation(this, this->BurnSound, GetActorLocation());
+	}
 	GetWorld()->GetTimerManager().SetTimer(
 		this->BurnTimer,
 		this,
@@ -159,6 +166,24 @@ void ABurnableVine::Ignite()
 		this->SpreadDelay,
 		false
 	);
+}
+
+void ABurnableVine::StopBurnSound(bool bImmediate)
+{
+	if (!IsValid(this->BurnAudio))
+	{
+		this->BurnAudio = nullptr;
+		return ;
+	}
+	if (bImmediate)
+	{
+		this->BurnAudio->Stop();
+	}
+	else
+	{
+		this->BurnAudio->FadeOut(0.3f, 0.f);
+	}
+	this->BurnAudio = nullptr;
 }
 
 void ABurnableVine::FinishBurn()
@@ -180,6 +205,7 @@ void ABurnableVine::FinishBurn()
 	this->SetAssemblyVisible(this->BurnedMeshAssembly, true);
 	// 새 파티클 생성만 멈추고, 남은 불꽃은 수명대로 자연스럽게 사라지게 한다.
 	this->BurnEffect->Deactivate();
+	this->StopBurnSound(false);
 
 	// 다 탄 덩굴은 되살아나지 않으므로 세이브에 기록한다
 	if (UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this))

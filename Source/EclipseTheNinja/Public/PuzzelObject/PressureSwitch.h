@@ -14,6 +14,7 @@ class UBoxComponent;
 class UStaticMeshComponent;
 class UCheckpointBoundComponent;
 class UInteractHighlightComponent;
+class USoundBase;
 
 UCLASS()
 class ECLIPSETHENINJA_API APressureSwitch : public AActor, public IInteractable, public ICheckpointResettable
@@ -21,7 +22,8 @@ class ECLIPSETHENINJA_API APressureSwitch : public AActor, public IInteractable,
 	GENERATED_BODY()
 
 public:
-	APressureSwitch();
+	// 하위 클래스가 기본 컴포넌트 생성을 건너뛸 수 있도록 ObjectInitializer를 받는다
+	APressureSwitch(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	virtual void	Tick(float DeltaTime) override;
 
@@ -90,6 +92,10 @@ protected:
 	// 여러번 Interact 할 수 있는 액터인가
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Interact|State")
 	bool	bIsReinteractable = false;
+
+	// 발판이 눌려 대상을 작동시켰을 때 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	PressSound = nullptr;
 
 private:
 	// 현재 플래그로 InteractState를 다시 계산하고 하이라이트를 갱신

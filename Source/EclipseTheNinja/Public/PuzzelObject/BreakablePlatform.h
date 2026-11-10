@@ -12,6 +12,7 @@ class UBoxComponent;
 class UStaticMeshComponent;
 class UCheckpointBoundComponent;
 class UNiagaraComponent;
+class USoundBase;
 class ACharacter;
 
 enum class EBreakablePlatformState
@@ -96,6 +97,10 @@ protected:
 	// BreakEffect 재생 시간. 이 시간이 지나면 남은 파티클까지 즉시 지운다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Break|Effect", meta = (ClampMin = "0.01"))
 	float	BreakEffectDuration = 0.2f;
+
+	// 플랫폼이 무너질 때 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	BreakSound = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Break|Timer")
 	float	BreakTime = 0.5f;

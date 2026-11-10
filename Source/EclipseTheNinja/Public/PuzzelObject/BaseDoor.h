@@ -16,6 +16,7 @@ class UCheckpointBoundComponent;
 class UInteractHighlightComponent;
 class UActivateHighlightComponent;
 class UWidgetComponent;
+class USoundBase;
 
 UCLASS()
 class ECLIPSETHENINJA_API ABaseDoor : public AActor, public IActivatable, public IInteractable, public ICheckpointResettable, public IVineLockable
@@ -79,6 +80,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Interactable", meta = (ClampMin = "0.01"))
 	bool	bIsInteractable = true;
 
+	// 레벨 시작 시 열린 상태로 둘지. 체크포인트 리셋도 이 상태로 돌아간다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	bool	bStartOpen = false;
+
+	// 문이 열리기 시작할 때 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	OpenSound = nullptr;
+
+	// 문이 닫히기 시작할 때 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	CloseSound = nullptr;
+
 	UPROPERTY(Transient)
 	double	OpenAlpha = 0.0;
 
@@ -87,6 +100,9 @@ protected:
 
 private:
 	void	ResetInteractionCooldown();
+
+	// 지금 열림 상태에 맞는 열림/닫힘 사운드를 재생한다. 리셋·이어하기처럼 연출 없이 바뀔 때는 부르지 않는다
+	void	PlayDoorSound() const;
 
 	// 열림 상태를 세이브에 기록한다
 	void	SaveDoorState() const;
