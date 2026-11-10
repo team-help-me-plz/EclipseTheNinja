@@ -2,7 +2,9 @@
 
 
 #include "Character/PlayerCharacterController.h"
+#include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerStart.h"
@@ -69,16 +71,10 @@ void APlayerCharacterController::PlayerTick(float DeltaTime)
     const bool bGamepadAiming = IsInputKeyDown(EKeys::Gamepad_LeftTrigger);
     const APlayerCharacter* ControlledCharacter = Cast<APlayerCharacter>(GetPawn());
     const bool bCloneTargeting = ControlledCharacter && ControlledCharacter->IsCloneTargeting();
-    const FKey CursorX = bCloneTargeting ? EKeys::Gamepad_LeftX : EKeys::Gamepad_RightX;
-    const FKey CursorY = bCloneTargeting ? EKeys::Gamepad_LeftY : EKeys::Gamepad_RightY;
-    FVector2D Stick(GetInputAnalogKeyState(CursorX), GetInputAnalogKeyState(CursorY));
+    FVector2D Stick(GetInputAnalogKeyState(EKeys::Gamepad_RightX), GetInputAnalogKeyState(EKeys::Gamepad_RightY));
 
-    // 왼쪽 스틱은 화면 좌표에 맞추고, 오른쪽 스틱은 정상인 조준 방향을 기본으로 사용한다.
-    if (bCloneTargeting)
-    {
-        Stick.Y *= -1.0;
-    }
-    else if (bGamepadAiming && !bInvertGamepadAimCursorY)
+    // 분신 소환 커서의 상하 방향은 화면 좌표에 맞춘다.
+    if (bCloneTargeting || (bGamepadAiming && !bInvertGamepadAimCursorY))
     {
         Stick.Y *= -1.0;
     }
@@ -152,6 +148,10 @@ void APlayerCharacterController::SetupInputComponent()
     {
         // 게임플레이 IMC가 잠긴 상태에서도 ESC로 메뉴를 열 수 있다.
         InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APlayerCharacterController::OpenPauseMenu);
+    }
+    if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent); EnhancedInput && PauseAction)
+    {
+        EnhancedInput->BindAction(PauseAction, ETriggerEvent::Started, this, &APlayerCharacterController::OpenPauseMenu);
     }
 
     // add the input mapping context
@@ -261,6 +261,16 @@ void APlayerCharacterController::HandlePauseMenuBack()
     }
 
     ResumeFromPauseMenu();
+}
+
+bool APlayerCharacterController::IsPauseMenuKey(const FKey& Key) const
+{
+    if (Key == EKeys::Escape) return true;
+    if (!PauseAction) return false;
+
+    const UEnhancedInputLocalPlayerSubsystem* Subsystem =
+        ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
+    return Subsystem && Subsystem->QueryKeysMappedToAction(PauseAction).Contains(Key);
 }
 
 void APlayerCharacterController::ReturnToMainMenu()

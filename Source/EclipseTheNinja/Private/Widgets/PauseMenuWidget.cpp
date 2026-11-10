@@ -110,7 +110,8 @@ UButton* UPauseMenuWidget::AddMenuButton(UVerticalBox& Menu, const FText& Label,
 
 FReply UPauseMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
 {
-	if (InKeyEvent.GetKey() == EKeys::Escape)
+	const APlayerCharacterController* Controller = Cast<APlayerCharacterController>(GetOwningPlayer());
+	if (Controller && Controller->IsPauseMenuKey(InKeyEvent.GetKey()))
 	{
 		if (!InKeyEvent.IsRepeat())
 		{

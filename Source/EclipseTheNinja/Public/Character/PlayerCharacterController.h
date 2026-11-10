@@ -7,6 +7,7 @@
 #include "PlayerCharacterController.generated.h"
 
 class ASideScrollingCharacter;
+class UInputAction;
 class UInputMappingContext;
 class UPauseMenuWidget;
 class USettingsWidget;
@@ -58,6 +59,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input|Input Mappings")
 	TArray<UInputMappingContext*> MobileExcludedMappingContexts;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Input|Input Actions")
+	TObjectPtr<UInputAction> PauseAction;
+
 	/** Mobile controls widget to spawn */
 	UPROPERTY(EditAnywhere, Category = "Input|Touch Controls")
 	TSubclassOf<UUserWidget> MobileControlsWidgetClass;
@@ -94,6 +98,7 @@ public:
 	void ReturnToMainMenu();
 	bool HasOpenPauseMenu() const { return PauseMenuWidget != nullptr; }
 	void HandlePauseMenuBack();
+	bool IsPauseMenuKey(const FKey& Key) const;
 
 protected:
 
