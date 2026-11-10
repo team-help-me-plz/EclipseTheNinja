@@ -15,6 +15,9 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Component/CuttableComponent.h"
 
@@ -49,6 +52,17 @@ AKunaiProjectile::AKunaiProjectile()
     Movement->bShouldBounce = false;
     Movement->bConstrainToPlane = true;
     Movement->SetPlaneConstraintNormal(FVector::YAxisVector);
+
+    FlightTrail = CreateDefaultSubobject<UNiagaraComponent>(TEXT("FlightTrail"));
+    FlightTrail->SetupAttachment(Mesh);
+    FlightTrail->bAutoActivate = false;
+
+    static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TrailSystem(
+        TEXT("/Game/VFX/Projectiles/NS_ProjectileTrail.NS_ProjectileTrail"));
+    if (TrailSystem.Succeeded())
+    {
+        FlightTrail->SetAsset(TrailSystem.Object);
+    }
 }
 
 void AKunaiProjectile::InitializeKunai(
@@ -105,6 +119,7 @@ void AKunaiProjectile::InitializeKunai(
     Movement->Velocity = LaunchVelocity;
     Movement->MaxSpeed = LaunchVelocity.Size();
     Movement->Activate(true);
+    FlightTrail->Activate(true);
 }
 
 void AKunaiProjectile::IgnoreActorCollision(AActor* InActor)
@@ -189,6 +204,7 @@ void AKunaiProjectile::BeginPlay()
     // 메시가 BP에서 충돌/물리 설정을 덮어썼어도 판정은 전용 구체 하나로 제한한다.
     Mesh->SetSimulatePhysics(false);
     Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    FlightTrail->SetVariableFloat(TEXT("User.TrailSize"), FlightTrailWidth);
     Collision->OnComponentHit.AddDynamic(this, &AKunaiProjectile::OnProjectileHit);
 }
 
@@ -213,6 +229,8 @@ void AKunaiProjectile::OnReturnToPool_Implementation()
 
 void AKunaiProjectile::ClearThrowState()
 {
+    FlightTrail->DeactivateImmediate();
+
     if (AActor* Attached = AttachedActor.Get())
     {
         Attached->OnDestroyed.RemoveDynamic(this, &AKunaiProjectile::OnAttachedActorDestroyed);
@@ -492,6 +510,7 @@ void AKunaiProjectile::OnProjectileHit(
         return;
     }
 
+    FlightTrail->Deactivate();
     AttachToHitTarget(AttachTarget, OtherActor, IncomingDirection);
 }
 
