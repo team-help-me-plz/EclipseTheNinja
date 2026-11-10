@@ -71,6 +71,10 @@ protected:
 	UFUNCTION()
 	void HandleEnergyLinkEnded();
 
+	// 기믹 실패로 처형이 시작되면 레이저를 남은 입자까지 즉시 지운다
+	UFUNCTION()
+	void HandleEnergyLinkFailed();
+
 	// 레이저를 켜고 끝점을 대상 위치에 고정한다.
 	void StartLaser(const AActor* Target);
 

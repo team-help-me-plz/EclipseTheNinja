@@ -46,7 +46,11 @@ public:
 
 	/** 컷신·그로기처럼 보스가 패턴을 쓰면 안 되는 동안 켠다. 켜져 있으면 패턴 어빌리티가 발동하지 않는다. */
 	void SetCinematicLocked(bool bLocked) { bCinematicLocked = bLocked; }
-	bool IsCinematicLocked() const { return bCinematicLocked; }
+	bool IsCinematicLocked() const
+	{
+		if (PendingEnergyLinkIndex != INDEX_NONE) return true;
+		return bCinematicLocked;
+	}
 
 	/** Also callable by an arena trigger/cinematic. Detection of combat starts the UI automatically. */
 	UFUNCTION(BlueprintCallable, Category = "Boss|UI")
@@ -124,6 +128,9 @@ public:
 
 	// 체력이 낮으면 즉시 처치하고, 아니면 가장 가까운 아래쪽 에너지 링크 체력까지 깎는다.
 	virtual void ReceiveAssassination(UAnimMontage* Montage) override;
+
+	/** 대상을 놓쳐 포효를 시작하면 포효 방식의 재암살 제한을 해제한다. */
+	void NotifyLostTargetRoarStarted();
 
 	// 레버가 작동하면 실드를 해제한다.
 	virtual void ToggleActivate_Implementation() override;
@@ -314,6 +321,7 @@ protected:
 
 	// 실드를 켜고 제한시간 타이머를 시작한다.
 	void ActivateEnergyLink(int32 LinkIndex);
+	void TryActivatePendingEnergyLink();
 
 	// 제한시간 안에 실드를 해제하지 못하면 플레이어 입력을 막고 처형을 시작한다.
 	void OnEnergyLinkTimeExpired();
@@ -378,6 +386,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float AssassinationDamageRatio = 0.2f;
 
+	/** 켜면 시간제 쿨다운, 끄면 보스가 대상을 놓쳐 포효를 시작할 때까지 재암살을 차단한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (DisplayName = "Use Assassination Cooldown"))
+	bool bUseAssassinationCooldown = true;
+
+	/** 암살 피해를 받은 시점부터 재암살까지의 대기 시간. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (EditCondition = "bUseAssassinationCooldown", ClampMin = "0.0", Units = "s"))
+	float AssassinationCooldown = 10.0f;
+
 	/** 실드가 켜져 있는 동안 보스 주위에 디버그 구를 그린다. 실드 이펙트(VFXComp)가 생겨 기본은 끈다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Debug")
 	bool bDrawDebugShield = false;
@@ -433,6 +449,15 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Boss|Energy Link")
 	bool bEnergyLinkActive = false;
+
+	// 체력은 먼저 임계값에 고정하고, 암살 연출이 끝나면 링크를 켠다.
+	int32 PendingEnergyLinkIndex = INDEX_NONE;
+	bool bClampingEnergyLinkHealth = false;
+	bool bReceivingAssassination = false;
+
+	// 두 값을 함께 기록해 에디터에서 모드를 바꿔도 마지막 암살 이력을 유지한다.
+	double AssassinationReadyTime = 0.0;
+	bool bAssassinationBlockedUntilRoar = false;
 
 	FTimerHandle EnergyLinkTimer;
 

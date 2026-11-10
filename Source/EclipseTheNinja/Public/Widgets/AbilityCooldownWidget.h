@@ -13,6 +13,26 @@ class UImage;
 class UTextBlock;
 class UGACooldownBase;
 class ABaseCharacter;
+class UInputAction;
+class UInputGlyphWidget;
+class UInputMappingContext;
+class UDataTable;
+
+USTRUCT(BlueprintType)
+struct FCooldownInputPromptBinding
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName KeyTextWidgetName;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName KeyBackgroundWidgetName;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName GamepadIconWidgetName;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<UInputAction> InputAction;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FText KeyboardFallback;
+};
 
 /**
  * 
@@ -28,8 +48,22 @@ public:
 	virtual void NativeDestruct() override;
 
 	virtual void	InitWidget(APawn* InPawn);
+	UFUNCTION(BlueprintPure, Category = "Cooldown|Input")
+	FText GetCooldownInputLabel(int32 BindingIndex, bool bGamepad) const;
 
 protected:
+	UInputGlyphWidget* InstallKeyGlyph(FName TextName, FName BackgroundName, const UInputAction* Action);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputGlyphWidget> AbilityKeyGlyph;
+
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cooldown|Input")
+	TArray<FCooldownInputPromptBinding> InputPromptBindings;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cooldown|Input")
+	TObjectPtr<UInputMappingContext> InputPromptMappingContext;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cooldown|Input")
+	TObjectPtr<UDataTable> InputPromptIconTable;
 	/** 아직 갖지 않은 어빌리티면 위젯을 숨기고, 획득하는 순간 다시 보이게 한다. false면 항상 보인다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
 	bool	bHideUntilGranted = true;
@@ -65,6 +99,8 @@ protected:
 	TWeakObjectPtr<UGACooldownBase> ObservedAbility;
 
 private:
+	void RefreshInputPrompts();
+	TMap<FName, float> OriginalKeyOpacities;
 	void	HandleAbilityGranted(EAbilityInputID InInputID);
 	void	StopWaitingForGrant();
 	void	SetAbilityVisible(bool bInVisible);

@@ -190,9 +190,23 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 	FCollisionResponseParams WorldResponse(Capsule->GetCollisionResponseToChannels());
 	WorldResponse.CollisionResponse.SetResponse(ECC_Pawn, ECR_Ignore);
 
-	if (GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, MoveChannel, Shape, Params, WorldResponse))
+	// 지상에서는 무브먼트가 올라갈 수 있는 턱을 사전 스윕이 벽으로 잘라내지 않게 한다.
+	// 캡슐 윗부분은 유지하고 아래쪽만 줄인다. 실제 이동 충돌과 StepUp 검사는 그대로 수행된다.
+	FCollisionShape PathShape = Shape;
+	FVector PathOffset = FVector::ZeroVector;
+	const UCharacterMovementComponent* PathMovement = Player->GetCharacterMovement();
+	if (IsValid(PathMovement) && PathMovement->IsMovingOnGround())
 	{
-		End = Hit.Location;
+		const float StepClearance = FMath::Clamp(PathMovement->MaxStepHeight, 0.0f,
+			2.0f * (Shape.GetCapsuleHalfHeight() - Shape.GetCapsuleRadius()));
+		PathOffset.Z = StepClearance * 0.5f;
+		PathShape = FCollisionShape::MakeCapsule(Shape.GetCapsuleRadius(), Shape.GetCapsuleHalfHeight() - PathOffset.Z);
+	}
+
+	if (GetWorld()->SweepSingleByChannel(Hit, Start + PathOffset, End + PathOffset,
+		FQuat::Identity, MoveChannel, PathShape, Params, WorldResponse))
+	{
+		End = Hit.Location - PathOffset;
 	}
 
 	End = ResolveDashEnd(Start, End, Dir, Shape, MoveChannel, Params, WorldResponse, Capsule->GetCollisionResponseToChannel(ECC_Pawn));

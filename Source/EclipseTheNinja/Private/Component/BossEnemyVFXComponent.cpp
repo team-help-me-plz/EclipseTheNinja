@@ -37,6 +37,7 @@ void UBossEnemyVFXComponent::BeginPlay()
 
 	Owner->OnEnergyLinkActivated.AddDynamic(this, &UBossEnemyVFXComponent::HandleEnergyLinkActivated);
 	Owner->OnEnergyLinkBroken.AddDynamic(this, &UBossEnemyVFXComponent::HandleEnergyLinkBroken);
+	Owner->OnEnergyLinkFailed.AddDynamic(this, &UBossEnemyVFXComponent::HandleEnergyLinkFailed);
 
 	if (UStatAttributeSet* Stats = Owner->GetStatAttribute())
 	{
@@ -60,6 +61,7 @@ void UBossEnemyVFXComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		Owner->OnEnergyLinkActivated.RemoveDynamic(this, &UBossEnemyVFXComponent::HandleEnergyLinkActivated);
 		Owner->OnEnergyLinkBroken.RemoveDynamic(this, &UBossEnemyVFXComponent::HandleEnergyLinkBroken);
+		Owner->OnEnergyLinkFailed.RemoveDynamic(this, &UBossEnemyVFXComponent::HandleEnergyLinkFailed);
 
 		if (UStatAttributeSet* Stats = Owner->GetStatAttribute())
 		{
@@ -242,6 +244,15 @@ void UBossEnemyVFXComponent::HandleEnergyLinkBroken()
 	if (ShieldComp)
 	{
 		ShieldComp->Deactivate();
+	}
+}
+
+void UBossEnemyVFXComponent::HandleEnergyLinkFailed()
+{
+	// 실패하면 바로 처형 컷신이 나오므로 실드가 서서히 사라지지 않고 즉시 꺼지게 한다.
+	if (ShieldComp)
+	{
+		ShieldComp->DeactivateImmediate();
 	}
 }
 

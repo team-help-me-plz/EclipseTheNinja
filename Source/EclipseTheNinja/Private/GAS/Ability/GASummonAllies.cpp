@@ -147,11 +147,11 @@ void UGASummonAllies::OnMontageCompleted()
 		return;
 	}
 
-	// 노티파이를 넣지 않은 몽타주라도 소환은 되도록 끝날 때 부른다.
+	// 노티파이가 없거나 노티파이 시점의 소환이 전부 실패했으면 종료 시 다시 시도한다.
 	const UAllySummonComponent* SummonComp = GetSummonComponent();
 	if (SummonComp && !SummonComp->HasSummoned())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("%s: 소환 몽타주에 Summon Allies 노티파이가 없어 끝날 때 소환합니다."),
+		UE_LOG(LogTemp, Warning, TEXT("%s: 아직 동료를 소환하지 못해 몽타주 종료 시 소환을 다시 시도합니다."),
 			*GetNameSafe(GetAvatarActorFromActorInfo()));
 
 		SummonNow();

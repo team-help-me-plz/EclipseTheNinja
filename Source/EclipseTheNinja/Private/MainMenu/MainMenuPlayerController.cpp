@@ -3,6 +3,8 @@
 #include "MainMenu/MainMenuPlayerController.h"
 #include "MainMenu/MainMenuGameMode.h"
 #include "Widgets/MainMenuWidget.h"
+#include "TimerManager.h"
+#include "Engine/World.h"
 
 void AMainMenuPlayerController::BeginPlay()
 {
@@ -34,4 +36,12 @@ void AMainMenuPlayerController::BeginPlay()
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(InputMode);
 	this->bShowMouseCursor = true;
+
+	// Apply focus after UIOnly, then once more after the viewport has arranged
+	// the new widget. No synthetic A press is needed to acquire menu focus.
+	this->MainMenuWidget->FocusInitialMenuButton();
+	GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		if (IsValid(MainMenuWidget)) MainMenuWidget->FocusInitialMenuButton();
+	}));
 }

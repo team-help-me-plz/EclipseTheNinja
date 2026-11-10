@@ -127,16 +127,25 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (ClampMin = "0.0", EditCondition = "!bQuitGameOnClear"))
     float TravelDelay = 1.0f;
 
+    // 마지막 스테이지(보스)면 켠다. 클리어를 게임 완료로 저장하고, NextLevel(메인 메뉴 등)을 이어하기 위치로 저장하지 않는다.
+    // 이동 전에 게임 종료 때와 같은 카운트다운 UI(TravelMessageFormat)를 보여 준다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear")
+    bool bFinalStage = false;
+
+    // 마지막 스테이지 카운트다운 안내 메시지. {0}에 QuitCountdownSeconds가 들어간다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (EditCondition = "bFinalStage && !bQuitGameOnClear"))
+    FText TravelMessageFormat = NSLOCTEXT("LevelClearTrigger", "TravelMessage", "목표에 도달했습니다. {0}초 후 메인 메뉴로 돌아갑니다.");
+
     // 켜면 레벨 이동 대신 카운트다운 후 게임을 종료한다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit")
     bool bQuitGameOnClear = false;
 
     // 게임 종료까지 세는 초
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit", meta = (ClampMin = "1", EditCondition = "bQuitGameOnClear"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit", meta = (ClampMin = "1", EditCondition = "bQuitGameOnClear || bFinalStage"))
     int32 QuitCountdownSeconds = 5;
 
     // 카운트다운 중 게임을 일시정지할지 여부
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit", meta = (EditCondition = "bQuitGameOnClear"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit", meta = (EditCondition = "bQuitGameOnClear || bFinalStage"))
     bool bPauseGameOnQuitCountdown = true;
 
     // 카운트다운 안내 메시지. {0}에 QuitCountdownSeconds가 들어간다
@@ -145,6 +154,9 @@ protected:
 
 private:
     bool bIsCleared = false;
+
+    // 카운트다운이 끝나면 게임을 종료하지 않고 NextLevel로 이동한다(마지막 스테이지)
+    bool bCountdownTravels = false;
 
     // 보스 처치 순간의 플레이어 방향을 기록했는지, 그때 -X(왼쪽)를 보고 있었는지
     bool bHasDefeatFacing = false;

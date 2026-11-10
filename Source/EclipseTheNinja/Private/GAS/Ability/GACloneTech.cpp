@@ -406,6 +406,11 @@ void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle,
 	this->OnCloneCannotSwap.Broadcast();
 }
 
+bool UGACloneTech::HasSpawnedClone() const
+{
+	return SpawnedClone.IsValid();
+}
+
 void UGACloneTech::HandleCloneDespawned(ACloneCharacter* DespawnedClone)
 {
 	if (!DespawnedClone)

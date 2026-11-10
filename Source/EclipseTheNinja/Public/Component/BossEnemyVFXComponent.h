@@ -66,6 +66,10 @@ protected:
 	UFUNCTION()
 	void HandleEnergyLinkBroken();
 
+	// 기믹 실패로 처형이 시작되면 실드를 즉시 끈다
+	UFUNCTION()
+	void HandleEnergyLinkFailed();
+
 	// 체력이 깎이는 피해를 받았을 때 피를 튀긴다.
 	void HandleDamageReceived(const FGameplayEffectContextHandle& Context);
 

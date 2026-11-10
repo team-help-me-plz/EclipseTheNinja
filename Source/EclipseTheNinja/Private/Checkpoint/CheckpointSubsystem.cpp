@@ -16,6 +16,23 @@ bool UCheckpointSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType
     return (WorldType == EWorldType::Game || WorldType == EWorldType::PIE);
 }
 
+void UCheckpointSubsystem::RestoreCheckpoint(ECheckpointId Id)
+{
+    CurrentCheckpoint = Id;
+    UpdateCheckpointLights();
+}
+
+void UCheckpointSubsystem::UpdateCheckpointLights()
+{
+    for (const TPair<ECheckpointId, TWeakObjectPtr<ACheckpoint>>& Entry : Checkpoints)
+    {
+        ACheckpoint* Checkpoint = Entry.Value.Get();
+        if (!IsValid(Checkpoint)) continue;
+
+        Checkpoint->SetCheckpointActive(Entry.Key == CurrentCheckpoint);
+    }
+}
+
 void UCheckpointSubsystem::RegisterCheckpoint(ACheckpoint* InCheckpoint)
 {
     if (!IsValid(InCheckpoint))
@@ -26,6 +43,7 @@ void UCheckpointSubsystem::RegisterCheckpoint(ACheckpoint* InCheckpoint)
     const ECheckpointId CheckpointId = InCheckpoint->GetCheckpointId();
     if (CheckpointId == ECheckpointId::None)
     {
+        InCheckpoint->SetCheckpointActive(false);
         UE_LOG(LogTemp, Warning, TEXT("[UCheckpointSubsystem::RegisterCheckpoint()] %s 의 CheckpointId가 None입니다."),
                *InCheckpoint->GetName());
         return;
@@ -34,11 +52,13 @@ void UCheckpointSubsystem::RegisterCheckpoint(ACheckpoint* InCheckpoint)
     const TWeakObjectPtr<ACheckpoint>* Existing = this->Checkpoints.Find(CheckpointId);
     if (Existing && Existing->IsValid() && Existing->Get() != InCheckpoint)
     {
+        Existing->Get()->SetCheckpointActive(false);
         UE_LOG(LogTemp, Warning, TEXT("[UCheckpointSubsystem::RegisterCheckpoint()] %s 가 중복 배치되어 있습니다. (%s, %s)"),
                *UEnum::GetValueAsString(CheckpointId), *Existing->Get()->GetName(), *InCheckpoint->GetName());
     }
 
     this->Checkpoints.Add(CheckpointId, InCheckpoint);
+    InCheckpoint->SetCheckpointActive(CheckpointId == CurrentCheckpoint);
 }
 
 void UCheckpointSubsystem::UnregisterCheckpoint(ACheckpoint* InCheckpoint)
@@ -47,6 +67,8 @@ void UCheckpointSubsystem::UnregisterCheckpoint(ACheckpoint* InCheckpoint)
     {
         return;
     }
+
+    InCheckpoint->SetCheckpointActive(false);
 
     const ECheckpointId CheckpointId = InCheckpoint->GetCheckpointId();
     if (this->Checkpoints.FindRef(CheckpointId).Get() == InCheckpoint)
@@ -57,18 +79,23 @@ void UCheckpointSubsystem::UnregisterCheckpoint(ACheckpoint* InCheckpoint)
 
 void UCheckpointSubsystem::ActivateCheckpoint(ECheckpointId NewCheckpointId)
 {
-    UGameSaveSubsystem* Save = GetWorld()->GetGameInstance()->GetSubsystem<UGameSaveSubsystem>();
+    UGameSaveSubsystem* Save = nullptr;
+    UGameInstance* GameInstance = GetWorld()->GetGameInstance();
+    if (GameInstance)
+    {
+        Save = GameInstance->GetSubsystem<UGameSaveSubsystem>();
+    }
+
     if (Save && Save->IsRestoring()) return;
     // ID 크기와 관계없이 마지막으로 닿은 체크포인트로 갱신한다. 지금 체크포인트에 다시 닿은 경우만 무시한다
-    if (NewCheckpointId == ECheckpointId::None || NewCheckpointId == this->CurrentCheckpoint)
-    {
-        return;
-    }
+    if (NewCheckpointId == ECheckpointId::None) return;
+    if (NewCheckpointId == this->CurrentCheckpoint) return;
 
     UE_LOG(LogTemp, Log, TEXT("[UCheckpointSubsystem::ActivateCheckpoint()] 체크포인트 갱신 : %s -> %s"),
            *UEnum::GetValueAsString(this->CurrentCheckpoint), *UEnum::GetValueAsString(NewCheckpointId));
 
     this->CurrentCheckpoint = NewCheckpointId;
+    UpdateCheckpointLights();
     this->OnCheckpointActivated.Broadcast(NewCheckpointId);
     FTransform Transform;
     if (Save && GetCheckpointTransform(Transform)) Save->SaveCheckpoint(NewCheckpointId, Transform);

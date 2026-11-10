@@ -9,6 +9,7 @@ class ABossEnemy;
 class APlayerCharacter;
 class UAnimMontage;
 class UBrainComponent;
+class UNiagaraSystem;
 
 /**
  * 에너지 링크 기믹에 실패했을 때 보스가 플레이어를 암살하는 연출.
@@ -50,6 +51,10 @@ protected:
 
 	UFUNCTION()
 	void OnExecutionFinished();
+
+	// 처형 뒤 화면이 다 어두워지면 보스를 처형 직전 자리로 되돌리고 어빌리티를 끝낸다.
+	UFUNCTION()
+	void OnEndFadeFinished();
 
 	// 칼이 박히는 순간을 기다렸다가 히트스톱·슬로모션을 건다. 암살자 몽타주를 재생하기 직전에 호출한다.
 	// 암살자 몽타주에 AnimNotify_AssassinateImpact가 있으면 그 프레임을, 없으면 ImpactFallbackTime을 쓴다.
@@ -106,6 +111,56 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Execution|Impact", meta = (EditCondition = "bUseImpactTimeDilation && bUseAnticipation", ClampMin = "0.0", Units = "s"))
 	float SnapLeadTime = 0.06f;
 
+	/** 처형 몽타주(보스는 납도까지)가 끝난 뒤 쓰러진 장면을 더 보여 주는 시간. 그만큼 사망 처리(리스폰)와 보스 AI 재개가 늦어진다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution", meta = (ClampMin = "0.0", Units = "s"))
+	float PostExecutionHoldTime = 0.0f;
+
+	/** 처형이 끝난 뒤 리스폰 전에 화면을 검게 만드는 시간. 리스폰하면 컨트롤러가 다시 밝힌다. 0이면 어둡게 하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution", meta = (ClampMin = "0.0", Units = "s"))
+	float EndFadeOutTime = 0.4f;
+
+	/** 칼이 박히는 순간 플레이어 몸에서 터지는 피 이펙트 */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood")
+	TSoftObjectPtr<UNiagaraSystem> VictimBloodSystem;
+
+	/** 피 이펙트를 붙일 플레이어 메시 뼈. 없으면 캡슐 가운데에서 터진다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood")
+	FName VictimBloodBone = TEXT("spine_03");
+
+	/** 피가 나오는 자리를 정할 보스 칼 뼈. 이 뼈에서 BossBladeAxis 방향으로 뻗은 칼날이 플레이어 몸을 지나는 자리에서 피가 나온다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood")
+	FName BossBladeBone = TEXT("katana_bone");
+
+	/** 칼 뼈 공간에서 칼날이 뻗는 방향 */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood")
+	FVector BossBladeAxis = FVector(0.0, 1.0, 0.0);
+
+	/** 칼 뼈에서 칼끝까지의 길이 */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood", meta = (ClampMin = "0.0", Units = "cm"))
+	float BossBladeLength = 100.0f;
+
+	/** 칼이 박히는 순간 피와 함께 터지는 베인 자국 피 이펙트. 비우면 쓰지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood")
+	TSoftObjectPtr<UNiagaraSystem> VictimBloodSlashSystem;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood", meta = (ClampMin = "0.01"))
+	float VictimBloodScale = 2.0f;
+
+	/** 반복 이펙트를 멈추기까지의 시간 */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood", meta = (ClampMin = "0.0", Units = "s"))
+	float VictimBloodActiveTime = 1.5f;
+
+	/** 칼이 박힌 뒤 쓰러지는 동안 몸에서 피가 더 뿜어져 나오는 횟수와 간격 */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood", meta = (ClampMin = "0"))
+	int32 VictimBloodSpurtCount = 4;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood", meta = (ClampMin = "0.05", Units = "s"))
+	float VictimBloodSpurtInterval = 0.3f;
+
+	/** 추가로 뿜는 피의 크기(처음 터지는 피 대비 배율) */
+	UPROPERTY(EditDefaultsOnly, Category = "Execution|Blood", meta = (ClampMin = "0.01"))
+	float VictimBloodSpurtScaleRatio = 0.7f;
+
 	// 이번 처형에서 보스가 재생하는 암살자 몽타주
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ExecutionAttackMontage;
@@ -117,6 +172,10 @@ protected:
 	// 연출 동안 보스 중력을 끄기 전의 이동 모드
 	TEnumAsByte<EMovementMode> SavedBossMovementMode = MOVE_Walking;
 	bool bBossGravityDisabled = false;
+
+	// 처형 직전 보스 위치. 연출을 끝까지 마치면 화면이 어두운 동안 여기로 되돌린다
+	FTransform BossStartTransform = FTransform::Identity;
+	bool bReturnBossOnEnd = false;
 
 private:
 	UFUNCTION()
@@ -138,6 +197,10 @@ private:
 	void SetTimeScale(float Scale);
 
 	void StartImpactTimeDilation();
+
+	// 칼이 박히는 순간 플레이어 몸에 피 이펙트를 한 번 터뜨린다.
+	void SpawnVictimBlood();
+	bool bVictimBloodSpawned = false;
 
 	// 게임 속도 배율과 무관하게 실제 시간으로 진행해야 하므로 코어 티커로 돈다.
 	bool TickImpactTimeDilation(float DeltaTime);

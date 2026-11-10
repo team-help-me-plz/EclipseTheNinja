@@ -323,6 +323,20 @@ void AEnemy::PlayHitReaction()
 	}
 }
 
+bool AEnemy::IsBeingAssassinated() const
+{
+	if (!IsValid(AssassinateTargetComt)) return false;
+	return AssassinateTargetComt->IsAssassinationInProgress();
+}
+
+bool AEnemy::IsReadyForAI() const
+{
+	if (!HasActorBegunPlay()) return false;
+	if (bIsDead) return false;
+	if (IsBeingAssassinated()) return false;
+	return true;
+}
+
 void AEnemy::ReceiveAssassination(UAnimMontage* Montage)
 {
 	if (bIsDead) return;

@@ -25,7 +25,7 @@ class ECLIPSETHENINJA_API UCheckpointSubsystem : public UWorldSubsystem
     GENERATED_BODY()
 
 public:
-    void RestoreCheckpoint(ECheckpointId Id) { CurrentCheckpoint = Id; }
+    void RestoreCheckpoint(ECheckpointId Id);
     bool GetCheckpointTransform(FTransform& OutTransform) const;
 
     // 현재 체크포인트를 바꾸지 않고, 이 맵에 배치된 Id 체크포인트의 리스폰 위치만 읽는다. 없으면 false
@@ -79,6 +79,8 @@ public:
     FOnCheckpointEvent OnRespawned;
 
 private:
+    void UpdateCheckpointLights();
+
     // 런타임 스폰 액터(발사체, 증원 몬스터 등)들을 풀에 반환하는 함수 (풀 액터가 아니면 파괴)
     void ReleaseRuntimeSpawnedActors();
 

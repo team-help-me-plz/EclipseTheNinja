@@ -73,6 +73,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* MoveAction;
 
+	/** Minimum downward movement value required to start hanging from a ledge. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Gamepad", meta = (ClampMin = "0.1", ClampMax = "1"))
+	float LedgeHangDownInputThreshold = 0.65f;
+
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* JumpAction;
@@ -175,6 +179,9 @@ protected:
 	EPlayerCondition	PlayerCondition = EPlayerCondition::Normal;
 
 public:
+    const UInputAction* GetAbilityInputAction(EAbilityInputID InputID) const;
+    const UInputAction* GetCloneRecallInputAction() const { return CloneRecallAction; }
+
     float GetLogicalFacingSign() const { return FMath::Cos(FMath::DegreesToRadians(FacingTargetYaw)) >= 0.0f ? 1.0f : -1.0f; }
     UFUNCTION(BlueprintCallable, Category="Parry")
     void DoParry();
@@ -340,8 +347,8 @@ private:
 	bool bMoveTurnActive = false;
 
     bool bParryMovementLocked = false;
-    uint8 SavedParryMovementMode = 0;
-    uint8 SavedParryCustomMovementMode = 0;
+    TWeakObjectPtr<UAnimInstance> ParryLockedAnimation;
+    uint8 SavedParryRootMotionMode = 0;
 
     // bDebugInvincible에 맞춰 무적 태그를 붙이거나 뗀다. 태그는 개수로 관리되므로 붙인 횟수를 따로 기억한다.
     void SyncDebugInvincibleTag();
@@ -467,6 +474,7 @@ public:
 
 	/** 분신술 타게팅 상태 설정. 타게팅 중에는 카메라 시점을 유지하고, 종료되면 중앙으로 복귀한다. */
 	void SetCloneTargeting(bool bTargeting);
+	bool IsCloneTargeting() const { return bIsCloneTargeting; }
 
 protected:
 

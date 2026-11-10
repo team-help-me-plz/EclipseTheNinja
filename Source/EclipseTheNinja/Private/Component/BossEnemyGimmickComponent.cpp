@@ -25,7 +25,7 @@ void UBossEnemyGimmickComponent::BeginPlay()
 	{
 		Owner->OnEnergyLinkActivated.AddDynamic(this, &UBossEnemyGimmickComponent::HandleEnergyLinkActivated);
 		Owner->OnEnergyLinkBroken.AddDynamic(this, &UBossEnemyGimmickComponent::HandleEnergyLinkEnded);
-		Owner->OnEnergyLinkFailed.AddDynamic(this, &UBossEnemyGimmickComponent::HandleEnergyLinkEnded);
+		Owner->OnEnergyLinkFailed.AddDynamic(this, &UBossEnemyGimmickComponent::HandleEnergyLinkFailed);
 	}
 }
 
@@ -35,7 +35,7 @@ void UBossEnemyGimmickComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 	{
 		Owner->OnEnergyLinkActivated.RemoveDynamic(this, &UBossEnemyGimmickComponent::HandleEnergyLinkActivated);
 		Owner->OnEnergyLinkBroken.RemoveDynamic(this, &UBossEnemyGimmickComponent::HandleEnergyLinkEnded);
-		Owner->OnEnergyLinkFailed.RemoveDynamic(this, &UBossEnemyGimmickComponent::HandleEnergyLinkEnded);
+		Owner->OnEnergyLinkFailed.RemoveDynamic(this, &UBossEnemyGimmickComponent::HandleEnergyLinkFailed);
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -128,6 +128,17 @@ void UBossEnemyGimmickComponent::HandleEnergyLinkEnded()
 	if (!EndedLinkId.IsNone())
 	{
 		NotifyPortals(EndedLinkId, false);
+	}
+}
+
+void UBossEnemyGimmickComponent::HandleEnergyLinkFailed()
+{
+	HandleEnergyLinkEnded();
+
+	// 실패하면 바로 처형 컷신이 나오므로 남은 레이저 입자까지 즉시 지운다.
+	if (LaserComp)
+	{
+		LaserComp->DeactivateImmediate();
 	}
 }
 
