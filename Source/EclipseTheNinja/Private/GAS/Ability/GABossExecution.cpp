@@ -10,6 +10,7 @@
 #include "Character/PlayerCharacter.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/WidgetComponent.h"
 #include "GAS/Ability/GAAssassinateBase.h"
 #include "GAS/Animation/AnimNotify_AssassinateImpact.h"
 #include "GAS/Task/AbilityTask_MontageRootOffset.h"
@@ -21,6 +22,20 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "TimerManager.h"
+
+namespace
+{
+void SetExecutionOverheadHidden(ABossEnemy* Boss, bool bHidden)
+{
+	if (!IsValid(Boss)) return;
+
+	UWidgetComponent* OverheadWidget = Cast<UWidgetComponent>(Boss->GetDefaultSubobjectByName(TEXT("OverheadWidgetComp")));
+	if (!IsValid(OverheadWidget)) return;
+
+	// 사망 시 체력바를 끄는 Visibility와 분리해 처형 중에만 숨긴다.
+	OverheadWidget->SetHiddenInGame(bHidden);
+}
+}
 
 UGABossExecution::UGABossExecution()
 {
@@ -56,6 +71,7 @@ void UGABossExecution::ActivateAbility(
 	}
 
 	Victim = Player;
+	SetExecutionOverheadHidden(Boss, true);
 
 	// 연출 동안 보스 AI와 이동을 멈춘다.
 	if (AAIController* AI = Cast<AAIController>(Boss->GetController()))
@@ -618,6 +634,7 @@ void UGABossExecution::EndAbility(
 
 	// 보스가 살아 있으면 AI를 다시 켠다.
 	ABossEnemy* Boss = Cast<ABossEnemy>(GetAvatarActorFromActorInfo());
+	SetExecutionOverheadHidden(Boss, false);
 
 	// 끝까지 연출했으면 화면이 어두운 동안 보스를 처형 직전 자리로 되돌린다. 플레이어 높이(공중)에 남아 떨어지지 않게 한다.
 	if (bReturnBossOnEnd && IsValid(Boss) && !Boss->IsDead())
