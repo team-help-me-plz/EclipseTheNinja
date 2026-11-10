@@ -2,6 +2,7 @@
 
 
 #include "PuzzelObject/InteractSwitch.h"
+#include "PuzzelObject/BaseDoor.h"
 #include "Interface/Interactor.h"
 #include "Interface/Activatable.h"
 #include "Util/MeshAssembly.h"
@@ -47,6 +48,7 @@ void AInteractSwitch::ResetToInitial_Implementation()
 
 	GetWorldTimerManager().ClearTimer(this->InteractionCooldownTimer);
 	this->bIsInteractCooldown = false;
+	this->bIsAutoReturnPending = false;
 	this->RefreshInteractState();
 }
 
@@ -100,6 +102,27 @@ void AInteractSwitch::PostLoad()
 		this->TargetActors.AddUnique(this->TargetActor);
 		this->TargetActor = nullptr;
 	}
+
+#if WITH_EDITORONLY_DATA
+	// 문에 있던 자동 닫힘(AutoCloseDelay)을 이 스위치의 AutoReinteractTime으로 옮긴다.
+	// 같은 맵 패키지의 액터는 PostLoad 전에 모두 읽혀 있으므로 문 값을 그대로 읽을 수 있다
+	if (this->AutoReinteractTime <= 0.0f)
+	{
+		for (const AActor* Target : this->TargetActors)
+		{
+			const ABaseDoor*	Door = Cast<ABaseDoor>(Target);
+			if (Door && Door->GetDeprecatedAutoCloseDelay() > 0.0f)
+			{
+				this->AutoReinteractTime = FMath::Max(this->AutoReinteractTime, Door->GetDeprecatedAutoCloseDelay());
+			}
+		}
+		if (this->AutoReinteractTime > 0.0f)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[%s] 문 AutoCloseDelay를 스위치 AutoReinteractTime %.2f초로 옮겼습니다. 맵을 저장하세요."),
+				*GetName(), this->AutoReinteractTime);
+		}
+	}
+#endif
 }
 
 bool AInteractSwitch::HasActivatableTarget() const
@@ -166,20 +189,45 @@ void AInteractSwitch::Interact_Implementation(AActor* InActor)
 	{
 		return;
 	}
+	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
+	this->ActivateSwitch();
+}
+
+void AInteractSwitch::ActivateSwitch()
+{
+	// 시간 스위치를 켤 때만 긴 쿨타임을 걸고, 쿨타임이 끝나면 스스로 되돌린다. 되돌릴 때는 보통 쿨타임
+	const bool	bIsTimedOn = (this->AutoReinteractTime > 0.0f) && !this->bIsAutoReturnPending;
+	const float	CooldownTime = bIsTimedOn
+		? FMath::Max(this->AutoReinteractTime, this->InteractInterval)
+		: this->InteractInterval;
+
+	this->bIsAutoReturnPending = bIsTimedOn;
 	this->bIsInteractCooldown = true;
 	this->bIsInteracted = true;
 	GetWorldTimerManager().SetTimer(
 		InteractionCooldownTimer,
 		this,
 		&AInteractSwitch::ResetInteractionCooldown,
-		this->InteractInterval,
+		CooldownTime,
 		false
 	);
 	this->RefreshInteractState();
-	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
 	this->PlayInteractSound();
+	this->PerformSwitchAction();
+}
+
+void AInteractSwitch::PerformSwitchAction()
+{
 	this->ToggleTargets();
-	this->SaveSwitchState();
+	this->SaveSwitchStateIfSettled();
+}
+
+void AInteractSwitch::SaveSwitchStateIfSettled() const
+{
+	if (!this->bIsAutoReturnPending)
+	{
+		this->SaveSwitchState();
+	}
 }
 
 void AInteractSwitch::PlayInteractSound() const
@@ -240,6 +288,13 @@ EInteractState AInteractSwitch::GetInteractState_Implementation()
 void AInteractSwitch::ResetInteractionCooldown()
 {
 	this->bIsInteractCooldown = false;
+
+	// 시간 스위치: 켜 둔 시간이 끝났으니 스스로 한 번 더 작동해 대상을 되돌린다
+	if (this->bIsAutoReturnPending)
+	{
+		this->ActivateSwitch();
+		return;
+	}
 	this->RefreshInteractState();
 }
 
