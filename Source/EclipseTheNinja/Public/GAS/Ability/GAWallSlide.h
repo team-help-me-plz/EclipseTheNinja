@@ -6,6 +6,9 @@
 #include "Abilities/GameplayAbility.h"
 #include "GAWallSlide.generated.h"
 
+class UAudioComponent;
+class USoundBase;
+
 /**
  * 
  */
@@ -46,10 +49,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "WallSlide|Anim")
 	TSoftObjectPtr<UAnimMontage> SlideMontage;
 
+	UPROPERTY(EditDefaultsOnly, Category = "WallSlide|Audio")
+	TObjectPtr<USoundBase> SlideLoopSound;
+
 private:
 	void CheckSlideWall();
 	FTimerHandle WallCheckTimer;
 	bool bSlideMovementStarted = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> SlideAudioComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> LodaedSlideMontage;

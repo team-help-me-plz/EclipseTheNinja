@@ -130,6 +130,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (Units = "s"))
 	float ImpactFallbackTime = 0.4f;
 
+	/** 아래 암살 소리를 임팩트보다 얼마나 늦게 낼지(실제 시간). 히트스톱·슬로모에 늘어나지 않는다. 아래 암살에서만 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Sound", meta = (ClampMin = "0.0", Units = "s"))
+	float BelowAssassinationSoundDelay = 0.1f;
+
 	/** 히트스톱 동안의 게임 속도 배율 */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", ClampMin = "0.001", ClampMax = "1.0"))
 	float HitStopTimeScale = 0.02f;
@@ -214,6 +218,11 @@ protected:
 private:
 	bool StartAttackMontageTask(float StartTime);
 	void TriggerImpact();
+
+	UFUNCTION()
+	void PlayAssassinationStabSound();
+	// 아래 암살 소리를 BelowAssassinationSoundDelay만큼 실제 시간으로 늦춰 낸다.
+	void PlayBelowAssassinationSound();
 	void PlayImpactVFX();
 	UFUNCTION()
 	void OnVFXEvent(FGameplayEventData Payload);
@@ -248,6 +257,7 @@ private:
 	float ImpactElapsed = 0.0f;
 	float SavedTimeDilation = 1.0f;
 	bool bImpactTriggered = false;
+	bool bPlayBossImpactSound = false;
 	bool bImpactVFXTriggered = false;
 	bool bTimeDilationApplied = false;
 

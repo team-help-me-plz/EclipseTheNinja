@@ -11,6 +11,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
@@ -43,6 +44,15 @@ ABreakablePlatform::ABreakablePlatform()
 	if (BreakSystem.Succeeded())
 	{
 		this->BreakEffect->SetAsset(BreakSystem.Object);
+	}
+
+	// 무너지는 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
+	static ConstructorHelpers::FObjectFinder<USoundBase> BreakSoundFinder(
+		TEXT("/Game/Audio/wood_crate_destroy_v4.wood_crate_destroy_v4"));
+
+	if (BreakSoundFinder.Succeeded())
+	{
+		this->BreakSound = BreakSoundFinder.Object;
 	}
 }
 

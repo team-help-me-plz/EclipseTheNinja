@@ -304,6 +304,14 @@ void UGAThrowKunai::OnKunaiReleased(FGameplayEventData Payload)
 
     // 피해와 발사자 정보를 전달하고 비행을 시작
     Projectile->InitializeKunai(ASC, Spec, Direction, ProjectileSpeed);
+    if (const APlayerCharacter* Player = Cast<APlayerCharacter>(Character))
+    {
+        Player->PlayActionSound(EPlayerActionSound::Kunai);
+    }
+    else if (const AEnemy* Enemy = Cast<AEnemy>(Character))
+    {
+        Enemy->PlayAttackSound();
+    }
 
     // 체크포인트 리스폰 시 날아가거나 박혀 있는 표창을 풀에 반환한다.
     if (UCheckpointSubsystem* CheckpointSubsystem = World->GetSubsystem<UCheckpointSubsystem>())

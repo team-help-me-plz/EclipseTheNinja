@@ -2,6 +2,8 @@
 
 
 #include "Character/PlayerCharacter.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "Save/GameSaveSubsystem.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -121,6 +123,7 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::OnJumped_Implementation()
 {
 	Super::OnJumped_Implementation();
+	PlayActionSound(EPlayerActionSound::Jump);
 
 	this->NoiseComponent->EmitNoise(ENoiseType::Jump);
 }
@@ -189,6 +192,7 @@ void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateMovementSound(DeltaSeconds);
 	// 아래의 조기 반환(공격 중 등)과 관계없이 조준 위젯은 매 프레임 갱신한다.
 	UpdateAimWidget();
 	// 상호작용 키는 암살이 우선이므로, 암살이 가능한 동안에는 상호작용 표시를 숨겨 헷갈리지 않게 한다.
@@ -206,6 +210,72 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 
 	UpdateCursorTarget();
 	UpdateCursorFacing(DeltaSeconds);
+}
+
+void APlayerCharacter::PlayCharacterSound(USoundBase* Sound, float Volume) const
+{
+	if (Sound && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation(), Volume);
+	}
+}
+
+void APlayerCharacter::PlayActionSound(EPlayerActionSound Action, float Volume) const
+{
+	if (const TObjectPtr<USoundBase>* Sound = ActionSounds.Find(Action))
+	{
+		PlayCharacterSound(Sound->Get(), Volume);
+	}
+}
+
+void APlayerCharacter::PlaySwordAttackSound(int32 ComboIndex, bool bFire) const
+{
+	const auto& Sounds = bFire ? FireAttackSounds : SwordAttackSounds;
+	if (Sounds.IsValidIndex(ComboIndex - 1))
+	{
+		PlayCharacterSound(Sounds[ComboIndex - 1]);
+	}
+}
+
+void APlayerCharacter::PlayRandomCharacterSound(const TArray<TObjectPtr<USoundBase>>& Sounds) const
+{
+	if (!Sounds.IsEmpty())
+	{
+		PlayCharacterSound(Sounds[FMath::RandRange(0, Sounds.Num() - 1)]);
+	}
+}
+
+void APlayerCharacter::PlayAssassinationWithdrawalSound() const
+{
+	PlayRandomCharacterSound(AssassinationSounds);
+}
+
+void APlayerCharacter::UpdateMovementSound(float DeltaSeconds)
+{
+	const bool bOnWall = IsWallAttached();
+	const float Speed = bOnWall ? FMath::Abs(GetVelocity().Z) : GetVelocity().Size2D();
+	if (bIsDead || IsAssassinating() || IsAttacking() || IsHiding() || Speed < 10.0f
+		|| (!bOnWall && !GetCharacterMovement()->IsMovingOnGround()))
+	{
+		DistanceSinceMovementSound = 0.0f;
+		PreviousMovementSounds = nullptr;
+		return;
+	}
+
+	const auto& Sounds = bOnWall ? WallClimbSounds : (bIsCrouched ? CrouchWalkSounds : WalkSounds);
+	if (PreviousMovementSounds != &Sounds)
+	{
+		DistanceSinceMovementSound = 0.0f;
+		PreviousMovementSounds = &Sounds;
+	}
+
+	const float StepDistance = bOnWall ? 75.0f : (bIsCrouched ? 80.0f : 130.0f);
+	DistanceSinceMovementSound += Speed * DeltaSeconds;
+	if (DistanceSinceMovementSound >= StepDistance)
+	{
+		DistanceSinceMovementSound = FMath::Fmod(DistanceSinceMovementSound, StepDistance);
+		PlayRandomCharacterSound(Sounds);
+	}
 }
 
 void APlayerCharacter::UpdateCursorTarget()
@@ -580,6 +650,7 @@ void APlayerCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Othe
 void APlayerCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+	PlayActionSound(EPlayerActionSound::Land, 0.75f);
 	bCanCoyoteJump = false;
 
 	// 공중에서 앉기 키를 누르고 있었다면 착지하면서 앉는다.
@@ -669,6 +740,10 @@ void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
 	if (bIsDead)
 	{
 		return;
+	}
+	if (Data.NewValue < Data.OldValue && !IsValid(PendingAssassinationMontage))
+	{
+		PlayActionSound(EPlayerActionSound::Hit);
 	}
 	if (Data.NewValue <= 0.0f)
 	{
@@ -1192,6 +1267,7 @@ void APlayerCharacter::MultiJump()
 			WallJumpImpulse.Z = GetCharacterMovement()->JumpZVelocity * WallJumpVerticalMultiplier;
 
 			LaunchCharacter(WallJumpImpulse, true, true);
+			PlayActionSound(EPlayerActionSound::Jump);
 			// 벽 점프 시 소리 발생
 			this->NoiseComponent->EmitNoise(ENoiseType::WallJump);
 			// 벽점프 직후 이동 입력과 재부착을 잠시 제한한다.

@@ -144,6 +144,10 @@ void UGALedgeClimb::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 	MoveTask->OnTimedOutAndDestinationReached.AddDynamic(this, &UGALedgeClimb::OnClimbFinished);
 	MoveTask->OnTimedOut.AddDynamic(this, &UGALedgeClimb::OnClimbFinished);
 	MoveTask->ReadyForActivation();
+	if (IsActive())
+	{
+		Player->PlayActionSound(EPlayerActionSound::LedgeClimb);
+	}
 }
 
 void UGALedgeClimb::ClearLedgeInPath(const ACharacter* Player, const FVector& Start, float LedgeTopZ)

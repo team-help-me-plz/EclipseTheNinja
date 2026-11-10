@@ -188,6 +188,8 @@ void UGALedgeHang::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 		return;
 	}
 
+	Player->PlayActionSound(EPlayerActionSound::LedgeClimb);
+
 	// 이동은 루트 모션 태스크가 맡으므로 중력 없는 Flying으로 바꾼다. 종료 시 매달리기나 낙하로 넘긴다.
 	UCharacterMovementComponent* Movement = Player->GetCharacterMovement();
 	Movement->StopMovementImmediately();

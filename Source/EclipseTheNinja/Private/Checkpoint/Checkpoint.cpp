@@ -10,7 +10,9 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInterface.h"
+#include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
@@ -73,6 +75,14 @@ ACheckpoint::ACheckpoint()
     LampLight->SetAttenuationRadius(450.0f);
     LampLight->SetLightColor(FLinearColor(1.0f, 0.76f, 0.38f));
     LampLight->SetCastShadows(false);
+
+    // 체크포인트 갱신 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
+    static ConstructorHelpers::FObjectFinder<USoundBase> ActivateSoundAsset(
+        TEXT("/Game/Audio/spell_v15.spell_v15"));
+    if (ActivateSoundAsset.Succeeded())
+    {
+        ActivateSound = ActivateSoundAsset.Object;
+    }
 
     ApplyLampState();
 }
@@ -171,7 +181,15 @@ void ACheckpoint::OnTriggerBeginOverlap(
 
     if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
     {
+        // 갱신되면 Subsystem이 이 체크포인트의 가로등을 켠다. 꺼져 있다 켜진 경우만 갱신된 것으로 보고 소리를 낸다
+        const bool bWasActive = bCheckpointActive;
+
         // 실제 갱신 여부는 Subsystem에서 로그로 출력
         Subsystem->ActivateCheckpoint(this->CheckpointId);
+
+        if (!bWasActive && bCheckpointActive && ActivateSound)
+        {
+            UGameplayStatics::PlaySoundAtLocation(this, ActivateSound, GetActorLocation());
+        }
     }
 }

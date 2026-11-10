@@ -3,6 +3,7 @@
 
 
 #include "GAS/Ability/GASwiftStrike.h"
+#include "Character/PlayerCharacter.h"
 #include "NativeGameplayTags.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "GAS/Ability/GAAssassinateBase.h"
@@ -285,6 +286,10 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 
 	// 몽타주 재생 실패로 취소되었다면 이동을 시작하지 않는다.
 	if (!IsActive()) return;
+	if (const APlayerCharacter* Ninja = Cast<APlayerCharacter>(Player))
+	{
+		Ninja->PlayActionSound(EPlayerActionSound::SwiftStrike);
+	}
 
 	UCharacterMovementComponent* DashMovement = Player->GetCharacterMovement();
 	if (!IsValid(DashMovement))

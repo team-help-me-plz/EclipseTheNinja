@@ -8,6 +8,8 @@
 #include "BossEnemy.generated.h"
 
 class UGameplayAbility;
+class UAudioComponent;
+class USoundBase;
 class UBossHealthBarWidget;
 class UBossLostTargetComponent;
 class UBossEnemyGimmickComponent;
@@ -43,6 +45,10 @@ class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
 
 public:
 	ABossEnemy();
+	void StartBattleMusic();
+	void SetPlayerInGimmickStage(bool bInStage);
+	void PlayGroggySound() const;
+	void PlayAssassinationImpactSound();
 
 	/** 컷신·그로기처럼 보스가 패턴을 쓰면 안 되는 동안 켠다. 켜져 있으면 패턴 어빌리티가 발동하지 않는다. */
 	void SetCinematicLocked(bool bLocked) { bCinematicLocked = bLocked; }
@@ -202,6 +208,42 @@ public:
 	virtual float GetAIAttackCooldown() const override { return 0.1f; }
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> DetectionSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> HitSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> DeathSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> BattleMusic;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> PhaseThreeBattleMusic;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> GimmickStageMusic;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> GimmickBreakSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> GroggySound;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> BattleMusicComponent;
+
+	UFUNCTION()
+	void HandleBossAwarenessChanged(float Gauge, EEnemyAlertLevel Level);
+
+	void HandleBossDied(AEnemy* Enemy, bool bAssassinated);
+	void StopBattleMusic();
+	bool bInCombatAwareness = false;
+	bool bPlayerInGimmickStage = false;
+	bool bApplyingAssassinationDamage = false;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Boss|UI")
 	TSubclassOf<UBossHealthBarWidget> BossHealthBarClass;
 

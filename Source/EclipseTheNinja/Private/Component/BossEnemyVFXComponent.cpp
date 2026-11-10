@@ -9,6 +9,8 @@
 #include "GAS/Ability/GABossPatternBase.h"
 #include "GAS/StatAttributeSet.h"
 #include "GameplayEffectTypes.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -282,6 +284,14 @@ void UBossEnemyVFXComponent::HandleDamageBlocked(const FGameplayEffectContextHan
 	FVector Location;
 	FVector Direction;
 	GetHitPoint(Context, Location, Direction);
+	const ABossEnemy* Owner = Boss.Get();
+	if (Owner && Owner->IsEnergyLinkActive() && Owner->GetNetMode() != NM_DedicatedServer && !ShieldHitSounds.IsEmpty())
+	{
+		if (USoundBase* Sound = ShieldHitSounds[FMath::RandRange(0, ShieldHitSounds.Num() - 1)])
+		{
+			UGameplayStatics::PlaySoundAtLocation(Owner, Sound, Location);
+		}
+	}
 
 	// 공격자 쪽을 바라보게 해 실드 표면에서 튕겨 나가는 것처럼 보이게 한다.
 	SpawnOneShot(

@@ -1,4 +1,4 @@
-#include "Character/BossEnemy.h"
+﻿#include "Character/BossEnemy.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
@@ -10,6 +10,8 @@
 #include "Component/BossLostTargetComponent.h"
 #include "Component/EnemyDetectionComponent.h"
 #include "Component/EnemySpacingComponent.h"
+#include "Component/MovementLoopSoundComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/DataTable.h"
@@ -29,163 +31,261 @@
 
 ABossEnemy::ABossEnemy()
 {
-	DefaultStatsEffect = UGEBossEnemyDefaultStats::StaticClass();
+    DefaultStatsEffect = UGEBossEnemyDefaultStats::StaticClass();
 
-	// 처치 후 엔딩 컷신에서도 쓰러진 보스가 보여야 한다.
-	bHideCorpseAfterDeath = false;
+    // 처치 후 엔딩 컷신에서도 쓰러진 보스가 보여야 한다.
+    bHideCorpseAfterDeath = false;
 
-	// 보스는 덩치가 커서 일반 적보다 먼 거리에서 발도를 시작한다.
-	AttackDistance = 250.0f;
+    // 보스는 덩치가 커서 일반 적보다 먼 거리에서 발도를 시작한다.
+    AttackDistance = 250.0f;
 
-	// 보스는 혼자 움직이므로 다른 몬스터와 간격을 맞추지 않는다.
-	SpacingComp->SetKeepMonsterSpacing(false);
+    // 보스는 혼자 움직이므로 다른 몬스터와 간격을 맞추지 않는다.
+    SpacingComp->SetKeepMonsterSpacing(false);
 
-	// 보스는 Pawn 채널 그대로 두어 플레이어와 부딪히게 한다.
-	bOverlapWithCharacters = false;
+    // 보스는 Pawn 채널 그대로 두어 플레이어와 부딪히게 한다.
+    bOverlapWithCharacters = false;
 
-	// 보스는 암살로 처치되어도 회복 아이템을 떨어뜨리지 않는다.
-	AssassinationDropComp->SetDropActorClass(nullptr);
+    // 보스는 암살로 처치되어도 회복 아이템을 떨어뜨리지 않는다.
+    AssassinationDropComp->SetDropActorClass(nullptr);
 
-	// 대상을 놓치면 일반 적의 수색 대신 포효와 난사를 한다.
-	LostTargetComp = CreateDefaultSubobject<UBossLostTargetComponent>(TEXT("LostTargetComp"));
+    // 보스 발소리는 걷기 애니메이션 노티파이가 내므로 일반 몬스터 발소리 루프는 끈다.
+    WalkSoundComp->SetLoopSound(nullptr);
 
-	// 에너지 링크 기믹의 해제 순서와 레이저 연출
-	GimmickComp = CreateDefaultSubobject<UBossEnemyGimmickComponent>(TEXT("GimmickComp"));
+    // 대상을 놓치면 일반 적의 수색 대신 포효와 난사를 한다.
+    LostTargetComp = CreateDefaultSubobject<UBossLostTargetComponent>(TEXT("LostTargetComp"));
 
-	// 실드·피격·공격 VFX
-	VFXComp = CreateDefaultSubobject<UBossEnemyVFXComponent>(TEXT("VFXComp"));
+    // 에너지 링크 기믹의 해제 순서와 레이저 연출
+    GimmickComp = CreateDefaultSubobject<UBossEnemyGimmickComponent>(TEXT("GimmickComp"));
 
-	// 기믹 실패 시 처형 연출. 피격자 몽타주는 보스 Blueprint에서 지정한다.
-	ExecutionAbilityClass = UGABossExecution::StaticClass();
+    // 실드·피격·공격 VFX
+    VFXComp = CreateDefaultSubobject<UBossEnemyVFXComponent>(TEXT("VFXComp"));
+
+    // 기믹 실패 시 처형 연출. 피격자 몽타주는 보스 Blueprint에서 지정한다.
+    ExecutionAbilityClass = UGABossExecution::StaticClass();
 }
 
 void ABossEnemy::BeginPlay()
 {
-	Super::BeginPlay();
+    Super::BeginPlay();
 
-	// 높은 체력 구간부터 순서대로 발동하도록 정렬한다.
-	EnergyLinkThresholds.Sort([](float A, float B)
-	{
-		return A > B;
-	});
+    EnemyDetectComponent->OnAwarenessChanged.AddDynamic(this, &ABossEnemy::HandleBossAwarenessChanged);
+    OnDied.AddUObject(this, &ABossEnemy::HandleBossDied);
 
-	// 패턴이 끝난 시점부터 휴식 시간을 센다.
-	if (ASC)
-	{
-		PatternEndedHandle = ASC->OnAbilityEnded.AddUObject(this, &ABossEnemy::OnPatternAbilityEnded);
-	}
+    // 높은 체력 구간부터 순서대로 발동하도록 정렬한다.
+    EnergyLinkThresholds.Sort([](float A, float B)
+                              {
+                                  return A > B;
+                              });
+
+    // 패턴이 끝난 시점부터 휴식 시간을 센다.
+    if (ASC)
+    {
+        PatternEndedHandle = ASC->OnAbilityEnded.AddUObject(this, &ABossEnemy::OnPatternAbilityEnded);
+    }
 }
 
 void ABossEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	HideBossHealthBar();
-	GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
-	GetWorldTimerManager().ClearTimer(ExecutionWaitTimer);
+    EnemyDetectComponent->OnAwarenessChanged.RemoveDynamic(this, &ABossEnemy::HandleBossAwarenessChanged);
+    OnDied.RemoveAll(this);
+    StopBattleMusic();
+    HideBossHealthBar();
+    GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
+    GetWorldTimerManager().ClearTimer(ExecutionWaitTimer);
 
-	if (ASC)
-	{
-		ASC->OnAbilityEnded.Remove(PatternEndedHandle);
-	}
+    if (ASC)
+    {
+        ASC->OnAbilityEnded.Remove(PatternEndedHandle);
+    }
 
-	Super::EndPlay(EndPlayReason);
+    Super::EndPlay(EndPlayReason);
+}
+
+void ABossEnemy::HandleBossAwarenessChanged(float Gauge, EEnemyAlertLevel Level)
+{
+    const bool bEnteredCombat = Level == EEnemyAlertLevel::Combat && !bInCombatAwareness;
+    bInCombatAwareness = Level == EEnemyAlertLevel::Combat;
+    if (!bEnteredCombat || bIsDead || GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    if (DetectionSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, DetectionSound, GetActorLocation());
+    }
+    StartBattleMusic();
+}
+
+void ABossEnemy::StartBattleMusic()
+{
+    if (bIsDead || GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    USoundBase* Track = GetPhase() >= 3 && PhaseThreeBattleMusic ? PhaseThreeBattleMusic : BattleMusic;
+    if (bPlayerInGimmickStage && GimmickStageMusic)
+    {
+        Track = GimmickStageMusic;
+    }
+    if (!Track || (BattleMusicComponent && BattleMusicComponent->GetSound() == Track))
+    {
+        return;
+    }
+
+    if (BattleMusicComponent)
+    {
+        BattleMusicComponent->Stop();
+        BattleMusicComponent->SetSound(Track);
+        BattleMusicComponent->Play();
+        return;
+    }
+
+    BattleMusicComponent = UGameplayStatics::SpawnSound2D(this, Track, 0.45f, 1.0f, 0.0f, nullptr, false, false);
+}
+
+void ABossEnemy::SetPlayerInGimmickStage(bool bInStage)
+{
+    if (bPlayerInGimmickStage != bInStage)
+    {
+        bPlayerInGimmickStage = bInStage;
+        StartBattleMusic();
+    }
+}
+
+void ABossEnemy::PlayGroggySound() const
+{
+    if (GroggySound && GetNetMode() != NM_DedicatedServer)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, GroggySound, GetActorLocation());
+    }
+}
+
+void ABossEnemy::HandleBossDied(AEnemy* Enemy, bool bAssassinated)
+{
+    StopBattleMusic();
+    if (!bApplyingAssassinationDamage && DeathSound && GetNetMode() != NM_DedicatedServer)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
+    }
+}
+
+void ABossEnemy::PlayAssassinationImpactSound()
+{
+    USoundBase* Sound = bIsDead ? DeathSound : HitSound;
+    if (Sound && GetNetMode() != NM_DedicatedServer)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
+    }
+}
+
+void ABossEnemy::StopBattleMusic()
+{
+    if (BattleMusicComponent)
+    {
+        BattleMusicComponent->Stop();
+        BattleMusicComponent->DestroyComponent();
+        BattleMusicComponent = nullptr;
+    }
 }
 
 void ABossEnemy::Tick(float DeltaTime)
 {
-	Super::Tick(DeltaTime);
-	TryActivatePendingEnergyLink();
+    Super::Tick(DeltaTime);
+    TryActivatePendingEnergyLink();
 
-	UpdateTurning(DeltaTime);
+    UpdateTurning(DeltaTime);
 
-	if (!bIsDead && !BossHealthBar && EnemyDetectComponent
-		&& EnemyDetectComponent->GetCurrentAlertLevel() == EEnemyAlertLevel::Combat)
-	{
-		ShowBossHealthBar();
-	}
+    if (!bIsDead && !BossHealthBar && EnemyDetectComponent
+        && EnemyDetectComponent->GetCurrentAlertLevel() == EEnemyAlertLevel::Combat)
+    {
+        ShowBossHealthBar();
+    }
 
-	// A failed attempt must not leave a boss HUD on the respawn screen.
-	if (BossHealthBar)
-	{
-		const APlayerController* PC = BossHealthBar->GetOwningPlayer();
-		const ABaseCharacter* Player = PC ? Cast<ABaseCharacter>(PC->GetPawn()) : nullptr;
-		if (!Player || !Player->GetStatAttribute() || Player->GetStatAttribute()->GetHealth() <= 0.0f)
-		{
-			BossHealthBar->SetVisibility(ESlateVisibility::Collapsed);
-		}
-	}
+    // A failed attempt must not leave a boss HUD on the respawn screen.
+    if (BossHealthBar)
+    {
+        const APlayerController* PC = BossHealthBar->GetOwningPlayer();
+        const ABaseCharacter* Player = PC ? Cast<ABaseCharacter>(PC->GetPawn()) : nullptr;
+        if (!Player || !Player->GetStatAttribute() || Player->GetStatAttribute()->GetHealth() <= 0.0f)
+        {
+            BossHealthBar->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
 
 #if WITH_EDITOR
-	ProcessDebugRequests();
+    ProcessDebugRequests();
 #endif
 
-	// 실드 이펙트가 생기기 전까지 실드 상태를 눈으로 확인하기 위한 표시
-	if (bDrawDebugShield && bEnergyLinkActive)
-	{
-		const float Radius = GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 1.3f;
-		DrawDebugSphere(
-			GetWorld(),
-			GetActorLocation(),
-			Radius,
-			16,
-			FColor::Cyan,
-			false,
-			-1.0f,
-			0,
-			2.0f
-		);
-	}
+    // 실드 이펙트가 생기기 전까지 실드 상태를 눈으로 확인하기 위한 표시
+    if (bDrawDebugShield && bEnergyLinkActive)
+    {
+        const float Radius = GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 1.3f;
+        DrawDebugSphere(
+            GetWorld(),
+            GetActorLocation(),
+            Radius,
+            16,
+            FColor::Cyan,
+            false,
+            -1.0f,
+            0,
+            2.0f
+        );
+    }
 }
 
 float ABossEnemy::GetHealthRatio() const
 {
-	if (!StatAttributeSet || StatAttributeSet->GetMaxHealth() <= 0.0f)
-	{
-		return 0.0f;
-	}
+    if (!StatAttributeSet || StatAttributeSet->GetMaxHealth() <= 0.0f)
+    {
+        return 0.0f;
+    }
 
-	return StatAttributeSet->GetHealth() / StatAttributeSet->GetMaxHealth();
+    return StatAttributeSet->GetHealth() / StatAttributeSet->GetMaxHealth();
 }
 
 void ABossEnemy::ShowBossHealthBar()
 {
-	if (BossHealthBar || bIsDead || !BossHealthBarClass || GetNetMode() == NM_DedicatedServer)
-	{
-		return;
-	}
-	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
-	if (PC && PC->IsLocalController() && PC->GetPawn())
-	{
-		BossHealthBar = CreateWidget<UBossHealthBarWidget>(PC, BossHealthBarClass);
-		if (BossHealthBar)
-		{
-			BossHealthBar->AddToViewport(10);
-			BossHealthBar->InitBoss(this, BossDisplayName);
-		}
-	}
+    if (BossHealthBar || bIsDead || !BossHealthBarClass || GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+    APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+    if (PC && PC->IsLocalController() && PC->GetPawn())
+    {
+        BossHealthBar = CreateWidget<UBossHealthBarWidget>(PC, BossHealthBarClass);
+        if (BossHealthBar)
+        {
+            BossHealthBar->AddToViewport(10);
+            BossHealthBar->InitBoss(this, BossDisplayName);
+        }
+    }
 }
 
 void ABossEnemy::HideBossHealthBar()
 {
-	if (BossHealthBar)
-	{
-		BossHealthBar->RemoveFromParent();
-		BossHealthBar = nullptr;
-	}
+    if (BossHealthBar)
+    {
+        BossHealthBar->RemoveFromParent();
+        BossHealthBar = nullptr;
+    }
 }
 
 void ABossEnemy::SetDrawDebugAttack(bool bEnable)
 {
-	bDrawDebugAttack = bEnable;
+    bDrawDebugAttack = bEnable;
 }
 
 float ABossEnemy::GetEnergyLinkTimeRemaining() const
 {
-	if (!bEnergyLinkActive || EnergyLinkTimeLimit <= 0.0f)
-	{
-		return -1.0f;
-	}
+    if (!bEnergyLinkActive || EnergyLinkTimeLimit <= 0.0f)
+    {
+        return -1.0f;
+    }
 
-	return FMath::Max(0.0f, GetWorldTimerManager().GetTimerRemaining(EnergyLinkTimer));
+    return FMath::Max(0.0f, GetWorldTimerManager().GetTimerRemaining(EnergyLinkTimer));
 }
 
 void ABossEnemy::SetEnergyLinkTimerPaused(bool bPaused)
@@ -208,814 +308,833 @@ void ABossEnemy::SetEnergyLinkTimerPaused(bool bPaused)
 
 void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
-	// 임계 체력 복원이 발생시킨 재진입은 별도 피해로 처리하지 않는다.
-	if (bClampingEnergyLinkHealth) return;
+    if (HitSound && !bApplyingAssassinationDamage && !bIsDead && !bEnergyLinkActive && !bIsDotDamage && Data.NewValue < Data.OldValue
+        && GetNetMode() != NM_DedicatedServer)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, HitSound, GetActorLocation());
+    }
 
-	if (!bIsDead && PendingEnergyLinkIndex != INDEX_NONE)
-	{
-		const float PendingHealth = GetEnergyLinkThresholdHealth(PendingEnergyLinkIndex);
-		if (Data.NewValue < PendingHealth)
-		{
-			TGuardValue<bool> ClampGuard(bClampingEnergyLinkHealth, true);
-			ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), PendingHealth);
-			return;
-		}
-		Super::OnHealthChanged(Data);
-		return;
-	}
+    // 임계 체력 복원이 발생시킨 재진입은 별도 피해로 처리하지 않는다.
+    if (bClampingEnergyLinkHealth) return;
 
-	// 실드 중이거나 체력이 늘어난 경우는 일반 처리만 한다.
-	if (bIsDead || bEnergyLinkActive || Data.NewValue >= Data.OldValue
-		|| !EnergyLinkThresholds.IsValidIndex(NextEnergyLinkIndex))
-	{
-		Super::OnHealthChanged(Data);
-		return;
-	}
+    if (!bIsDead && PendingEnergyLinkIndex != INDEX_NONE)
+    {
+        const float PendingHealth = GetEnergyLinkThresholdHealth(PendingEnergyLinkIndex);
+        if (Data.NewValue < PendingHealth)
+        {
+            TGuardValue<bool> ClampGuard(bClampingEnergyLinkHealth, true);
+            ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), PendingHealth);
+            return;
+        }
+        Super::OnHealthChanged(Data);
+        return;
+    }
 
-	const float ThresholdHealth = GetEnergyLinkThresholdHealth(NextEnergyLinkIndex);
-	if (Data.NewValue > ThresholdHealth)
-	{
-		Super::OnHealthChanged(Data);
-		return;
-	}
+    // 실드 중이거나 체력이 늘어난 경우는 일반 처리만 한다.
+    if (bIsDead || bEnergyLinkActive || Data.NewValue >= Data.OldValue
+        || !EnergyLinkThresholds.IsValidIndex(NextEnergyLinkIndex))
+    {
+        Super::OnHealthChanged(Data);
+        return;
+    }
 
-	// 암살 중에는 체력 구간만 예약하고 쉴드·링크·시퀀스 알림을 미룬다.
-	const int32 LinkIndex = NextEnergyLinkIndex++;
-	bool bDeferActivation = false;
-	if (IsBeingAssassinated()) bDeferActivation = true;
-	if (bReceivingAssassination) bDeferActivation = true;
-	if (bDeferActivation)
-	{
-		PendingEnergyLinkIndex = LinkIndex;
-	}
-	else
-	{
-		ActivateEnergyLink(LinkIndex);
-	}
+    const float ThresholdHealth = GetEnergyLinkThresholdHealth(NextEnergyLinkIndex);
+    if (Data.NewValue > ThresholdHealth)
+    {
+        Super::OnHealthChanged(Data);
+        return;
+    }
 
-	// 큰 피해로 구간을 넘어가도 이번 구간 체력에서 멈춘다. 같은 이유로 이 피해로는 죽지 않는다.
-	if (Data.NewValue < ThresholdHealth)
-	{
-		TGuardValue<bool> ClampGuard(bClampingEnergyLinkHealth, true);
-		ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), ThresholdHealth);
-	}
+    // 암살 중에는 체력 구간만 예약하고 쉴드·링크·시퀀스 알림을 미룬다.
+    const int32 LinkIndex = NextEnergyLinkIndex++;
+    bool bDeferActivation = false;
+    if (IsBeingAssassinated()) bDeferActivation = true;
+    if (bReceivingAssassination) bDeferActivation = true;
+    if (bDeferActivation)
+    {
+        PendingEnergyLinkIndex = LinkIndex;
+    }
+    else
+    {
+        ActivateEnergyLink(LinkIndex);
+    }
 
-	// 피격 반응과 감지 갱신은 보정된 체력 기준으로 일반 적 처리에 맡긴다.
-	FOnAttributeChangeData ClampedData = Data;
-	ClampedData.NewValue = ThresholdHealth;
-	Super::OnHealthChanged(ClampedData);
+    // 큰 피해로 구간을 넘어가도 이번 구간 체력에서 멈춘다. 같은 이유로 이 피해로는 죽지 않는다.
+    if (Data.NewValue < ThresholdHealth)
+    {
+        TGuardValue<bool> ClampGuard(bClampingEnergyLinkHealth, true);
+        ASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), ThresholdHealth);
+    }
+
+    // 피격 반응과 감지 갱신은 보정된 체력 기준으로 일반 적 처리에 맡긴다.
+    FOnAttributeChangeData ClampedData = Data;
+    ClampedData.NewValue = ThresholdHealth;
+    Super::OnHealthChanged(ClampedData);
 }
 
 void ABossEnemy::TryActivatePendingEnergyLink()
 {
-	if (PendingEnergyLinkIndex == INDEX_NONE) return;
-	if (bIsDead)
-	{
-		PendingEnergyLinkIndex = INDEX_NONE;
-		return;
-	}
-	if (IsBeingAssassinated()) return;
-	if (bReceivingAssassination) return;
+    if (PendingEnergyLinkIndex == INDEX_NONE) return;
+    if (bIsDead)
+    {
+        PendingEnergyLinkIndex = INDEX_NONE;
+        return;
+    }
+    if (IsBeingAssassinated()) return;
+    if (bReceivingAssassination) return;
 
-	// 플레이어의 암살이 먼저 끝나도 보스의 반응 동작을 시퀀스로 끊지 않는다.
-	const UAnimInstance* Animation = GetMesh()->GetAnimInstance();
-	if (IsValid(Animation) && IsValid(AssassinationReactionMontage))
-	{
-		if (Animation->Montage_IsActive(AssassinationReactionMontage)) return;
-	}
+    // 플레이어의 암살이 먼저 끝나도 보스의 반응 동작을 시퀀스로 끊지 않는다.
+    const UAnimInstance* Animation = GetMesh()->GetAnimInstance();
+    if (IsValid(Animation) && IsValid(AssassinationReactionMontage))
+    {
+        if (Animation->Montage_IsActive(AssassinationReactionMontage)) return;
+    }
 
-	const int32 LinkIndex = PendingEnergyLinkIndex;
-	PendingEnergyLinkIndex = INDEX_NONE;
-	ActivateEnergyLink(LinkIndex);
+    const int32 LinkIndex = PendingEnergyLinkIndex;
+    PendingEnergyLinkIndex = INDEX_NONE;
+    ActivateEnergyLink(LinkIndex);
 }
 
 float ABossEnemy::GetEnergyLinkThresholdHealth(int32 LinkIndex) const
 {
-	if (!EnergyLinkThresholds.IsValidIndex(LinkIndex) || !StatAttributeSet)
-	{
-		return 0.0f;
-	}
+    if (!EnergyLinkThresholds.IsValidIndex(LinkIndex) || !StatAttributeSet)
+    {
+        return 0.0f;
+    }
 
-	// 0.3 * 200이 60.000002가 되는 식의 오차가 남으면, 남은 체력만큼 피해를 줘도 0.000002가 남아 죽지 않는다.
-	return FMath::RoundToFloat(EnergyLinkThresholds[LinkIndex] * StatAttributeSet->GetMaxHealth());
+    // 0.3 * 200이 60.000002가 되는 식의 오차가 남으면, 남은 체력만큼 피해를 줘도 0.000002가 남아 죽지 않는다.
+    return FMath::RoundToFloat(EnergyLinkThresholds[LinkIndex] * StatAttributeSet->GetMaxHealth());
 }
 
 void ABossEnemy::ActivateEnergyLink(int32 LinkIndex)
 {
-	bEnergyLinkActive = true;
-	ASC->SetLooseGameplayTagCount(EclipseGameplayTags::State_Invincible, 1);
+    bEnergyLinkActive = true;
+    ASC->SetLooseGameplayTagCount(EclipseGameplayTags::State_Invincible, 1);
 
-	if (EnergyLinkTimeLimit > 0.0f)
-	{
-		GetWorldTimerManager().SetTimer(
-			EnergyLinkTimer,
-			this,
-			&ABossEnemy::OnEnergyLinkTimeExpired,
-			EnergyLinkTimeLimit,
-			false
-		);
-	}
+    if (EnergyLinkTimeLimit > 0.0f)
+    {
+        GetWorldTimerManager().SetTimer(
+            EnergyLinkTimer,
+            this,
+            &ABossEnemy::OnEnergyLinkTimeExpired,
+            EnergyLinkTimeLimit,
+            false
+        );
+    }
 
-	UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 %d 발동 (체력 %.0f%%)"), *GetName(), LinkIndex, EnergyLinkThresholds[LinkIndex] * 100.0f);
-	OnEnergyLinkActivated.Broadcast(LinkIndex);
+    UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 %d 발동 (체력 %.0f%%)"), *GetName(), LinkIndex, EnergyLinkThresholds[LinkIndex] * 100.0f);
+    OnEnergyLinkActivated.Broadcast(LinkIndex);
 }
 
 void ABossEnemy::BreakEnergyLink()
 {
-	if (!bEnergyLinkActive)
-	{
-		return;
-	}
+    if (!bEnergyLinkActive)
+    {
+        return;
+    }
 
-	ClearEnergyLinkState();
-	++BrokenEnergyLinkCount;
+    ClearEnergyLinkState();
+    ++BrokenEnergyLinkCount;
+    if (GimmickBreakSound && GetNetMode() != NM_DedicatedServer)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, GimmickBreakSound, GetActorLocation());
+    }
+    if (BattleMusicComponent || bInCombatAwareness)
+    {
+        StartBattleMusic();
+    }
 
-	UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 해제, %d페이즈"), *GetName(), GetPhase());
-	OnEnergyLinkBroken.Broadcast();
-	OnPhaseChanged.Broadcast(GetPhase());
+    UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 해제, %d페이즈"), *GetName(), GetPhase());
+    OnEnergyLinkBroken.Broadcast();
+    OnPhaseChanged.Broadcast(GetPhase());
 }
 
 void ABossEnemy::OnEnergyLinkTimeExpired()
 {
-	if (!bEnergyLinkActive || bIsDead)
-	{
-		return;
-	}
+    if (!bEnergyLinkActive || bIsDead)
+    {
+        return;
+    }
 
-	UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 해제 실패, 플레이어 처형"), *GetName());
-	OnEnergyLinkFailed.Broadcast();
+    UE_LOG(LogTemp, Log, TEXT("%s: 에너지 링크 해제 실패, 플레이어 처형"), *GetName());
+    OnEnergyLinkFailed.Broadcast();
 
-	// 진행 중인 패턴을 멈추고 처형으로 넘어간다.
-	CancelAIBaseAttack();
+    // 진행 중인 패턴을 멈추고 처형으로 넘어간다.
+    CancelAIBaseAttack();
 
-	// 처형 전까지 플레이어가 움직이지 못하게 한다. 벽 매달리기 등은 취소해 땅으로 내려오게 한다.
-	APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
-	if (IsValid(Player))
-	{
-		if (UAbilitySystemComponent* PlayerASC = Player->GetAbilitySystemComponent())
-		{
-			PlayerASC->CancelAllAbilities();
-		}
+    // 처형 전까지 플레이어가 움직이지 못하게 한다. 벽 매달리기 등은 취소해 땅으로 내려오게 한다.
+    APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+    if (IsValid(Player))
+    {
+        if (UAbilitySystemComponent* PlayerASC = Player->GetAbilitySystemComponent())
+        {
+            PlayerASC->CancelAllAbilities();
+        }
 
-		if (APlayerController* PlayerController = Cast<APlayerController>(Player->GetController()))
-		{
-			Player->DisableInput(PlayerController);
-		}
-	}
+        if (APlayerController* PlayerController = Cast<APlayerController>(Player->GetController()))
+        {
+            Player->DisableInput(PlayerController);
+        }
+    }
 
-	ExecutionWaitStartTime = GetWorld()->GetTimeSeconds();
-	TryStartExecution();
+    ExecutionWaitStartTime = GetWorld()->GetTimeSeconds();
+    TryStartExecution();
 }
 
 void ABossEnemy::TryStartExecution()
 {
-	if (bIsDead)
-	{
-		return;
-	}
+    if (bIsDead)
+    {
+        return;
+    }
 
-	APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
-	UAbilitySystemComponent* PlayerASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Player);
-	if (!IsValid(Player) || !PlayerASC || PlayerASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) <= 0.0f)
-	{
-		return;
-	}
+    APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+    UAbilitySystemComponent* PlayerASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Player);
+    if (!IsValid(Player) || !PlayerASC || PlayerASC->GetNumericAttribute(UStatAttributeSet::GetHealthAttribute()) <= 0.0f)
+    {
+        return;
+    }
 
-	// 공중에서 피격자 몽타주를 재생하면 허공에 멈춘 채 쓰러지므로, 착지할 때까지 잠시 기다린다.
-	const bool bWaitTimedOut = GetWorld()->GetTimeSeconds() - ExecutionWaitStartTime >= ExecutionGroundWaitTime;
-	if (!Player->GetCharacterMovement()->IsMovingOnGround() && !bWaitTimedOut)
-	{
-		GetWorldTimerManager().SetTimer(
-			ExecutionWaitTimer,
-			this,
-			&ABossEnemy::TryStartExecution,
-			0.1f,
-			false
-		);
-		return;
-	}
+    // 공중에서 피격자 몽타주를 재생하면 허공에 멈춘 채 쓰러지므로, 착지할 때까지 잠시 기다린다.
+    const bool bWaitTimedOut = GetWorld()->GetTimeSeconds() - ExecutionWaitStartTime >= ExecutionGroundWaitTime;
+    if (!Player->GetCharacterMovement()->IsMovingOnGround() && !bWaitTimedOut)
+    {
+        GetWorldTimerManager().SetTimer(
+            ExecutionWaitTimer,
+            this,
+            &ABossEnemy::TryStartExecution,
+            0.1f,
+            false
+        );
+        return;
+    }
 
-	if (ActivateExecutionAbility())
-	{
-		return;
-	}
+    if (ActivateExecutionAbility())
+    {
+        return;
+    }
 
-	// 처형을 시작하지 못하면 플레이어의 체력을 0으로 만들어 플레이어 쪽 사망 처리를 그대로 사용한다.
-	PlayerASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 0.0f);
+    // 처형을 시작하지 못하면 플레이어의 체력을 0으로 만들어 플레이어 쪽 사망 처리를 그대로 사용한다.
+    PlayerASC->SetNumericAttributeBase(UStatAttributeSet::GetHealthAttribute(), 0.0f);
 }
 
 bool ABossEnemy::ActivateExecutionAbility()
 {
-	if (!ExecutionAbilityClass || !ASC)
-	{
-		return false;
-	}
+    if (!ExecutionAbilityClass || !ASC)
+    {
+        return false;
+    }
 
-	// 처음 실행할 때 부여한다.
-	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(ExecutionAbilityClass);
-	if (!Spec && HasAuthority())
-	{
-		const FGameplayAbilitySpecHandle NewHandle = ASC->GiveAbility(FGameplayAbilitySpec(ExecutionAbilityClass, 1));
-		Spec = ASC->FindAbilitySpecFromHandle(NewHandle);
-	}
+    // 처음 실행할 때 부여한다.
+    FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(ExecutionAbilityClass);
+    if (!Spec && HasAuthority())
+    {
+        const FGameplayAbilitySpecHandle NewHandle = ASC->GiveAbility(FGameplayAbilitySpec(ExecutionAbilityClass, 1));
+        Spec = ASC->FindAbilitySpecFromHandle(NewHandle);
+    }
 
-	if (!Spec)
-	{
-		return false;
-	}
+    if (!Spec)
+    {
+        return false;
+    }
 
-	return ASC->TryActivateAbility(Spec->Handle);
+    return ASC->TryActivateAbility(Spec->Handle);
 }
 
 void ABossEnemy::ClearEnergyLinkState()
 {
-	PendingEnergyLinkIndex = INDEX_NONE;
-	bEnergyLinkActive = false;
-	GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
+    PendingEnergyLinkIndex = INDEX_NONE;
+    bEnergyLinkActive = false;
+    GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
 
-	// 착지를 기다리던 중에 실드가 해제되면 처형을 취소하고 플레이어 입력을 되돌린다.
-	if (GetWorldTimerManager().IsTimerActive(ExecutionWaitTimer))
-	{
-		GetWorldTimerManager().ClearTimer(ExecutionWaitTimer);
+    // 착지를 기다리던 중에 실드가 해제되면 처형을 취소하고 플레이어 입력을 되돌린다.
+    if (GetWorldTimerManager().IsTimerActive(ExecutionWaitTimer))
+    {
+        GetWorldTimerManager().ClearTimer(ExecutionWaitTimer);
 
-		APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
-		if (APlayerController* PlayerController = Player ? Cast<APlayerController>(Player->GetController()) : nullptr)
-		{
-			Player->EnableInput(PlayerController);
-		}
-	}
+        APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+        if (APlayerController* PlayerController = Player ? Cast<APlayerController>(Player->GetController()) : nullptr)
+        {
+            Player->EnableInput(PlayerController);
+        }
+    }
 
-	if (ASC)
-	{
-		ASC->SetLooseGameplayTagCount(EclipseGameplayTags::State_Invincible, 0);
-	}
+    if (ASC)
+    {
+        ASC->SetLooseGameplayTagCount(EclipseGameplayTags::State_Invincible, 0);
+    }
 }
 
 bool ABossEnemy::CanBeAssassinated() const
 {
-	if (bIsDead) return false;
-	if (bReceivingAssassination) return false;
-	if (PendingEnergyLinkIndex != INDEX_NONE) return false;
-	if (bEnergyLinkActive) return false;
+    if (bIsDead) return false;
+    if (bReceivingAssassination) return false;
+    if (PendingEnergyLinkIndex != INDEX_NONE) return false;
+    if (bEnergyLinkActive) return false;
 
-	if (bUseAssassinationCooldown)
-	{
-		const UWorld* World = GetWorld();
-		if (!World) return false;
-		if (World->GetTimeSeconds() < AssassinationReadyTime) return false;
-	}
-	else if (bAssassinationBlockedUntilRoar)
-	{
-		return false;
-	}
+    if (bUseAssassinationCooldown)
+    {
+        const UWorld* World = GetWorld();
+        if (!World) return false;
+        if (World->GetTimeSeconds() < AssassinationReadyTime) return false;
+    }
+    else if (bAssassinationBlockedUntilRoar)
+    {
+        return false;
+    }
 
-	return true;
+    return true;
 }
 
 void ABossEnemy::NotifyLostTargetRoarStarted()
 {
-	// 암살 연출 중에는 해제하지 않고, 실제 놓침 포효 시작 시에만 해제한다.
-	if (IsBeingAssassinated()) return;
-	if (bReceivingAssassination) return;
+    // 암살 연출 중에는 해제하지 않고, 실제 놓침 포효 시작 시에만 해제한다.
+    if (IsBeingAssassinated()) return;
+    if (bReceivingAssassination) return;
 
-	bAssassinationBlockedUntilRoar = false;
+    bAssassinationBlockedUntilRoar = false;
 }
 
 void ABossEnemy::ReceiveAssassination(UAnimMontage* Montage)
 {
-	if (!CanBeAssassinated()) return;
-	if (!IsValid(ASC)) return;
-	if (!IsValid(StatAttributeSet)) return;
+    if (!CanBeAssassinated()) return;
+    if (!IsValid(ASC)) return;
+    if (!IsValid(StatAttributeSet)) return;
 
-	const UWorld* World = GetWorld();
-	if (!World) return;
+    const UWorld* World = GetWorld();
+    if (!World) return;
 
-	// 피해 알림이나 연타가 재진입하더라도 같은 암살을 다시 적용하지 않는다.
-	AssassinationReadyTime = World->GetTimeSeconds() + FMath::Max(0.0f, AssassinationCooldown);
-	bAssassinationBlockedUntilRoar = true;
+    // 피해 알림이나 연타가 재진입하더라도 같은 암살을 다시 적용하지 않는다.
+    AssassinationReadyTime = World->GetTimeSeconds() + FMath::Max(0.0f, AssassinationCooldown);
+    bAssassinationBlockedUntilRoar = true;
 
-	// 암살 피해는 최대 체력의 AssassinationDamageRatio만큼이다.
-	TGuardValue<bool> AssassinationGuard(bReceivingAssassination, true);
-	const float Health = StatAttributeSet->GetHealth();
-	const float Damage = AssassinationDamageRatio * StatAttributeSet->GetMaxHealth();
+    TGuardValue<bool> ApplyingAssassinationDamage(bApplyingAssassinationDamage, true);
 
-	// 피해 중간에 남은 에너지 링크 체력이 있으면 OnHealthChanged가 그 체력에서 멈추므로 죽지 않는다.
-	bool bStoppedByEnergyLink = false;
-	if (EnergyLinkThresholds.IsValidIndex(NextEnergyLinkIndex))
-	{
-		const float ThresholdHealth = GetEnergyLinkThresholdHealth(NextEnergyLinkIndex);
-		bStoppedByEnergyLink = ThresholdHealth > 0.0f && ThresholdHealth < Health;
-	}
+    // 암살 피해는 최대 체력의 AssassinationDamageRatio만큼이다.
+    TGuardValue<bool> AssassinationGuard(bReceivingAssassination, true);
+    const float Health = StatAttributeSet->GetHealth();
+    const float Damage = AssassinationDamageRatio * StatAttributeSet->GetMaxHealth();
 
-	// 피해로 죽는 체력이면 일반 적처럼 암살 몽타주로 즉시 처치한다.
-	if (!bStoppedByEnergyLink && Health <= Damage + KINDA_SMALL_NUMBER)
-	{
-		Super::ReceiveAssassination(Montage);
-		return;
-	}
+    // 피해 중간에 남은 에너지 링크 체력이 있으면 OnHealthChanged가 그 체력에서 멈추므로 죽지 않는다.
+    bool bStoppedByEnergyLink = false;
+    if (EnergyLinkThresholds.IsValidIndex(NextEnergyLinkIndex))
+    {
+        const float ThresholdHealth = GetEnergyLinkThresholdHealth(NextEnergyLinkIndex);
+        bStoppedByEnergyLink = ThresholdHealth > 0.0f && ThresholdHealth < Health;
+    }
 
-	// 살아남는 체력이면 피해를 적용하고 암살 리액션을 재생한다. 경계 고정과 에너지 링크는 OnHealthChanged()에서 처리한다.
-	Super::ReceiveAssassination(AssassinationReactionMontage, Damage);
+    // 피해로 죽는 체력이면 일반 적처럼 암살 몽타주로 즉시 처치한다.
+    if (!bStoppedByEnergyLink && Health <= Damage + KINDA_SMALL_NUMBER)
+    {
+        Super::ReceiveAssassination(Montage);
+        return;
+    }
+
+    // 살아남는 체력이면 피해를 적용하고 암살 리액션을 재생한다. 경계 고정과 에너지 링크는 OnHealthChanged()에서 처리한다.
+    Super::ReceiveAssassination(AssassinationReactionMontage, Damage);
 }
 
 void ABossEnemy::ToggleActivate_Implementation()
 {
-	BreakEnergyLink();
+    BreakEnergyLink();
 }
 
 void ABossEnemy::ResetToInitial_Implementation()
 {
-	AssassinationReadyTime = 0.0;
-	bAssassinationBlockedUntilRoar = false;
+    StopBattleMusic();
+    bPlayerInGimmickStage = false;
+    bInCombatAwareness = false;
+    AssassinationReadyTime = 0.0;
+    bAssassinationBlockedUntilRoar = false;
 
-	HideBossHealthBar();
-	ClearEnergyLinkState();
-	NextEnergyLinkIndex = 0;
+    HideBossHealthBar();
+    ClearEnergyLinkState();
+    NextEnergyLinkIndex = 0;
 
-	// 링크 레이저를 끄고 기믹 포탈도 닫는다.
-	if (GimmickComp)
-	{
-		GimmickComp->ResetGimmick();
-	}
+    // 링크 레이저를 끄고 기믹 포탈도 닫는다.
+    if (GimmickComp)
+    {
+        GimmickComp->ResetGimmick();
+    }
 
-	if (VFXComp)
-	{
-		VFXComp->ResetVFX();
-	}
+    if (VFXComp)
+    {
+        VFXComp->ResetVFX();
+    }
 
-	// 리스폰한 보스는 모든 패턴을 바로 쓸 수 있게 패턴 쿨타임을 지운다.
-	PatternReadyTimes.Reset();
+    // 리스폰한 보스는 모든 패턴을 바로 쓸 수 있게 패턴 쿨타임을 지운다.
+    PatternReadyTimes.Reset();
 
-	bTurning = false;
+    bTurning = false;
 
-	Super::ResetToInitial_Implementation();
+    Super::ResetToInitial_Implementation();
 
-	if (BrokenEnergyLinkCount != 0)
-	{
-		BrokenEnergyLinkCount = 0;
-		OnPhaseChanged.Broadcast(GetPhase());
-	}
+    if (BrokenEnergyLinkCount != 0)
+    {
+        BrokenEnergyLinkCount = 0;
+        OnPhaseChanged.Broadcast(GetPhase());
+    }
 }
 
 bool ABossEnemy::ShouldLockMovementDuringAttack() const
 {
-	return !LostTargetComp || !LostTargetComp->IsHandlingLostTarget();
+    return !LostTargetComp || !LostTargetComp->IsHandlingLostTarget();
 }
 
 bool ABossEnemy::ShouldHoldCombatMemory() const
 {
-	return LostTargetComp && LostTargetComp->IsHandlingLostTarget();
+    return LostTargetComp && LostTargetComp->IsHandlingLostTarget();
 }
 
 bool ABossEnemy::ShouldRun() const
 {
-	return IsRunPhase() || (LostTargetComp && LostTargetComp->IsApproaching());
+    return IsRunPhase() || (LostTargetComp && LostTargetComp->IsApproaching());
 }
 
 void ABossEnemy::FaceDirection(float DirectionX)
 {
-	if (TurnRate <= 0.0f)
-	{
-		Super::FaceDirection(DirectionX);
-		return;
-	}
+    if (TurnRate <= 0.0f)
+    {
+        Super::FaceDirection(DirectionX);
+        return;
+    }
 
-	if (FMath::IsNearlyZero(DirectionX))
-	{
-		return;
-	}
+    if (FMath::IsNearlyZero(DirectionX))
+    {
+        return;
+    }
 
-	// 실제 회전은 Tick에서 TurnRate로 진행한다.
-	TargetFacingYaw = DirectionX > 0.0f ? 0.0f : 180.0f;
-	bTurning = !FMath::IsNearlyZero(FRotator::NormalizeAxis(TargetFacingYaw - GetActorRotation().Yaw), 1.0f);
+    // 실제 회전은 Tick에서 TurnRate로 진행한다.
+    TargetFacingYaw = DirectionX > 0.0f ? 0.0f : 180.0f;
+    bTurning = !FMath::IsNearlyZero(FRotator::NormalizeAxis(TargetFacingYaw - GetActorRotation().Yaw), 1.0f);
 }
 
 void ABossEnemy::UpdateTurning(float DeltaTime)
 {
-	if (!bTurning)
-	{
-		return;
-	}
+    if (!bTurning)
+    {
+        return;
+    }
 
-	const float CurrentYaw = GetActorRotation().Yaw;
-	const float NewYaw = FMath::FixedTurn(CurrentYaw, TargetFacingYaw, TurnRate * DeltaTime);
-	SetActorRotation(FRotator(0.0f, NewYaw, 0.0f));
+    const float CurrentYaw = GetActorRotation().Yaw;
+    const float NewYaw = FMath::FixedTurn(CurrentYaw, TargetFacingYaw, TurnRate * DeltaTime);
+    SetActorRotation(FRotator(0.0f, NewYaw, 0.0f));
 
-	if (FMath::IsNearlyZero(FRotator::NormalizeAxis(TargetFacingYaw - NewYaw), 1.0f))
-	{
-		SetActorRotation(FRotator(0.0f, TargetFacingYaw, 0.0f));
-		bTurning = false;
-	}
+    if (FMath::IsNearlyZero(FRotator::NormalizeAxis(TargetFacingYaw - NewYaw), 1.0f))
+    {
+        SetActorRotation(FRotator(0.0f, TargetFacingYaw, 0.0f));
+        bTurning = false;
+    }
 }
 
 void ABossEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 {
-	// 달리기 전 페이즈에서는 자세를 잡고 천천히 다가간다. 순찰·수색처럼 원래 느린 이동은 그대로다.
-	// 놓친 대상의 마지막 목격 위치로 갈 때는 페이즈와 무관하게 달린다.
-	const float LimitedSpeed = ShouldRun()
-		? Speed
-		: FMath::Min(Speed, StanceWalkSpeed);
+    // 달리기 전 페이즈에서는 자세를 잡고 천천히 다가간다. 순찰·수색처럼 원래 느린 이동은 그대로다.
+    // 놓친 대상의 마지막 목격 위치로 갈 때는 페이즈와 무관하게 달린다.
+    const float LimitedSpeed = ShouldRun()
+        ? Speed
+        : FMath::Min(Speed, StanceWalkSpeed);
 
-	// 이동 방향으로 도는 것은 FaceDirection 재정의가 맡는다.
-	Super::MoveAlongX(DestinationX, LimitedSpeed, DeltaTime);
+    // 이동 방향으로 도는 것은 FaceDirection 재정의가 맡는다.
+    Super::MoveAlongX(DestinationX, LimitedSpeed, DeltaTime);
 
-	// 크게 도는 중에는 뒷걸음질치지 않도록 방금 넣은 이동 입력을 버리고 제자리에서 다 돈 뒤 이동한다.
-	if (bTurning && FMath::Abs(FRotator::NormalizeAxis(TargetFacingYaw - GetActorRotation().Yaw)) > 45.0f)
-	{
-		StopHorizontalMovement();
-	}
+    // 크게 도는 중에는 뒷걸음질치지 않도록 방금 넣은 이동 입력을 버리고 제자리에서 다 돈 뒤 이동한다.
+    if (bTurning && FMath::Abs(FRotator::NormalizeAxis(TargetFacingYaw - GetActorRotation().Yaw)) > 45.0f)
+    {
+        StopHorizontalMovement();
+    }
 }
 
 bool ABossEnemy::CanStartAIAttack(AActor* Target) const
 {
-	if (PendingEnergyLinkIndex != INDEX_NONE) return false;
-	// 패턴 사이 휴식 중에는 공격 분기로 넘어가지 않고 추격 분기에서 대상을 바라보며 거리를 맞춘다.
-	if (IsRestingBetweenPatterns())
-	{
-		return false;
-	}
+    if (PendingEnergyLinkIndex != INDEX_NONE) return false;
+    // 패턴 사이 휴식 중에는 공격 분기로 넘어가지 않고 추격 분기에서 대상을 바라보며 거리를 맞춘다.
+    if (IsRestingBetweenPatterns())
+    {
+        return false;
+    }
 
-	if (!PatternTable || !IsValidAITarget(Target))
-	{
-		return false;
-	}
+    if (!PatternTable || !IsValidAITarget(Target))
+    {
+        return false;
+    }
 
-	TArray<TPair<FName, const FBossPatternRow*>> Candidates;
-	float TotalWeight = 0.0f;
-	GatherUsablePatterns(Target, Candidates, TotalWeight);
-	return !Candidates.IsEmpty();
+    TArray<TPair<FName, const FBossPatternRow*>> Candidates;
+    float TotalWeight = 0.0f;
+    GatherUsablePatterns(Target, Candidates, TotalWeight);
+    return !Candidates.IsEmpty();
 }
 
 bool ABossEnemy::IsRestingBetweenPatterns() const
 {
-	return GetWorld()->GetTimeSeconds() < NextAttackTime;
+    return GetWorld()->GetTimeSeconds() < NextAttackTime;
 }
 
 void ABossEnemy::UpdateCombatMovement(AActor* Target, float DeltaSeconds)
 {
-	// 패턴 재생 중에는 이동·방향 전환 입력을 넣지 않는다.
-	// 난사 중 시작한 패턴은 BT 공격 태스크가 붙잡지 않아, 그 도중 대상을 발견하면 추격 태스크가 이 함수를 부른다.
-	// 속도는 건드리지 않으므로 돌진 패턴의 이동은 그대로 진행된다.
-	if (IsAttackActive())
-	{
-		return;
-	}
+    // 패턴 재생 중에는 이동·방향 전환 입력을 넣지 않는다.
+    // 난사 중 시작한 패턴은 BT 공격 태스크가 붙잡지 않아, 그 도중 대상을 발견하면 추격 태스크가 이 함수를 부른다.
+    // 속도는 건드리지 않으므로 돌진 패턴의 이동은 그대로 진행된다.
+    if (IsAttackActive())
+    {
+        return;
+    }
 
-	if (!IsRestingBetweenPatterns())
-	{
-		Super::UpdateCombatMovement(Target, DeltaSeconds);
-		return;
-	}
+    if (!IsRestingBetweenPatterns())
+    {
+        Super::UpdateCombatMovement(Target, DeltaSeconds);
+        return;
+    }
 
-	if (!IsValidAITarget(Target) || DeltaSeconds <= 0.0f)
-	{
-		return;
-	}
+    if (!IsValidAITarget(Target) || DeltaSeconds <= 0.0f)
+    {
+        return;
+    }
 
-	const float OffsetX = Target->GetActorLocation().X - GetActorLocation().X;
+    const float OffsetX = Target->GetActorLocation().X - GetActorLocation().X;
 
-	// 휴식 거리보다 멀면 대상 앞 휴식 거리 지점까지 다가간다. 다가가는 동안의 회전은 MoveAlongX가 맡는다.
-	if (FMath::Abs(OffsetX) > PatternRestKeepDistance)
-	{
-		const float DestinationX = Target->GetActorLocation().X - FMath::Sign(OffsetX) * PatternRestKeepDistance;
-		MoveAlongX(DestinationX, ChaseSpeed, DeltaSeconds);
-		return;
-	}
+    // 휴식 거리보다 멀면 대상 앞 휴식 거리 지점까지 다가간다. 다가가는 동안의 회전은 MoveAlongX가 맡는다.
+    if (FMath::Abs(OffsetX) > PatternRestKeepDistance)
+    {
+        const float DestinationX = Target->GetActorLocation().X - FMath::Sign(OffsetX) * PatternRestKeepDistance;
+        MoveAlongX(DestinationX, ChaseSpeed, DeltaSeconds);
+        return;
+    }
 
-	// 충분히 가까우면 제자리에서 대상을 바라보며 다음 패턴을 기다린다.
-	StopHorizontalMovement();
-	FaceLocation(Target->GetActorLocation());
+    // 충분히 가까우면 제자리에서 대상을 바라보며 다음 패턴을 기다린다.
+    StopHorizontalMovement();
+    FaceLocation(Target->GetActorLocation());
 }
 
 float ABossEnemy::GetCombatSightRadius() const
 {
-	if (!EnemyDetectComponent)
-	{
-		return Super::GetCombatSightRadius();
-	}
+    if (!EnemyDetectComponent)
+    {
+        return Super::GetCombatSightRadius();
+    }
 
-	return FMath::Max(Super::GetCombatSightRadius(), EnemyDetectComponent->GetCurrentDetectionRadius());
+    return FMath::Max(Super::GetCombatSightRadius(), EnemyDetectComponent->GetCurrentDetectionRadius());
 }
 
 bool ABossEnemy::ActivateAIAttack()
 {
-	// 대상 쪽으로 다 돌기 전에는 공격하지 않는다. Attack 태스크가 AttackActivationRetryDelay 뒤에 다시 시도한다.
-	if (bTurning)
-	{
-		return false;
-	}
+    // 대상 쪽으로 다 돌기 전에는 공격하지 않는다. Attack 태스크가 AttackActivationRetryDelay 뒤에 다시 시도한다.
+    if (bTurning)
+    {
+        return false;
+    }
 
-	// 패턴은 모두 패턴 테이블로 고른다. 테이블이 없으면 공격하지 않는다.
-	if (!PatternTable)
-	{
-		return false;
-	}
+    // 패턴은 모두 패턴 테이블로 고른다. 테이블이 없으면 공격하지 않는다.
+    if (!PatternTable)
+    {
+        return false;
+    }
 
-	FName RowName;
-	float TotalWeight = 0.0f;
-	const FBossPatternRow* Pattern = PickNextPattern(GetCombatTarget(), RowName, TotalWeight);
-	if (!Pattern)
-	{
-		// 모든 패턴이 쿨타임이거나 사용 거리 밖이다.
-		return false;
-	}
+    FName RowName;
+    float TotalWeight = 0.0f;
+    const FBossPatternRow* Pattern = PickNextPattern(GetCombatTarget(), RowName, TotalWeight);
+    if (!Pattern)
+    {
+        // 모든 패턴이 쿨타임이거나 사용 거리 밖이다.
+        return false;
+    }
 
-	const bool bActivated = ActivatePatternAbility(*Pattern);
-	if (bActivated)
-	{
-		// 쿨타임은 패턴을 시작한 시점부터 센다.
-		if (Pattern->Cooldown > 0.0f)
-		{
-			PatternReadyTimes.Add(RowName, GetWorld()->GetTimeSeconds() + Pattern->Cooldown);
-		}
+    const bool bActivated = ActivatePatternAbility(*Pattern);
+    if (bActivated)
+    {
+        // 쿨타임은 패턴을 시작한 시점부터 센다.
+        if (Pattern->Cooldown > 0.0f)
+        {
+            PatternReadyTimes.Add(RowName, GetWorld()->GetTimeSeconds() + Pattern->Cooldown);
+        }
 
-		LogPatternChoice(RowName, *Pattern, TotalWeight);
-	}
+        LogPatternChoice(RowName, *Pattern, TotalWeight);
+    }
 
-	return bActivated;
+    return bActivated;
 }
 
 bool ABossEnemy::ActivatePatternAgainst(const FBossPatternRow& Row, APawn* Target)
 {
-	if (!IsValidAITarget(Target))
-	{
-		return false;
-	}
+    if (!IsValidAITarget(Target))
+    {
+        return false;
+    }
 
-	// 패턴 어빌리티는 공격 대상과 공격 상태를 요구한다. 근접 판정도 이 대상에게만 들어간다.
-	CombatTarget = Target;
-	SetBehaviorState(EEnemyBehaviorState::Attack);
-	return ActivatePatternAbility(Row);
+    // 패턴 어빌리티는 공격 대상과 공격 상태를 요구한다. 근접 판정도 이 대상에게만 들어간다.
+    CombatTarget = Target;
+    SetBehaviorState(EEnemyBehaviorState::Attack);
+    return ActivatePatternAbility(Row);
 }
 
 bool ABossEnemy::ActivatePatternAbility(const FBossPatternRow& Row)
 {
-	if (IsCinematicLocked()) return false;
-	// BT 밖에서 요청한 패턴도 암살 접근·연출 중에는 시작하지 않는다.
-	if (IsBeingAssassinated()) return false;
+    if (IsCinematicLocked()) return false;
+    // BT 밖에서 요청한 패턴도 암살 접근·연출 중에는 시작하지 않는다.
+    if (IsBeingAssassinated()) return false;
 
-	if (!ASC || !Row.AbilityClass)
-	{
-		return false;
-	}
+    if (!ASC || !Row.AbilityClass)
+    {
+        return false;
+    }
 
-	// 처음 고른 어빌리티는 그때 부여한다. 같은 어빌리티를 쓰는 패턴끼리는 스펙을 공유한다.
-	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Row.AbilityClass);
-	if (!Spec && HasAuthority())
-	{
-		const FGameplayAbilitySpecHandle NewHandle = ASC->GiveAbility(FGameplayAbilitySpec(Row.AbilityClass, 1));
-		Spec = ASC->FindAbilitySpecFromHandle(NewHandle);
-	}
+    // 처음 고른 어빌리티는 그때 부여한다. 같은 어빌리티를 쓰는 패턴끼리는 스펙을 공유한다.
+    FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Row.AbilityClass);
+    if (!Spec && HasAuthority())
+    {
+        const FGameplayAbilitySpecHandle NewHandle = ASC->GiveAbility(FGameplayAbilitySpec(Row.AbilityClass, 1));
+        Spec = ASC->FindAbilitySpecFromHandle(NewHandle);
+    }
 
-	if (!Spec)
-	{
-		return false;
-	}
+    if (!Spec)
+    {
+        return false;
+    }
 
-	CurrentPatternHandle = Spec->Handle;
-	return ASC->TryActivateAbility(CurrentPatternHandle);
+    CurrentPatternHandle = Spec->Handle;
+    return ASC->TryActivateAbility(CurrentPatternHandle);
 }
 
 void ABossEnemy::GatherUsablePatterns(
-	const AActor* Target,
-	TArray<TPair<FName, const FBossPatternRow*>>& OutCandidates,
-	float& OutTotalWeight
+    const AActor* Target,
+    TArray<TPair<FName, const FBossPatternRow*>>& OutCandidates,
+    float& OutTotalWeight
 ) const
 {
-	OutCandidates.Reset();
-	OutTotalWeight = 0.0f;
-	if (!PatternTable || !ASC || !Target)
-	{
-		return;
-	}
+    OutCandidates.Reset();
+    OutTotalWeight = 0.0f;
+    if (!PatternTable || !ASC || !Target)
+    {
+        return;
+    }
 
-	const float Distance = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
-	const bool bAssumeInAttackDistance = IsChasingFleeingTarget(Target);
-	const int32 Phase = GetPhase();
-	for (const TPair<FName, uint8*>& Pair : PatternTable->GetRowMap())
-	{
-		const FBossPatternRow* Row = reinterpret_cast<const FBossPatternRow*>(Pair.Value);
-		if (!Row || !IsPatternUsable(Pair.Key, *Row, Distance, bAssumeInAttackDistance))
-		{
-			continue;
-		}
+    const float Distance = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
+    const bool bAssumeInAttackDistance = IsChasingFleeingTarget(Target);
+    const int32 Phase = GetPhase();
+    for (const TPair<FName, uint8*>& Pair : PatternTable->GetRowMap())
+    {
+        const FBossPatternRow* Row = reinterpret_cast<const FBossPatternRow*>(Pair.Value);
+        if (!Row || !IsPatternUsable(Pair.Key, *Row, Distance, bAssumeInAttackDistance))
+        {
+            continue;
+        }
 
-		OutCandidates.Emplace(Pair.Key, Row);
-		OutTotalWeight += Row->GetWeightForPhase(Phase);
-	}
+        OutCandidates.Emplace(Pair.Key, Row);
+        OutTotalWeight += Row->GetWeightForPhase(Phase);
+    }
 }
 
 bool ABossEnemy::IsPatternUsable(
-	FName RowName,
-	const FBossPatternRow& Row,
-	float DistanceToTarget,
-	bool bAssumeInAttackDistance
+    FName RowName,
+    const FBossPatternRow& Row,
+    float DistanceToTarget,
+    bool bAssumeInAttackDistance
 ) const
 {
-	// 지금 페이즈의 가중치가 있고 어빌리티가 지정된 행만 후보로 삼는다.
-	if (Row.GetWeightForPhase(GetPhase()) <= 0.0f || !Row.AbilityClass)
-	{
-		return false;
-	}
+    // 지금 페이즈의 가중치가 있고 어빌리티가 지정된 행만 후보로 삼는다.
+    if (Row.GetWeightForPhase(GetPhase()) <= 0.0f || !Row.AbilityClass)
+    {
+        return false;
+    }
 
-	if (IsPatternOnCooldown(RowName))
-	{
-		return false;
-	}
+    if (IsPatternOnCooldown(RowName))
+    {
+        return false;
+    }
 
-	if (IsPatternAbilityOnCooldown(Row))
-	{
-		return false;
-	}
+    if (IsPatternAbilityOnCooldown(Row))
+    {
+        return false;
+    }
 
-	// 사용 거리는 어빌리티 CDO의 설정을 읽는다. 보스 패턴 계열이 아니면 기본 공격 거리를 쓴다.
-	const UGameplayAbility* AbilityCDO = Row.AbilityClass->GetDefaultObject<UGameplayAbility>();
-	const UGABossPatternBase* PatternCDO = Cast<UGABossPatternBase>(AbilityCDO);
-	const float MinDistance = PatternCDO ? PatternCDO->GetMinUseDistance() : 0.0f;
-	const float MaxDistance = PatternCDO && PatternCDO->GetMaxUseDistance() > 0.0f
-		? PatternCDO->GetMaxUseDistance()
-		: AttackDistance;
+    // 사용 거리는 어빌리티 CDO의 설정을 읽는다. 보스 패턴 계열이 아니면 기본 공격 거리를 쓴다.
+    const UGameplayAbility* AbilityCDO = Row.AbilityClass->GetDefaultObject<UGameplayAbility>();
+    const UGABossPatternBase* PatternCDO = Cast<UGABossPatternBase>(AbilityCDO);
+    const float MinDistance = PatternCDO ? PatternCDO->GetMinUseDistance() : 0.0f;
+    const float MaxDistance = PatternCDO && PatternCDO->GetMaxUseDistance() > 0.0f
+        ? PatternCDO->GetMaxUseDistance()
+        : AttackDistance;
 
-	auto IsInRange = [MinDistance, MaxDistance](float Distance)
-	{
-		return Distance >= MinDistance && Distance <= MaxDistance;
-	};
+    auto IsInRange = [MinDistance, MaxDistance](float Distance)
+        {
+            return Distance >= MinDistance && Distance <= MaxDistance;
+        };
 
-	if (IsInRange(DistanceToTarget))
-	{
-		return true;
-	}
+    if (IsInRange(DistanceToTarget))
+    {
+        return true;
+    }
 
-	// 달아나는 대상을 쫓는 중이면 공격 거리에 들어온 것으로 보고 다시 검사한다.
-	return bAssumeInAttackDistance && IsInRange(AttackDistance);
+    // 달아나는 대상을 쫓는 중이면 공격 거리에 들어온 것으로 보고 다시 검사한다.
+    return bAssumeInAttackDistance && IsInRange(AttackDistance);
 }
 
 bool ABossEnemy::IsPatternAbilityOnCooldown(const FBossPatternRow& Row) const
 {
-	// 어빌리티 자체에 GAS 쿨타임이 걸려 있으면 어차피 활성화되지 않으므로 뺀다.
-	const UGameplayAbility* AbilityCDO = Row.AbilityClass ? Row.AbilityClass->GetDefaultObject<UGameplayAbility>() : nullptr;
-	const FGameplayTagContainer* CooldownTags = AbilityCDO ? AbilityCDO->GetCooldownTags() : nullptr;
-	return ASC && CooldownTags && !CooldownTags->IsEmpty() && ASC->HasAnyMatchingGameplayTags(*CooldownTags);
+    // 어빌리티 자체에 GAS 쿨타임이 걸려 있으면 어차피 활성화되지 않으므로 뺀다.
+    const UGameplayAbility* AbilityCDO = Row.AbilityClass ? Row.AbilityClass->GetDefaultObject<UGameplayAbility>() : nullptr;
+    const FGameplayTagContainer* CooldownTags = AbilityCDO ? AbilityCDO->GetCooldownTags() : nullptr;
+    return ASC && CooldownTags && !CooldownTags->IsEmpty() && ASC->HasAnyMatchingGameplayTags(*CooldownTags);
 }
 
 bool ABossEnemy::IsPatternOnCooldown(FName RowName) const
 {
-	const double* ReadyTime = PatternReadyTimes.Find(RowName);
-	if (!ReadyTime)
-	{
-		return false;
-	}
+    const double* ReadyTime = PatternReadyTimes.Find(RowName);
+    if (!ReadyTime)
+    {
+        return false;
+    }
 
-	return GetWorld()->GetTimeSeconds() < *ReadyTime;
+    return GetWorld()->GetTimeSeconds() < *ReadyTime;
 }
 
 bool ABossEnemy::IsChasingFleeingTarget(const AActor* Target) const
 {
-	if (!bAssumeAttackRangeWhileChasing || !Target || !EnemyDetectComponent)
-	{
-		return false;
-	}
+    if (!bAssumeAttackRangeWhileChasing || !Target || !EnemyDetectComponent)
+    {
+        return false;
+    }
 
-	// 안쪽 감지 범위(발각 반경) 안이어야 한다.
-	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
-	if (ToTarget.SizeSquared() > FMath::Square(EnemyDetectComponent->GetCurrentDiscoveryRadius()))
-	{
-		return false;
-	}
+    // 안쪽 감지 범위(발각 반경) 안이어야 한다.
+    const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
+    if (ToTarget.SizeSquared() > FMath::Square(EnemyDetectComponent->GetCurrentDiscoveryRadius()))
+    {
+        return false;
+    }
 
-	// 횡스크롤이라 X축만 본다. 대상이 보스 앞쪽에 있고, 보스가 바라보는 방향으로 달아나고 있어야 한다.
-	const float FacingSign = GetActorForwardVector().X >= 0.0f ? 1.0f : -1.0f;
-	if (ToTarget.X * FacingSign <= 0.0f)
-	{
-		return false;
-	}
+    // 횡스크롤이라 X축만 본다. 대상이 보스 앞쪽에 있고, 보스가 바라보는 방향으로 달아나고 있어야 한다.
+    const float FacingSign = GetActorForwardVector().X >= 0.0f ? 1.0f : -1.0f;
+    if (ToTarget.X * FacingSign <= 0.0f)
+    {
+        return false;
+    }
 
-	return Target->GetVelocity().X * FacingSign >= ChaseAssumeMinTargetSpeed;
+    return Target->GetVelocity().X * FacingSign >= ChaseAssumeMinTargetSpeed;
 }
 
 const FBossPatternRow* ABossEnemy::PickNextPattern(const AActor* Target, FName& OutRowName, float& OutTotalWeight) const
 {
-	TArray<TPair<FName, const FBossPatternRow*>> Candidates;
-	GatherUsablePatterns(Target, Candidates, OutTotalWeight);
-	if (Candidates.IsEmpty())
-	{
-		return nullptr;
-	}
+    TArray<TPair<FName, const FBossPatternRow*>> Candidates;
+    GatherUsablePatterns(Target, Candidates, OutTotalWeight);
+    if (Candidates.IsEmpty())
+    {
+        return nullptr;
+    }
 
-	// 0 ~ 후보 가중치 합 사이 값을 뽑아 누적 가중치가 그 값을 넘는 행을 고른다.
-	const int32 Phase = GetPhase();
-	float Roll = FMath::FRandRange(0.0f, OutTotalWeight);
-	for (const TPair<FName, const FBossPatternRow*>& Candidate : Candidates)
-	{
-		Roll -= Candidate.Value->GetWeightForPhase(Phase);
-		if (Roll <= 0.0f)
-		{
-			OutRowName = Candidate.Key;
-			return Candidate.Value;
-		}
-	}
+    // 0 ~ 후보 가중치 합 사이 값을 뽑아 누적 가중치가 그 값을 넘는 행을 고른다.
+    const int32 Phase = GetPhase();
+    float Roll = FMath::FRandRange(0.0f, OutTotalWeight);
+    for (const TPair<FName, const FBossPatternRow*>& Candidate : Candidates)
+    {
+        Roll -= Candidate.Value->GetWeightForPhase(Phase);
+        if (Roll <= 0.0f)
+        {
+            OutRowName = Candidate.Key;
+            return Candidate.Value;
+        }
+    }
 
-	OutRowName = Candidates.Last().Key;
-	return Candidates.Last().Value;
+    OutRowName = Candidates.Last().Key;
+    return Candidates.Last().Value;
 }
 
 void ABossEnemy::LogPatternChoice(FName RowName, const FBossPatternRow& Row, float TotalWeight) const
 {
-	const float Weight = Row.GetWeightForPhase(GetPhase());
-	const FString Message = FString::Printf(
-		TEXT("[보스 패턴] %d페이즈 %s (%s) - 가중치 %.1f / 합 %.1f (%.1f%%), 쿨타임 %.1f초"),
-		GetPhase(),
-		*Row.DisplayName.ToString(),
-		*RowName.ToString(),
-		Weight,
-		TotalWeight,
-		TotalWeight > 0.0f ? Weight / TotalWeight * 100.0f : 0.0f,
-		Row.Cooldown
-	);
+    const float Weight = Row.GetWeightForPhase(GetPhase());
+    const FString Message = FString::Printf(
+        TEXT("[보스 패턴] %d페이즈 %s (%s) - 가중치 %.1f / 합 %.1f (%.1f%%), 쿨타임 %.1f초"),
+        GetPhase(),
+        *Row.DisplayName.ToString(),
+        *RowName.ToString(),
+        Weight,
+        TotalWeight,
+        TotalWeight > 0.0f ? Weight / TotalWeight * 100.0f : 0.0f,
+        Row.Cooldown
+    );
 
-	UE_LOG(LogTemp, Log, TEXT("%s"), *Message);
+    UE_LOG(LogTemp, Log, TEXT("%s"), *Message);
 
-	if (bPrintPatternOnScreen && GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Orange, Message);
-	}
+    if (bPrintPatternOnScreen && GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Orange, Message);
+    }
 }
 
 bool ABossEnemy::IsAttackActive() const
 {
-	if (const FGameplayAbilitySpec* Spec = ASC ? ASC->FindAbilitySpecFromHandle(CurrentPatternHandle) : nullptr)
-	{
-		return Spec->IsActive();
-	}
+    if (const FGameplayAbilitySpec* Spec = ASC ? ASC->FindAbilitySpecFromHandle(CurrentPatternHandle) : nullptr)
+    {
+        return Spec->IsActive();
+    }
 
-	return Super::IsAttackActive();
+    return Super::IsAttackActive();
 }
 
 void ABossEnemy::OnPatternAbilityEnded(const FAbilityEndedData& EndedData)
 {
-	if (bIsDead || !CurrentPatternHandle.IsValid() || EndedData.AbilitySpecHandle != CurrentPatternHandle)
-	{
-		return;
-	}
+    if (bIsDead || !CurrentPatternHandle.IsValid() || EndedData.AbilitySpecHandle != CurrentPatternHandle)
+    {
+        return;
+    }
 
-	const float RestTime = FMath::FRandRange(
-		PatternRestTimeMin,
-		FMath::Max(PatternRestTimeMin, PatternRestTimeMax)
-	);
+    const float RestTime = FMath::FRandRange(
+        PatternRestTimeMin,
+        FMath::Max(PatternRestTimeMin, PatternRestTimeMax)
+    );
 
-	// 피격 경직 등으로 이미 더 늦게 잡힌 공격 시각은 앞당기지 않는다.
-	NextAttackTime = FMath::Max(NextAttackTime, GetWorld()->GetTimeSeconds() + RestTime);
+    // 피격 경직 등으로 이미 더 늦게 잡힌 공격 시각은 앞당기지 않는다.
+    NextAttackTime = FMath::Max(NextAttackTime, GetWorld()->GetTimeSeconds() + RestTime);
 }
 
 void ABossEnemy::CancelAIBaseAttack()
 {
-	if (ASC && CurrentPatternHandle.IsValid())
-	{
-		ASC->CancelAbilityHandle(CurrentPatternHandle);
-		return;
-	}
+    if (ASC && CurrentPatternHandle.IsValid())
+    {
+        ASC->CancelAbilityHandle(CurrentPatternHandle);
+        return;
+    }
 
-	Super::CancelAIBaseAttack();
+    Super::CancelAIBaseAttack();
 }
 
 #if WITH_EDITOR
 void ABossEnemy::ProcessDebugRequests()
 {
-	if (DebugDamage > 0.0f)
-	{
-		const float Amount = DebugDamage;
-		DebugDamage = 0.0f;
+    if (DebugDamage > 0.0f)
+    {
+        const float Amount = DebugDamage;
+        DebugDamage = 0.0f;
 
-		// 플레이어가 때린 것처럼 Context를 만들어 일반 피해 경로(무적 검사, 감지 갱신)를 그대로 탄다.
-		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-		APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
-		Context.AddInstigator(Player, Player);
+        // 플레이어가 때린 것처럼 Context를 만들어 일반 피해 경로(무적 검사, 감지 갱신)를 그대로 탄다.
+        FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+        APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+        Context.AddInstigator(Player, Player);
 
-		FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(UGEBasicAttackDamage::StaticClass(), 1.0f, Context);
-		if (Spec.IsValid())
-		{
-			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), Amount);
-			ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
-		}
-	}
+        FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(UGEBasicAttackDamage::StaticClass(), 1.0f, Context);
+        if (Spec.IsValid())
+        {
+            Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), Amount);
+            ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+        }
+    }
 
-	if (bDebugAssassinate)
-	{
-		bDebugAssassinate = false;
-		ReceiveAssassination(nullptr);
-	}
+    if (bDebugAssassinate)
+    {
+        bDebugAssassinate = false;
+        ReceiveAssassination(nullptr);
+    }
 
-	if (bDebugBreakEnergyLink)
-	{
-		bDebugBreakEnergyLink = false;
-		BreakEnergyLink();
-	}
+    if (bDebugBreakEnergyLink)
+    {
+        bDebugBreakEnergyLink = false;
+        BreakEnergyLink();
+    }
 
-	if (bDebugExpireEnergyLink)
-	{
-		bDebugExpireEnergyLink = false;
-		GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
-		OnEnergyLinkTimeExpired();
-	}
+    if (bDebugExpireEnergyLink)
+    {
+        bDebugExpireEnergyLink = false;
+        GetWorldTimerManager().ClearTimer(EnergyLinkTimer);
+        OnEnergyLinkTimeExpired();
+    }
 }
 #endif

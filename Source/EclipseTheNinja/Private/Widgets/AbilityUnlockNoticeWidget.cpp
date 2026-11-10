@@ -6,10 +6,14 @@
 #include "Engine/Texture2D.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "EclipseUISound.h"
 
 void UAbilityUnlockNoticeWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+
+	// 확인 버튼에 호버·선택 사운드를 넣는다
+	EclipseUISound::ApplyButtonSoundsToTree(this);
 
 	SetIsFocusable(true);
 	if (IsValid(this->CloseButton))

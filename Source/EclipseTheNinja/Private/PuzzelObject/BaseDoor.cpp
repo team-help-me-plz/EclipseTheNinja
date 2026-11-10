@@ -13,6 +13,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/StaticMesh.h"
 #include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 
 ABaseDoor::ABaseDoor()
@@ -41,6 +42,21 @@ ABaseDoor::ABaseDoor()
 	this->InteractKeyWidget->SetDrawAtDesiredSize(true);
 	this->InteractKeyWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	this->InteractKeyWidget->SetVisibility(false);
+
+	// 문 여닫는 기본 사운드(에셋 시트). 힌지 문·미닫이 문이 함께 쓰고, BP에서 바꿀 수 있다
+	static ConstructorHelpers::FObjectFinder<USoundBase> OpenSoundFinder(
+		TEXT("/Game/Audio/wooden_squeaking_3.wooden_squeaking_3"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> CloseSoundFinder(
+		TEXT("/Game/Audio/wooden_squeaking_4.wooden_squeaking_4"));
+
+	if (OpenSoundFinder.Succeeded())
+	{
+		this->OpenSound = OpenSoundFinder.Object;
+	}
+	if (CloseSoundFinder.Succeeded())
+	{
+		this->CloseSound = CloseSoundFinder.Object;
+	}
 }
 
 void ABaseDoor::BeginPlay()

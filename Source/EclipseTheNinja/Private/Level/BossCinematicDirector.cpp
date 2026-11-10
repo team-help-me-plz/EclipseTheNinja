@@ -49,13 +49,10 @@ void ABossCinematicDirector::BeginPlay()
     this->Boss->OnEnergyLinkBroken.AddDynamic(this, &ABossCinematicDirector::HandleEnergyLinkBroken);
     this->Boss->OnExecutionStarted.AddDynamic(this, &ABossCinematicDirector::HandleExecutionStarted);
 
-    // 보스 스테이지 쪽 포탈에 도착하는 순간 그로기를 시작한다
+    // 도착한 스테이지에 맞춰 BGM을 바꾸고, 보스 스테이지로 돌아오면 예약된 그로기를 시작한다.
     for (TActorIterator<ABossGimmickPortal> It(GetWorld()); It; ++It)
     {
-        if (It->GetPortalSide() == EBossGimmickPortalSide::BossStage)
-        {
-            It->OnPlayerArrived.AddDynamic(this, &ABossCinematicDirector::HandlePortalArrived);
-        }
+        It->OnPlayerArrived.AddDynamic(this, &ABossCinematicDirector::HandlePortalArrived);
     }
 
     TArray<ATutorialSequenceTrigger*> Triggers = { this->IntroSequence, this->ExecutionSequence, this->GroggySequence };
@@ -81,6 +78,7 @@ void ABossCinematicDirector::BeginPlay()
         GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
         {
             PauseBoss();
+            this->Boss->StartBattleMusic();
             this->IntroSequence->PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
         }));
     }
@@ -132,13 +130,20 @@ void ABossCinematicDirector::HandleExecutionStarted()
 
 void ABossCinematicDirector::HandlePortalArrived(ABossGimmickPortal* Portal, APawn* Player)
 {
-    if (!this->bGroggyPending || !IsValid(this->GroggySequence))
+    if (!IsValid(this->Boss) || !IsValid(Portal))
+    {
+        return;
+    }
+    const bool bInGimmickStage = Portal->GetPortalSide() == EBossGimmickPortalSide::GimmickStage;
+    this->Boss->SetPlayerInGimmickStage(bInGimmickStage);
+    if (bInGimmickStage || !this->bGroggyPending || !IsValid(this->GroggySequence) || this->Boss->IsDead())
     {
         return;
     }
     this->bGroggyPending = false;
 
     PauseBoss();
+    this->Boss->PlayGroggySound();
 
     if (IsValid(this->GroggyAnimation))
     {

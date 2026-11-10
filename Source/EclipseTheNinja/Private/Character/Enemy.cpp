@@ -2,6 +2,7 @@
 
 
 #include "Character/Enemy.h"
+#include "Sound/SoundBase.h"
 #include "Clone/CloneCharacter.h"
 #include "Component/EnemyDetectionComponent.h"
 #include "GAS/StatAttributeSet.h"
@@ -36,6 +37,7 @@
 #include "GAS/Tags/EclipseGameplayTags.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Component/EnemySpacingComponent.h"
+#include "Component/MovementLoopSoundComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 // Sets default values
@@ -77,6 +79,10 @@ AEnemy::AEnemy()
 
 	// 시체가 사라질 때까지 기다리지 않고 암살 시작 4초 뒤에 떨어뜨린다.
 	AssassinationDropComp->SetDropDelay(true, 4.0f);
+
+	// 몬스터 걷기 발소리. 지금은 기본 사운드를 비워 꺼 둔다.
+	// 다시 켜려면 BP의 WalkSoundComp에서 Loop Sound를 지정한다 (예: /Game/Audio/A_army_walk_loop)
+	WalkSoundComp = CreateDefaultSubobject<UMovementLoopSoundComponent>(TEXT("WalkSoundComp"));
 
 	NoiseDetectComponent = CreateDefaultSubobject<USphereComponent>(TEXT("NoiseDetectComponent"));
 	NoiseDetectComponent->SetupAttachment(RootComponent);
@@ -262,6 +268,11 @@ void AEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 	if (bIsDead)
 	{
 		return;
+	}
+	if (!bIsDoT && Data.NewValue < Data.OldValue
+		&& (Data.NewValue > 0.0f || !IsValid(PendingAssassinationMontage)))
+	{
+		PlayEnemySound(MonsterHitSound);
 	}
 	if (Data.NewValue <= 0.0f)
 	{
@@ -728,6 +739,23 @@ void AEnemy::HandleAwarenessChanged(float Gauge, EEnemyAlertLevel Level)
 	if (Level != LastNoiseSyncLevel)
 	{
 		SyncNoiseDetectRadius(Level);
+		if (Level == EEnemyAlertLevel::Combat && !bIsDead)
+		{
+			PlayEnemySound(MonsterDetectionSound);
+		}
+	}
+}
+
+void AEnemy::PlayAttackSound() const
+{
+	PlayEnemySound(AttackSound);
+}
+
+void AEnemy::PlayEnemySound(USoundBase* Sound) const
+{
+	if (Sound && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
 	}
 }
 

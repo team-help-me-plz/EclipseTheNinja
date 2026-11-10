@@ -12,6 +12,8 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -99,6 +101,11 @@ void UGAElementalFire::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 			EAttachLocation::SnapToTarget, true);
 	}
 
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (FireImbueSound && IsValid(Avatar) && Avatar->GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(Avatar, FireImbueSound, Avatar->GetActorLocation());
+	}
 	OnFireElementStarted.Broadcast();
 }
 

@@ -25,6 +25,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Styling/CoreStyle.h"
+#include "EclipseUISound.h"
 
 namespace MainMenuStyle
 {
@@ -104,6 +105,9 @@ bool UMainMenuWidget::Initialize()
 void UMainMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// WBP·C++ 어느 쪽에서 만든 버튼이든 호버·선택 사운드를 넣는다
+	EclipseUISound::ApplyButtonSoundsToTree(this);
 	InputFeedback.Start();
     if (ContinueButton) ContinueButton->SetIsEnabled(GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->CanContinue());
     if (OverwritePanel) OverwritePanel->SetVisibility(ESlateVisibility::Collapsed);

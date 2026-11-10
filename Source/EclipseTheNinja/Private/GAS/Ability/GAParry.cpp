@@ -91,6 +91,7 @@ void UGAParry::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         OpenWindow();
     }
     if (!IsActive()) return;
+    Player->PlayActionSound(EPlayerActionSound::Parry);
 
     if (ParryMontage)
     {
@@ -212,6 +213,11 @@ void UGAParry::HandleSuccess(AActor* Attacker, AActor* DeflectedProjectile)
     const bool bDeflectedProjectile = DeflectedProjectile != nullptr;
     bSucceeded = true;
     CloseWindow();
+
+    if (const APlayerCharacter* Player = Cast<APlayerCharacter>(GetAvatarActorFromActorInfo()))
+    {
+        Player->PlayActionSound(EPlayerActionSound::ParrySuccess);
+    }
 
     // 불꽃은 성공 동작과 같이 적의 공격을 직접 막았을 때만 낸다. 투사체를 튕겨낼 때는 내지 않는다.
     if (!bDeflectedProjectile)
