@@ -49,6 +49,11 @@ public:
 	virtual void	RemoveInteractLock_Implementation() override;
 	virtual bool	IsInteractLocked_Implementation() override;
 
+#if WITH_EDITORONLY_DATA
+	// 스위치 PostLoad가 구버전 자동 닫힘 값을 옮겨 갈 때 읽는다
+	float	GetDeprecatedAutoCloseDelay() const { return this->AutoCloseDelay_DEPRECATED; }
+#endif
+
 protected:
 	virtual void	BeginPlay() override;
 
@@ -83,6 +88,12 @@ protected:
 	// 레벨 시작 시 열린 상태로 둘지. 체크포인트 리셋도 이 상태로 돌아간다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
 	bool	bStartOpen = false;
+
+#if WITH_EDITORONLY_DATA
+	// 구버전 시간 문. 자동 닫힘은 스위치의 AutoReinteractTime으로 옮겼다. 저장된 레벨을 불러올 때 스위치 PostLoad가 이 값을 옮겨 간다
+	UPROPERTY(meta = (DeprecatedProperty, DeprecationMessage = "스위치의 AutoReinteractTime을 사용하세요"))
+	float	AutoCloseDelay_DEPRECATED = 0.0f;
+#endif
 
 	// 문이 열리기 시작할 때 재생할 사운드. 비워 두면 재생하지 않는다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
@@ -119,6 +130,7 @@ private:
 
 	FTimerHandle	InteractionCooldownTimer;
 	bool			bIsInteractCooldown = false;
+
 	float			InteractInterval = 0.5f;
 
 	// 체크포인트 리셋용 초기 상태
