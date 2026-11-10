@@ -13,6 +13,7 @@ class UStaticMeshComponent;
 class ATrapArrowActor;
 class UCheckpointBoundComponent;
 class UActivateHighlightComponent;
+class USoundBase;
 
 UCLASS()
 class ECLIPSETHENINJA_API AArrowTrapActor : public AActor, public IActivatable, public ICheckpointResettable
@@ -65,6 +66,10 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Trap")
 	float								ArrowSpawnDist = 100.f;
+
+	// 화살이 발사될 때 화살에 붙여 재생할 사운드. 화살과 함께 날아간다. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>				FireSound = nullptr;
 
 	// 오브젝트 풀에 미리 생성을 요청할 화살 수 (동시에 날아가는 화살 수 기준, 화살 풀이 등록된 경우만 적용)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trap|ObjectPool", meta = (ClampMin = "0"))

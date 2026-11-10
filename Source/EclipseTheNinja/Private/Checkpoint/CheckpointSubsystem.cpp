@@ -103,7 +103,12 @@ void UCheckpointSubsystem::ActivateCheckpoint(ECheckpointId NewCheckpointId)
 
 bool UCheckpointSubsystem::GetCheckpointTransform(FTransform& OutTransform) const
 {
-    const ACheckpoint* Checkpoint = Checkpoints.FindRef(CurrentCheckpoint).Get();
+    return GetCheckpointTransformById(this->CurrentCheckpoint, OutTransform);
+}
+
+bool UCheckpointSubsystem::GetCheckpointTransformById(ECheckpointId Id, FTransform& OutTransform) const
+{
+    const ACheckpoint* Checkpoint = Checkpoints.FindRef(Id).Get();
     if (!IsValid(Checkpoint)) return false;
     OutTransform = Checkpoint->GetRespawnTransform();
     return true;

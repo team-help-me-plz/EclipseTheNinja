@@ -28,6 +28,9 @@ public:
     void RestoreCheckpoint(ECheckpointId Id);
     bool GetCheckpointTransform(FTransform& OutTransform) const;
 
+    // 현재 체크포인트를 바꾸지 않고, 이 맵에 배치된 Id 체크포인트의 리스폰 위치만 읽는다. 없으면 false
+    bool GetCheckpointTransformById(ECheckpointId Id, FTransform& OutTransform) const;
+
     // 세이프 포인트가 없을 때 돌아갈 위치를 찾는다. 현재 체크포인트가 있으면 그 위치,
     // 없으면 bActivateOnBeginPlay가 켜진 체크포인트 중 FromLocation에 가장 가까운 것의 위치. 둘 다 없으면 false
     bool GetFallbackRespawnTransform(const FVector& FromLocation, FTransform& OutTransform) const;

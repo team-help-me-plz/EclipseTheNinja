@@ -11,6 +11,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
@@ -30,7 +31,8 @@ namespace
 	}
 }
 
-APressureSwitch::APressureSwitch()
+APressureSwitch::APressureSwitch(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
@@ -233,6 +235,10 @@ void APressureSwitch::Interact_Implementation(AActor* InActor)
 	this->ToggleTargets();
 	this->bIsInteracted = true;
 	this->RefreshInteractState();
+	if (this->PressSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, this->PressSound, GetActorLocation());
+	}
 
 	// 누르는 동안만 작동하거나 여러 번 누를 수 있는 발판은 남길 상태가 없다. 한 번용 발판만 기록한다
 	UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);

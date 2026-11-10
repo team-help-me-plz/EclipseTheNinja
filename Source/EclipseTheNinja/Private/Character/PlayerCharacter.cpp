@@ -44,6 +44,7 @@
 #include "GAS/Ability/GAWallSlide.h"
 #include "Character/Enemy.h"
 #include "Component/HidingComponent.h"
+#include "Minimap/MinimapComponent.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
@@ -64,6 +65,8 @@ APlayerCharacter::APlayerCharacter()
 	NoiseComponent = CreateDefaultSubobject<UNoiseComponent>(TEXT("NoiseComponent"));
 
 	HidingComponent = CreateDefaultSubobject<UHidingComponent>(TEXT("HidingComponent"));
+
+	MinimapComponent = CreateDefaultSubobject<UMinimapComponent>(TEXT("MinimapComponent"));
 
 	// 암살도 배열의 기본 항목으로 둔다. 기본 공격 항목은 부모 생성자에서 추가한다.
 	FAbilityInfo& AssassinateInfo = AbilityClassArray.AddDefaulted_GetRef();
@@ -997,6 +1000,31 @@ void APlayerCharacter::DoWAllMove(float Up)
 	if (!WallAttach) return;
 
 	const bool bClimbableWall = WallAttach->GetIsClimbable();
+
+	// 벽타기 벽을 타고 내려가다가 아래가 끝났으면 매달림을 푼다.
+	//  - 발 높이에 더 이상 벽이 없으면(벽·사다리 아래 끝) 그대로 떨어진다
+	//  - 발 바로 아래가 바닥이면 내려선다
+	// 풀지 않으면 벽 아래 끝을 지나서도, 바닥에 닿은 뒤에도 벽 타는 자세로 계속 내려가려 한다.
+	if (bClimbableWall && IsWallAttached() && Up < -0.1f)
+	{
+		const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+		const float WallDirX = GetActorForwardVector().X >= 0.f ? 1.f : -1.f;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(WallClimbBottom), false, this);
+
+		FVector Feet = GetActorLocation();
+		Feet.Z -= HalfHeight - 5.f;
+		FHitResult Hit;
+		const bool bWallAtFeet = GetWorld()->LineTraceSingleByChannel(Hit, Feet, Feet + FVector(WallDirX * 80.f, 0.f, 0.f), ECC_GameTraceChannel2, Params);
+		const bool bGroundBelow = GetWorld()->LineTraceSingleByChannel(Hit, Feet, Feet - FVector(0.f, 0.f, 25.f), ECC_Visibility, Params);
+
+		if (!bWallAtFeet || bGroundBelow)
+		{
+			FGameplayTagContainer WallAttachTags;
+			WallAttachTags.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
+			GetAbilitySystemComponent()->CancelAbilities(&WallAttachTags);
+			return;
+		}
+	}
 
 	// 위 입력으로 모서리 위로 올라간다. 벽타기 벽에서는 모서리 매달림 높이에 온 뒤에만 올라간다.
 	if (Up > 0.5f)

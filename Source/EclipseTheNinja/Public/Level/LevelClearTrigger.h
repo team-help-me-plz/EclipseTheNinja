@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Containers/Ticker.h"
 #include "GameFramework/Actor.h"
+#include "Checkpoint/CheckpointId.h"
 #include "LevelClearTrigger.generated.h"
 
 class UBoxComponent;
@@ -112,6 +113,15 @@ protected:
     // 다음 레벨을 열 때 넘길 옵션 문자열 (예: "?Spawn=CastleGate?Stage=2"). 다음 레벨의 GameMode에서 OptionsString으로 읽는다
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LevelClear", meta = (EditCondition = "!bQuitGameOnClear"))
     FString TravelOptions;
+
+    // 다음 레벨에서 이 체크포인트 위치로 시작한다. None이면 그 레벨의 시작 위치(PlayerStart·시작 체크포인트)
+    // 예: 성 안에서 성 밖으로 되돌아갈 때 성 밖의 "성 안 문 앞" 체크포인트
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (EditCondition = "!bQuitGameOnClear"))
+    ECheckpointId ArrivalCheckpoint = ECheckpointId::None;
+
+    // 끄면 이 맵을 클리어 목록에 넣지 않는다. 앞 맵으로 되돌아가는 출구에서 끈다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (EditCondition = "!bQuitGameOnClear"))
+    bool bMarkLevelCleared = true;
 
     // 클리어 후 다음 레벨로 이동하기까지의 대기 시간(초)
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (ClampMin = "0.0", EditCondition = "!bQuitGameOnClear"))

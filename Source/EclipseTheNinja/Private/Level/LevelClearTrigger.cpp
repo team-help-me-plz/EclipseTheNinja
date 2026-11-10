@@ -121,8 +121,7 @@ void ALevelClearTrigger::ClearLevel()
     }
     this->bIsCleared = true;
 
-    // 마지막 스테이지는 다음 레벨(메인 메뉴)을 이어하기 위치로 남기지 않고 게임 완료로 저장한다
-    GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->SaveStageClear(this->NextLevel, this->bQuitGameOnClear || this->bFinalStage);
+    GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->SaveStageClear(this->NextLevel, this->bQuitGameOnClear || this->bFinalStage, this->ArrivalCheckpoint, this->bMarkLevelCleared);
 
     UE_LOG(LogTemp, Log, TEXT("[ALevelClearTrigger::ClearLevel()] 레벨 클리어 : %s -> %s"),
         *UGameplayStatics::GetCurrentLevelName(this),
@@ -230,7 +229,16 @@ void ALevelClearTrigger::FinishClear()
 
 void ALevelClearTrigger::TravelToNextLevel()
 {
-    UGameplayStatics::OpenLevelBySoftObjectPtr(this, this->NextLevel, true, this->TravelOptions);
+    // 도착 체크포인트를 옵션으로도 넘긴다. 세이브 진행이 없을 때(에디터에서 맵을 바로 실행) 다음 맵이 이 값으로 위치를 잡는다
+    FString Options = this->TravelOptions;
+    if (this->ArrivalCheckpoint != ECheckpointId::None)
+    {
+        // OpenLevel이 옵션 앞에 '?'를 붙이므로 첫 옵션에는 '?'를 붙이지 않는다
+        Options += FString::Printf(TEXT("%sArrival=%s"), Options.IsEmpty() ? TEXT("") : TEXT("?"),
+            *StaticEnum<ECheckpointId>()->GetNameStringByValue(static_cast<int64>(this->ArrivalCheckpoint)));
+    }
+
+    UGameplayStatics::OpenLevelBySoftObjectPtr(this, this->NextLevel, true, Options);
 }
 
 void ALevelClearTrigger::StartQuitCountdown(APlayerController* PlayerController)

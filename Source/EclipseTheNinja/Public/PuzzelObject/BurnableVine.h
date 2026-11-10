@@ -12,6 +12,8 @@ class UBoxComponent;
 class UChildActorComponent;
 class UCheckpointBoundComponent;
 class UNiagaraComponent;
+class USoundBase;
+class UAudioComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API ABurnableVine : public AActor, public ICheckpointResettable
@@ -70,6 +72,16 @@ protected:
 	// 불이 붙어 있는 동안 재생할 불꽃 이펙트. BP에서 Niagara System Asset을 지정한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UNiagaraComponent>	BurnEffect = nullptr;
+
+	// 불이 붙어 있는 동안 재생할 사운드. 다 타면 페이드아웃된다. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	BurnSound = nullptr;
+
+	// 재생 중인 BurnSound. 루프 사운드여도 다 타거나 리셋될 때 멈추기 위해 들고 있는다
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent>	BurnAudio = nullptr;
+
+	void	StopBurnSound(bool bImmediate);
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBoundComponent = nullptr;

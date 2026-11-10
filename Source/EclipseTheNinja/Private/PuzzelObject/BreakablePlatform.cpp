@@ -10,6 +10,7 @@
 
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
+#include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
@@ -224,6 +225,10 @@ void ABreakablePlatform::BreakPlatform()
 {
 	this->State = EBreakablePlatformState::Broken;
 	this->MeshAssembly->SetVisibility(false);
+	if (this->BreakSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, this->BreakSound, GetActorLocation());
+	}
 
 	AActor* AssemblyActor = this->MeshAssembly->GetChildActor();
 	if (!IsValid(AssemblyActor))

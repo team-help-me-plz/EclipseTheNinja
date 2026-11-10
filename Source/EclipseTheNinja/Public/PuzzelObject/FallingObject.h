@@ -15,6 +15,7 @@ class UBoxComponent;
 class AMeshAssembly;
 class UActivateHighlightComponent;
 class UNiagaraComponent;
+class USoundBase;
 
 UCLASS()
 class ECLIPSETHENINJA_API AFallingObject : public AActor, public IActivatable, public ICheckpointResettable
@@ -91,6 +92,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|Effect")
 	TObjectPtr<UNiagaraComponent>	LandEffect = nullptr;
 
+	// 줄이 끊겨 떨어지기 시작할 때 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	DropSound = nullptr;
+
+	// 떨어진 물체가 바닥에 부딪혔을 때 착지 지점에서 재생할 사운드. 비워 두면 재생하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
+	TObjectPtr<USoundBase>	LandSound = nullptr;
+
 	// 착지 이펙트를 재생할 시간. 루프 이펙트라서 이 시간이 지나면 새 파티클 생성을 멈춘다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|Effect", meta = (ClampMin = "0.01"))
 	float	LandEffectDuration = 0.5f;
@@ -116,6 +125,8 @@ private:
 	FVector	FallingLocation = FVector::ZeroVector;
 
 	bool	bIsFalling = false;
+	// 미니맵 마커가 이름(StateProperty)으로 읽는다. 착지하면 지도에 땅으로 그린다
+	UPROPERTY(VisibleInstanceOnly, Transient, Category = "Falling|State")
 	bool	bIsLanded = false;
 
 	// 착지했지만 아래에 Pawn이 남아 있어 Block 전환을 미룬 상태
