@@ -67,6 +67,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Boss|Energy Link")
 	float GetEnergyLinkTimeLimit() const { return EnergyLinkTimeLimit; }
 
+	/**
+	 * 에너지 링크 제한시간을 멈추거나 다시 흐르게 한다.
+	 * 플레이어가 기믹 스테이지에 있는 동안 멈춘다(기믹 포탈이 호출). 링크가 꺼져 있으면 아무것도 하지 않는다.
+	 */
+	void SetEnergyLinkTimerPaused(bool bPaused);
+
 	/** 현재 체력 비율(0~1). */
 	UFUNCTION(BlueprintPure, Category = "Boss")
 	float GetHealthRatio() const;

@@ -83,4 +83,10 @@ enum class ECheckpointId : uint8
     LDInside_Start,             // 1층 창고 입구 (천수각 아래)
     LDInside_Corridor,          // 2층 무사 회랑 입구 (천수각)
     LDInside_Treasury,          // 3층 보물전 입구 (천수각)
+
+    // Lvl_LD_BossGimmick_FireBlade / GaleSlash (보스 맵에 레벨 인스턴스로 들어가는 기믹 방)
+    BossGimA_Tower,             // 불칼 방 3층 시작 (원거리 적 구간)
+    BossGimA_Bridge,            // 불칼 방 꼭대기 다리 (시간 문 뒤)
+    BossGimB_Floor2,            // 질풍참 방 2층 시작 (화살 회랑)
+    BossGimB_Floor3,            // 질풍참 방 3층 시작 (시간 문)
 };

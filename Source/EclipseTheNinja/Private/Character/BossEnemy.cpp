@@ -188,6 +188,24 @@ float ABossEnemy::GetEnergyLinkTimeRemaining() const
 	return FMath::Max(0.0f, GetWorldTimerManager().GetTimerRemaining(EnergyLinkTimer));
 }
 
+void ABossEnemy::SetEnergyLinkTimerPaused(bool bPaused)
+{
+	FTimerManager& TimerManager = GetWorldTimerManager();
+	if (!bEnergyLinkActive || !TimerManager.TimerExists(EnergyLinkTimer))
+	{
+		return;
+	}
+
+	if (bPaused)
+	{
+		TimerManager.PauseTimer(EnergyLinkTimer);
+	}
+	else
+	{
+		TimerManager.UnPauseTimer(EnergyLinkTimer);
+	}
+}
+
 void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
 	// 임계 체력 복원이 발생시킨 재진입은 별도 피해로 처리하지 않는다.

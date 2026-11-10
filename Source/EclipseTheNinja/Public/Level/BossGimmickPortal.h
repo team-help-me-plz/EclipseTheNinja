@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Interface/Activatable.h"
+#include "Checkpoint/CheckpointId.h"
 #include "BossGimmickPortal.generated.h"
 
 class UBoxComponent;
@@ -127,6 +128,13 @@ protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Gimmick Portal", meta = (EditCondition = "PortalSide == EBossGimmickPortalSide::GimmickStage"))
 	TArray<TObjectPtr<AActor>> ActivateOnLinkBroken;
 
+	/**
+	 * 기믹 스테이지 포탈만 사용. 켜면 보스 스테이지로 나가는 출구로만 쓴다.
+	 * 보스 스테이지 포탈이 도착지로 고르지 않으므로, 기믹 방 끝(레버 옆)에 두어 시작점까지 되돌아가지 않고 나가게 한다.
+	 */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Gimmick Portal", meta = (EditCondition = "PortalSide == EBossGimmickPortalSide::GimmickStage"))
+	bool bExitOnly = false;
+
 	/** 화면이 어두워지는(그리고 다시 밝아지는) 시간(초). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gimmick Portal", meta = (ClampMin = "0.0", Units = "s"))
 	float FadeTime = 0.3f;
@@ -161,6 +169,14 @@ private:
 
 	// 이 시간(월드 초)까지는 들어가지 못한다
 	double EntryBlockedUntil = 0.0;
+
+	// 보스 스테이지 포탈만 사용. 기믹 스테이지로 들어갈 때의 체크포인트를 기억했다가 돌아오면 되돌린다.
+	// 기믹 방 안 체크포인트가 보스전 리스폰 위치로 남지 않게 한다.
+	ECheckpointId CheckpointBeforeGimmick = ECheckpointId::None;
+	bool bHasCheckpointBeforeGimmick = false;
+
+	// 기믹 스테이지로 들어갈 때(true)와 보스 스테이지로 돌아올 때(false) 링크 시간과 체크포인트를 처리한다.
+	void HandleStageChange(ABossGimmickPortal* Destination);
 
 	// 화면이 어두워지는 동안 옮길 플레이어와 목적지
 	TWeakObjectPtr<APawn> TeleportingPlayer;

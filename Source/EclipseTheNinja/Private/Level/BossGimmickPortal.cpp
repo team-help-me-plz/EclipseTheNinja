@@ -1,6 +1,8 @@
 #include "Level/BossGimmickPortal.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "Character/BossEnemy.h"
+#include "Checkpoint/CheckpointSubsystem.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/BossEnemyGimmickComponent.h"
 #include "Components/BoxComponent.h"
@@ -147,6 +149,11 @@ ABossGimmickPortal* ABossGimmickPortal::FindDestination() const
 	{
 		if (*It != this && It->LinkId == LinkId && It->PortalSide != PortalSide)
 		{
+			// 출구 전용 포탈은 보스 스테이지에서 들어갈 도착지가 아니다
+			if (It->bExitOnly)
+			{
+				continue;
+			}
 			return *It;
 		}
 	}
@@ -251,7 +258,44 @@ void ABossGimmickPortal::FinishTeleport()
 
 	if (IsValid(Destination))
 	{
+		HandleStageChange(Destination);
 		Destination->OnPlayerArrived.Broadcast(Destination, Player);
+	}
+}
+
+void ABossGimmickPortal::HandleStageChange(ABossGimmickPortal* Destination)
+{
+	UWorld* World = GetWorld();
+	if (!World || !IsValid(Destination))
+	{
+		return;
+	}
+
+	const bool bEnteringGimmick = Destination->GetPortalSide() == EBossGimmickPortalSide::GimmickStage;
+
+	// 기믹 방에 있는 동안 링크 제한시간을 멈춘다. 기믹 방은 숙련자 기준 약 3분이라 60초 제한으로는 깰 수 없다
+	for (TActorIterator<ABossEnemy> It(World); It; ++It)
+	{
+		It->SetEnergyLinkTimerPaused(bEnteringGimmick);
+	}
+
+	// 기믹 방 체크포인트는 그 방 안에서만 쓴다. 보스 스테이지로 돌아오면 들어가기 전 체크포인트로 되돌린다
+	UCheckpointSubsystem* CP = World->GetSubsystem<UCheckpointSubsystem>();
+	if (!CP)
+	{
+		return;
+	}
+
+	ABossGimmickPortal* BossSide = bEnteringGimmick ? this : Destination;
+	if (bEnteringGimmick)
+	{
+		BossSide->CheckpointBeforeGimmick = CP->GetCurrentCheckpoint();
+		BossSide->bHasCheckpointBeforeGimmick = true;
+	}
+	else if (BossSide->bHasCheckpointBeforeGimmick)
+	{
+		CP->RestoreCheckpoint(BossSide->CheckpointBeforeGimmick);
+		BossSide->bHasCheckpointBeforeGimmick = false;
 	}
 }
 
