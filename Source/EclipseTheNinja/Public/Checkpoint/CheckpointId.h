@@ -78,4 +78,9 @@ enum class ECheckpointId : uint8
     LDCastle_GaleSlashRoom,     // 질풍참 방 착지대
     LDCastle_FireBladeRoom,     // 불칼 방 꼭대기 (불칼 획득 위치)
     LDCastle_BeforeCastle,      // 성 안 문 앞
+
+    // Lvl_LD_CastleInside
+    LDInside_Start,             // 1층 창고 입구 (천수각 아래)
+    LDInside_Corridor,          // 2층 무사 회랑 입구 (천수각)
+    LDInside_Treasury,          // 3층 보물전 입구 (천수각)
 };

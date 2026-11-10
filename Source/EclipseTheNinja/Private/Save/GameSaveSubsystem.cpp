@@ -10,10 +10,76 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/PackageName.h"
+#include "Minimap/MinimapSubsystem.h"
 
 namespace GameSave
 {
 	constexpr int32 User = 0;
+}
+
+namespace
+{
+	// 에디터 실행(PIE)은 이미 연 맵을 가리키는 경로에 "UEDPIE_0_" 접두어를 붙인다.
+	// 세이브에는 접두어 없는 원래 패키지 경로만 남겨, 같은 맵을 다른 맵으로 착각하지 않게 한다
+	TSoftObjectPtr<UWorld> WithoutPIEPrefix(const TSoftObjectPtr<UWorld>& Level)
+	{
+		return TSoftObjectPtr<UWorld>(FSoftObjectPath(UWorld::RemovePIEPrefix(Level.ToSoftObjectPath().ToString())));
+	}
+
+	// 플레이어를 Transform 위치로 순간이동시키고 시점 회전을 맞춘다
+	void TeleportPlayer(APlayerCharacter* Player, const FTransform& Transform)
+	{
+		Player->GetCharacterMovement()->StopMovementImmediately();
+		Player->GetCharacterMovement()->SetPlaneConstraintOrigin(Transform.GetLocation());
+		Player->SetActorLocationAndRotation(
+			Transform.GetLocation(),
+			Transform.Rotator(),
+			false,
+			nullptr,
+			ETeleportType::TeleportPhysics
+		);
+
+		if (AController* Controller = Player->GetController())
+		{
+			Controller->SetControlRotation(Transform.Rotator());
+		}
+	}
+
+	// 도착 지점: Id 체크포인트의 "위치"로만 옮긴다. 체크포인트를 활성화하지 않아 현재 체크포인트·리스폰 규칙은 그대로다
+	bool MoveToArrival(APlayerCharacter* Player, ECheckpointId Id, FTransform& OutTransform)
+	{
+		const UCheckpointSubsystem* CP = Player->GetWorld() ? Player->GetWorld()->GetSubsystem<UCheckpointSubsystem>() : nullptr;
+		if (!CP || !CP->GetCheckpointTransformById(Id, OutTransform))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[GameSave] 도착 지점 %s 체크포인트를 이 맵에서 찾지 못함"), *UEnum::GetValueAsString(Id));
+			return false;
+		}
+
+		TeleportPlayer(Player, OutTransform);
+		UE_LOG(LogTemp, Log, TEXT("[GameSave] 도착 지점 %s 위치에서 시작 (체크포인트는 활성화하지 않음)"), *UEnum::GetValueAsString(Id));
+		return true;
+	}
+
+	// 세이브 진행 없이 다른 맵에서 넘어왔을 때: URL의 "?Arrival=<체크포인트 이름>"으로 위치를 잡는다
+	void MoveToUrlArrivalCheckpoint(APlayerCharacter* Player)
+	{
+		UWorld* World = Player->GetWorld();
+		const TCHAR* Arrival = World ? World->URL.GetOption(TEXT("Arrival="), nullptr) : nullptr;
+		if (!Arrival || !*Arrival)
+		{
+			return;
+		}
+
+		const int64 Value = StaticEnum<ECheckpointId>()->GetValueByNameString(Arrival);
+		if (Value == INDEX_NONE || Value == static_cast<int64>(ECheckpointId::None))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[GameSave] 알 수 없는 도착 체크포인트: %s"), Arrival);
+			return;
+		}
+
+		FTransform Transform;
+		MoveToArrival(Player, static_cast<ECheckpointId>(Value), Transform);
+	}
 }
 
 UGameSaveSubsystem* UGameSaveSubsystem::Get(const UObject* WorldContext)
@@ -119,8 +185,10 @@ void UGameSaveSubsystem::PlayerReady(APlayerCharacter* Player)
 	CurrentPlayer = Player;
 
 	// 게임 맵을 에디터에서 직접 실행한 경우에는 기존 캠페인 파일에 저장하지 않는다.
+	// 대신 이전 맵의 출구가 "?Arrival=" 옵션으로 도착 체크포인트를 넘겼으면 그 위치에서 시작한다.
 	if (!Progress)
 	{
+		MoveToUrlArrivalCheckpoint(Player);
 		return;
 	}
 
@@ -137,6 +205,9 @@ void UGameSaveSubsystem::PlayerReady(APlayerCharacter* Player)
 
 	if (bPendingRestore)
 	{
+		FTransform Transform = Progress->RespawnTransform;
+		bool bMoveToTransform = Progress->bHasRespawnTransform;
+
 		if (Progress->Checkpoint != ECheckpointId::None)
 		{
 			if (UCheckpointSubsystem* CP = Player->GetWorld()->GetSubsystem<UCheckpointSubsystem>())
@@ -145,23 +216,9 @@ void UGameSaveSubsystem::PlayerReady(APlayerCharacter* Player)
 			}
 		}
 
-		if (Progress->bHasRespawnTransform)
+		if (bMoveToTransform)
 		{
-			const FTransform& Transform = Progress->RespawnTransform;
-			Player->GetCharacterMovement()->StopMovementImmediately();
-			Player->GetCharacterMovement()->SetPlaneConstraintOrigin(Transform.GetLocation());
-			Player->SetActorLocationAndRotation(
-				Transform.GetLocation(),
-				Transform.Rotator(),
-				false,
-				nullptr,
-				ETeleportType::TeleportPhysics
-			);
-
-			if (AController* Controller = Player->GetController())
-			{
-				Controller->SetControlRotation(Transform.Rotator());
-			}
+			TeleportPlayer(Player, Transform);
 		}
 
 		if (Progress->bHasHealth)
@@ -172,6 +229,12 @@ void UGameSaveSubsystem::PlayerReady(APlayerCharacter* Player)
 			);
 		}
 	}
+
+	// 앞 맵의 출구가 도착 지점을 지정했으면 그 체크포인트의 위치로만 옮긴다 (체크포인트는 활성화하지 않는다)
+	FTransform ArrivalTransform;
+	const bool bArrived = Progress->ArrivalCheckpoint != ECheckpointId::None
+		&& MoveToArrival(Player, Progress->ArrivalCheckpoint, ArrivalTransform);
+	Progress->ArrivalCheckpoint = ECheckpointId::None;
 
 	bApplyingRestore = false;
 	bPendingRestore = false;
@@ -193,6 +256,13 @@ void UGameSaveSubsystem::PlayerReady(APlayerCharacter* Player)
 			Progress->RespawnTransform = Transform;
 			Progress->bHasRespawnTransform = true;
 		}
+	}
+
+	// 도착 직후 게임을 끄고 이어하면 맵 처음이 아니라 도착 지점에서 시작한다. 다음 체크포인트에 닿으면 덮어쓴다
+	if (bArrived)
+	{
+		Progress->RespawnTransform = ArrivalTransform;
+		Progress->bHasRespawnTransform = true;
 	}
 
 	SaveProgress();
@@ -261,7 +331,7 @@ void UGameSaveSubsystem::SaveCheckpoint(ECheckpointId Id, const FTransform& Tran
 	SaveProgress();
 }
 
-bool UGameSaveSubsystem::SaveStageClear(TSoftObjectPtr<UWorld> NextLevel, bool bFinalStage)
+bool UGameSaveSubsystem::SaveStageClear(TSoftObjectPtr<UWorld> NextLevel, bool bFinalStage, ECheckpointId ArrivalCheckpoint, bool bMarkCleared)
 {
 	// 다음 스테이지의 첫 체크포인트에 닿기 전에 종료해도 다음 맵에서 이어가게 한다.
 	if (!Progress || bPendingRestore || bStageTravel || !CurrentPlayer.IsValid())
@@ -275,15 +345,26 @@ bool UGameSaveSubsystem::SaveStageClear(TSoftObjectPtr<UWorld> NextLevel, bool b
 		return false;
 	}
 
+	// 진행 맵이 바뀌면 이 맵의 미니맵 기록을 더 받지 않으므로, 마지막 주기 기록 이후 밝힌 칸을 먼저 남긴다
+	if (UMinimapSubsystem* Minimap = UMinimapSubsystem::Get(CurrentPlayer.Get()))
+	{
+		Minimap->FlushReveal();
+	}
+
 	Progress->Health = Health;
 	Progress->bHasHealth = true;
-	Progress->ClearedLevels.AddUnique(FName(*Progress->Level.ToSoftObjectPath().GetLongPackageName()));
+	if (bMarkCleared)
+	{
+		Progress->ClearedLevels.AddUnique(GetProgressLevelKey());
+	}
 	Progress->bGameCompleted |= bFinalStage;
 	if (!bFinalStage && !NextLevel.IsNull())
 	{
-		Progress->Level = NextLevel;
+		Progress->Level = WithoutPIEPrefix(NextLevel);
+		// 다음 맵은 체크포인트 없이 연다(시작 체크포인트 규칙을 따른다). 도착 지점은 PlayerReady에서 위치로만 쓴다
 		Progress->Checkpoint = ECheckpointId::None;
 		Progress->bHasRespawnTransform = false;
+		Progress->ArrivalCheckpoint = ArrivalCheckpoint;
 	}
 
 	const bool bSaved = WriteSave();
@@ -321,7 +402,8 @@ bool UGameSaveSubsystem::IsProgressLevel(const UObject* WorldContext) const
 	}
 
 	// GetCurrentLevelName은 PIE 접두어를 뺀 짧은 맵 이름을 돌려준다.
-	const FString SavedLevel = Progress->Level.ToSoftObjectPath().GetLongPackageName();
+	// 예전 세이브에 PIE 접두어가 붙은 경로가 남아 있어도 같은 맵으로 본다
+	const FString SavedLevel = UWorld::RemovePIEPrefix(Progress->Level.ToSoftObjectPath().GetLongPackageName());
 	const FString CurrentLevel = UGameplayStatics::GetCurrentLevelName(WorldContext, true);
 
 	return SavedLevel == CurrentLevel || FPackageName::GetShortName(SavedLevel) == CurrentLevel;
@@ -334,7 +416,7 @@ FName UGameSaveSubsystem::GetProgressLevelKey() const
 		return NAME_None;
 	}
 
-	return FName(*Progress->Level.ToSoftObjectPath().GetLongPackageName());
+	return FName(*UWorld::RemovePIEPrefix(Progress->Level.ToSoftObjectPath().GetLongPackageName()));
 }
 
 bool UGameSaveSubsystem::TakeActorState(const AActor* Actor, FSavedActorState& OutState) const
@@ -395,4 +477,34 @@ bool UGameSaveSubsystem::IsCheckpointBound(const AActor* Actor)
 	// 항상 초기화되는 액터도 리스폰이 상태를 관리하므로 세이브 대상에서 뺀다.
 	return Bound
 		&& (Bound->GetBoundCheckpoint() != ECheckpointId::None || Bound->IsAlwaysResetOnRespawn());
+}
+
+bool UGameSaveSubsystem::TakeMinimapReveal(const UObject* WorldContext, int32 GridHash, TArray<uint8>& OutBits) const
+{
+	if (!IsProgressLevel(WorldContext))
+	{
+		return false;
+	}
+
+	const FSavedLevelState* LevelState = Progress->LevelStates.Find(GetProgressLevelKey());
+	if (!LevelState || LevelState->MinimapGridHash != GridHash || LevelState->MinimapRevealed.IsEmpty())
+	{
+		return false;
+	}
+
+	OutBits = LevelState->MinimapRevealed;
+	return true;
+}
+
+void UGameSaveSubsystem::RecordMinimapReveal(const UObject* WorldContext, int32 GridHash, const TArray<uint8>& Bits)
+{
+	// 다음 맵으로 이동 대기 중이면 Progress의 맵이 이미 바뀌었으므로 기록하지 않는다
+	if (bStageTravel || !IsProgressLevel(WorldContext))
+	{
+		return;
+	}
+
+	FSavedLevelState& LevelState = Progress->LevelStates.FindOrAdd(GetProgressLevelKey());
+	LevelState.MinimapGridHash = GridHash;
+	LevelState.MinimapRevealed = Bits;
 }

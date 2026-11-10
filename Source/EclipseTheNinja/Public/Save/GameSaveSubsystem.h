@@ -62,8 +62,12 @@ public:
 	/** 재개 위치를 체크포인트로 고정하고 현재 체력과 함께 저장한다. */
 	void SaveCheckpoint(ECheckpointId Id, const FTransform& Transform);
 
-	/** 현재 맵을 클리어 목록에 추가한다. 다음 맵으로 넘어갈 때는 그 맵의 시작 위치에서 이어가도록 이전 체크포인트를 지운다. */
-	bool SaveStageClear(TSoftObjectPtr<UWorld> NextLevel, bool bFinalStage);
+	/**
+	 * 현재 맵을 클리어 목록에 추가하고 다음 맵으로 진행을 옮긴다.
+	 * ArrivalCheckpoint가 None이면 다음 맵의 시작 위치에서, 아니면 그 체크포인트의 위치에서 시작한다(체크포인트는 활성화하지 않는다).
+	 * bMarkCleared를 끄면 클리어 목록에 넣지 않는다(앞 맵으로 되돌아가는 출구).
+	 */
+	bool SaveStageClear(TSoftObjectPtr<UWorld> NextLevel, bool bFinalStage, ECheckpointId ArrivalCheckpoint = ECheckpointId::None, bool bMarkCleared = true);
 
 	/** 이어하기로 저장된 체크포인트를 적용할 차례인지 확인한다. true이면 맵 시작 시 자동으로 켜지는 체크포인트가 저장된 진행을 바꾸지 못하게 한다. */
 	bool IsRestoring() const { return bPendingRestore && Progress && Progress->Checkpoint != ECheckpointId::None; }
@@ -86,6 +90,12 @@ public:
 
 	/** 체크포인트에 묶이지 않은 퍼즐 액터의 상태가 바뀌었을 때 기록하고 파일에 저장한다. */
 	void RecordActorState(const AActor* Actor, const FSavedActorState& State);
+
+	/** 현재 맵의 미니맵 기록을 받아 간다. 격자 해시가 같고 기록이 있으면 true. */
+	bool TakeMinimapReveal(const UObject* WorldContext, int32 GridHash, TArray<uint8>& OutBits) const;
+
+	/** 현재 맵의 미니맵 기록을 진행 데이터에 남긴다. 자주 불리므로 파일에는 쓰지 않고, 다음 저장(체크포인트 등) 때 함께 기록된다. */
+	void RecordMinimapReveal(const UObject* WorldContext, int32 GridHash, const TArray<uint8>& Bits);
 
 private:
 	// 체크포인트 리셋 대상인지 확인한다. BoundCheckpoint가 None이 아니거나 bAlwaysResetOnRespawn이 켜져 있으면 true.

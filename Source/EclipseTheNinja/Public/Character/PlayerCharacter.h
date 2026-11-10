@@ -22,6 +22,7 @@ class UInteractBoxComponent;
 class UAssassinationTargetingComponent;
 class UNoiseComponent;
 class UHidingComponent;
+class UMinimapComponent;
 class UGAAssassinate;
 class AEnemy;
 class UUserWidget;
@@ -57,6 +58,10 @@ protected:
 	// 은신구역에 들어가고 나오는 연출을 맡는다. 숨기 몽타주는 여기에 지정한다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hiding")
 	TObjectPtr<UHidingComponent> HidingComponent;
+
+	// 미니맵 시야 밝히기와 Tab 입력, 미니맵 위젯 표시를 맡는다
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
+	TObjectPtr<UMinimapComponent> MinimapComponent;
 
 	// 예전 BP에 저장된 암살 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
 	UPROPERTY()

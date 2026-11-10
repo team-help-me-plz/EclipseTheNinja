@@ -47,6 +47,14 @@ struct FSavedLevelState
 	/** 키는 액터 이름. */
 	UPROPERTY(SaveGame)
 	TMap<FName, FSavedActorState> ActorStates;
+
+	/** 미니맵에서 밝힌 칸. 한 칸이 1비트다. */
+	UPROPERTY(SaveGame)
+	TArray<uint8> MinimapRevealed;
+
+	/** MinimapRevealed를 만든 격자의 범위·칸 크기 해시. 다르면 예전 기록을 버린다. */
+	UPROPERTY(SaveGame)
+	int32 MinimapGridHash = 0;
 };
 
 /**
@@ -78,6 +86,13 @@ public:
 	/** 새 게임이나 다음 스테이지처럼 저장된 재시작 위치가 없는 경우를 구분한다. */
 	UPROPERTY(SaveGame)
 	bool bHasRespawnTransform = false;
+
+	/**
+	 * 앞 맵의 출구가 지정한 도착 지점. Level을 열면 이 체크포인트의 "위치"로만 옮기고 비운다.
+	 * 체크포인트를 활성화하지 않으므로 현재 체크포인트·사망 시 리스폰 지점은 그 맵의 원래 규칙(시작 체크포인트 등)을 따른다.
+	 */
+	UPROPERTY(SaveGame)
+	ECheckpointId ArrivalCheckpoint = ECheckpointId::None;
 
 	/** 마지막으로 저장한 살아 있는 플레이어의 현재 체력. */
 	UPROPERTY(SaveGame)

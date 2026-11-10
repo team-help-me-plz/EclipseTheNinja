@@ -9,6 +9,7 @@
 #include "EngineUtils.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Pawn.h"
+#include "Util/EclipseCollisionChannels.h"
 
 AHouseCutawayVolume::AHouseCutawayVolume()
 {
@@ -40,6 +41,8 @@ void AHouseCutawayVolume::BeginPlay()
 
 	// 벽 붙기 트레이스(WallAttach)가 트리거 상자에 막히지 않게 한다. Trigger 프로필에는 WallAttach 채널이 없어 기본값 Block이 적용된다.
 	this->InteriorArea->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Ignore);
+	// 몬스터가 영역 안에 갇히지 않게 한다. Trigger 프로필에는 Monster 채널이 없어 기본값 Block이 적용된다.
+	this->InteriorArea->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
 	this->InteriorArea->OnComponentBeginOverlap.AddDynamic(this, &AHouseCutawayVolume::OnInteriorBeginOverlap);
 	this->InteriorArea->OnComponentEndOverlap.AddDynamic(this, &AHouseCutawayVolume::OnInteriorEndOverlap);
 }
