@@ -262,6 +262,8 @@ private:
 	float SavedTimeDilation = 1.0f;
 	bool bImpactTriggered = false;
 	bool bPlayBossImpactSound = false;
+	// 피격자에게 암살 피해를 적용했는지. 살아남은 대상을 종료 시 전투 상태로 바꿀 때 쓴다.
+	bool bVictimExecuted = false;
 	bool bImpactVFXTriggered = false;
 	bool bTimeDilationApplied = false;
 

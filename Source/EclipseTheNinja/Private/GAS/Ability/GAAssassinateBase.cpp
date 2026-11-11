@@ -22,6 +22,7 @@
 #include "Component/AssassinateTargetComponent.h"
 #include "Component/AssassinationDropComponent.h"
 #include "Component/AssassinationTargetingComponent.h"
+#include "Component/EnemyDetectionComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "GAS/Ability/GAWallAttach.h"
@@ -128,6 +129,7 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	bLedgeWalkLocked = false;
 	bImpactTriggered = false;
 	bPlayBossImpactSound = false;
+	bVictimExecuted = false;
 	bImpactVFXTriggered = false;
 	PausedBrain.Reset();
 
@@ -347,6 +349,7 @@ void UGAAssassinateBase::ExecuteVictim()
 	const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy);
 	const float PreviousBossHealthRatio = Boss ? Boss->GetHealthRatio() : 0.0f;
 	Enemy->ReceiveAssassination(VictimExecutionMontage);
+	bVictimExecuted = true;
 	bPlayBossImpactSound = IsValid(Boss) && Boss->GetHealthRatio() < PreviousBossHealthRatio;
 
 	// 실제 재생 중인 몽타주를 불러옴
@@ -865,6 +868,14 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 
 			// 살아남았으면 평소 오프셋으로 되돌린다. 죽었으면 리스폰 때 되돌린다.
 			Enemy->SetMeshYOffsetSuppressed(false);
+
+			// 암살 피해 시점에는 IsReadyForAI()가 false라 감지 갱신이 건너뛰어진다.
+			// 예약을 푼 지금 암살자를 공격자로 알려 BT 재개 전에 전투 상태로 만든다.
+			UEnemyDetectionComponent* Detection = Enemy->GetEneymDetectionComponent();
+			if (bVictimExecuted && IsValid(Player) && IsValid(Detection))
+			{
+				Detection->NotifyDamaged(Player);
+			}
 
 			if (PausedBrain.IsValid())
 			{
