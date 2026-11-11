@@ -296,24 +296,6 @@ float ABossEnemy::GetEnergyLinkTimeRemaining() const
     return FMath::Max(0.0f, GetWorldTimerManager().GetTimerRemaining(EnergyLinkTimer));
 }
 
-void ABossEnemy::SetEnergyLinkTimerPaused(bool bPaused)
-{
-	FTimerManager& TimerManager = GetWorldTimerManager();
-	if (!bEnergyLinkActive || !TimerManager.TimerExists(EnergyLinkTimer))
-	{
-		return;
-	}
-
-	if (bPaused)
-	{
-		TimerManager.PauseTimer(EnergyLinkTimer);
-	}
-	else
-	{
-		TimerManager.UnPauseTimer(EnergyLinkTimer);
-	}
-}
-
 void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
     if (HitSound && !bApplyingAssassinationDamage && !bIsDead && !bEnergyLinkActive && !bIsDotDamage && Data.NewValue < Data.OldValue

@@ -73,12 +73,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Boss|Energy Link")
 	float GetEnergyLinkTimeLimit() const { return EnergyLinkTimeLimit; }
 
-	/**
-	 * 에너지 링크 제한시간을 멈추거나 다시 흐르게 한다.
-	 * 플레이어가 기믹 스테이지에 있는 동안 멈춘다(기믹 포탈이 호출). 링크가 꺼져 있으면 아무것도 하지 않는다.
-	 */
-	void SetEnergyLinkTimerPaused(bool bPaused);
-
 	/** 현재 체력 비율(0~1). */
 	UFUNCTION(BlueprintPure, Category = "Boss")
 	float GetHealthRatio() const;
@@ -392,7 +386,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Energy Link")
 	TArray<float> EnergyLinkThresholds = { 0.7f, 0.3f };
 
-	/** 실드 해제(기믹) 제한시간(초). 지나면 보스가 플레이어를 처형한다. 0 이하면 시간 제한 없이 레버를 기다린다. */
+	/**
+	 * 실드 해제(기믹) 제한시간(초). 기믹 스테이지에 있는 동안에도 흐르므로 기믹 방 공략 시간까지 넣어 정한다.
+	 * 지나면 보스가 플레이어를 처형한다. 0 이하면 시간 제한 없이 레버를 기다린다.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Energy Link", meta = (ClampMin = "0.0", Units = "s"))
 	float EnergyLinkTimeLimit = 60.0f;
 

@@ -312,11 +312,10 @@ void ABossGimmickPortal::HandleStageChange(ABossGimmickPortal* Destination)
 		Stage->SetPlayerInside(bEnteringGimmick);
 	}
 
-	// 기믹 방에 있는 동안 링크 제한시간을 멈춘다. 기믹 방은 숙련자 기준 약 3분이라 60초 제한으로는 깰 수 없다
+	// 링크 제한시간은 기믹 방에 있는 동안에도 계속 흐른다. 기믹 방 공략 시간은 보스의 EnergyLinkTimeLimit로 맞춘다.
 	for (TActorIterator<ABossEnemy> It(World); It; ++It)
 	{
 		It->SetPlayerInGimmickStage(bEnteringGimmick);
-		It->SetEnergyLinkTimerPaused(bEnteringGimmick);
 	}
 
 	// 기믹 방 체크포인트는 그 방 안에서만 쓴다. 보스 스테이지로 돌아오면 들어가기 전 체크포인트로 되돌린다
