@@ -73,8 +73,8 @@ void APlayerCharacterController::PlayerTick(float DeltaTime)
     const bool bCloneTargeting = ControlledCharacter && ControlledCharacter->IsCloneTargeting();
     FVector2D Stick(GetInputAnalogKeyState(EKeys::Gamepad_RightX), GetInputAnalogKeyState(EKeys::Gamepad_RightY));
 
-    // 분신 소환 커서의 상하 방향은 화면 좌표에 맞춘다.
-    if (bCloneTargeting || (bGamepadAiming && !bInvertGamepadAimCursorY))
+    // 분신 소환 커서는 스틱 값을 그대로 쓴다(뒤집으면 상하가 반대로 움직였다).
+    if (!bCloneTargeting && bGamepadAiming && !bInvertGamepadAimCursorY)
     {
         Stick.Y *= -1.0;
     }
@@ -110,6 +110,13 @@ void APlayerCharacterController::InitializeGamepadAimCursor(bool bForCloneTarget
 {
     if (!IsLocalPlayerController()
         || (!bForCloneTargeting && !IsInputKeyDown(EKeys::Gamepad_LeftTrigger))) return;
+
+    // 키보드·마우스로 분신 소환 모드에 들어가면 커서를 옮기지 않고 현재 마우스 위치를 그대로 쓴다.
+    if (bForCloneTargeting && !bUsingGamepad)
+    {
+        return;
+    }
+
     const APlayerCharacter* ControlledCharacter = Cast<APlayerCharacter>(GetPawn());
     if (!ControlledCharacter) return;
 

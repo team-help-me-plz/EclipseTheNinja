@@ -39,7 +39,7 @@
 #include "Framework/Application/SlateUser.h"
 
 // Popup dropdowns can have a separate Slate focus path. Route the settings-level
-// controls before them so B and the shoulder buttons also work while a list is open.
+// controls before them so B also works while a list is open.
 class FSettingsMenuInputProcessor : public IInputProcessor
 {
 public:
@@ -288,17 +288,37 @@ bool USettingsWidget::HandleGamepadKey(const FKeyEvent& Event)
 		if (Control->HasUserFocus(GetOwningPlayer()) || Control->HasUserFocusedDescendants(GetOwningPlayer())) bTabFocus = false;
 	if (HasOpenCombo()) bTabFocus = false;
 
-	if (Key == EKeys::Gamepad_LeftShoulder || Key == EKeys::Gamepad_RightShoulder)
+	// 탭에 포커스가 있으면 방향키패드 위아래로 탭을 바꾼다(양 끝에서 반대쪽으로 돈다).
+	const bool bVerticalDPad = Key == EKeys::Gamepad_DPad_Up || Key == EKeys::Gamepad_DPad_Down;
+	if (bTabFocus && bVerticalDPad)
 	{
-		if (!Event.IsRepeat() && !TabButtons.IsEmpty())
+		if (!TabButtons.IsEmpty())
 		{
-			if (HasOpenCombo()) FSlateApplication::Get().DismissAllMenus();
-			const int32 Step = Key == EKeys::Gamepad_LeftShoulder ? -1 : 1;
-			SelectTab(static_cast<ESettingsTab>((static_cast<int32>(CurrentTab) + Step + TabButtons.Num()) % TabButtons.Num()));
+			const int32 Step = Key == EKeys::Gamepad_DPad_Up ? -1 : 1;
+			const int32 NextTab = (static_cast<int32>(CurrentTab) + Step + TabButtons.Num()) % TabButtons.Num();
+			SelectTab(static_cast<ESettingsTab>(NextTab));
 			FocusSelectedTab();
 		}
 		return true;
 	}
+
+	// 탭에서 방향키패드 오른쪽 또는 A를 누르면 탭 안의 첫 항목으로 들어간다.
+	const bool bEnterContent = Key == EKeys::Gamepad_DPad_Right || Key == EKeys::Gamepad_FaceButton_Bottom;
+	if (bTabFocus && bEnterContent)
+	{
+		if (!Event.IsRepeat())
+		{
+			MoveContentFocus(1);
+		}
+
+		// A를 뗄 때 들어간 항목이 눌리지 않게 막는다.
+		if (Key == EKeys::Gamepad_FaceButton_Bottom)
+		{
+			bConsumeAcceptRelease = true;
+		}
+		return true;
+	}
+
 	if (Key == EKeys::Gamepad_FaceButton_Right)
 	{
 		if (!Event.IsRepeat())
@@ -314,12 +334,6 @@ bool USettingsWidget::HandleGamepadKey(const FKeyEvent& Event)
 				FocusSelectedTab();
 			}
 		}
-		return true;
-	}
-	if (Key == EKeys::Gamepad_FaceButton_Bottom && bTabFocus)
-	{
-		if (!Event.IsRepeat()) MoveContentFocus(1);
-		bConsumeAcceptRelease = true;
 		return true;
 	}
 	if (Key == EKeys::Gamepad_DPad_Up || Key == EKeys::Gamepad_DPad_Down)

@@ -15,6 +15,9 @@
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "EclipseMenuStyle.h"
+#include "Engine/LocalPlayer.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Framework/Application/SlateUser.h"
 
 #define LOCTEXT_NAMESPACE "PauseMenu"
 
@@ -76,9 +79,16 @@ bool UPauseMenuWidget::Initialize()
 	KeyHint->SetHorizontalAlignment(HAlign_Center);
 	KeyHint->SetPadding(FMargin(0.f, 14.f, 0.f, 0.f));
 
-	AddMenuButton(*Menu, LOCTEXT("Resume", "게임 재개"), true)->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::HandleResumeClicked);
-	AddMenuButton(*Menu, LOCTEXT("Settings", "설정"))->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::HandleSettingsClicked);
-	AddMenuButton(*Menu, LOCTEXT("MainMenu", "메인 화면으로"))->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::HandleMainMenuClicked);
+	UButton* ResumeButton = AddMenuButton(*Menu, LOCTEXT("Resume", "게임 재개"), true);
+	UButton* SettingsButton = AddMenuButton(*Menu, LOCTEXT("Settings", "설정"));
+	UButton* MainMenuButton = AddMenuButton(*Menu, LOCTEXT("MainMenu", "메인 화면으로"));
+	ResumeButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::HandleResumeClicked);
+	SettingsButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::HandleSettingsClicked);
+	MainMenuButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::HandleMainMenuClicked);
+
+	// 게임패드 방향키 이동 순서.
+	MenuButtons = {ResumeButton, SettingsButton, MainMenuButton};
+
 	return true;
 }
 
@@ -119,12 +129,109 @@ FReply UPauseMenuWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, con
 		}
 		return FReply::Handled();
 	}
+
+	const FKey Key = InKeyEvent.GetKey();
+
+	// B는 게임으로 돌아간다.
+	if (Key == EKeys::Gamepad_FaceButton_Right)
+	{
+		if (!InKeyEvent.IsRepeat())
+		{
+			HandleResumeClicked();
+		}
+		return FReply::Handled();
+	}
+
+	// 방향키패드 위아래로 버튼을 고른다. A를 누르면 포커스된 버튼이 Slate 기본 동작으로 눌린다.
+	if (Key == EKeys::Gamepad_DPad_Up || Key == EKeys::Gamepad_DPad_Down)
+	{
+		MoveButtonFocus(Key == EKeys::Gamepad_DPad_Down ? 1 : -1);
+		return FReply::Handled();
+	}
+
 	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
 }
 
 FReply UPauseMenuWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	return FReply::Handled().SetUserFocus(TakeWidget(), EFocusCause::Mouse);
+}
+
+FReply UPauseMenuWidget::NativeOnFocusReceived(const FGeometry& InGeometry, const FFocusEvent& InFocusEvent)
+{
+	// 마우스로 빈 곳을 누른 경우는 루트에 포커스를 두고, 방향키를 누르면 그때 버튼을 고른다.
+	if (InFocusEvent.GetCause() == EFocusCause::Mouse)
+	{
+		return Super::NativeOnFocusReceived(InGeometry, InFocusEvent);
+	}
+
+	const int32 Index = MenuButtons.IsValidIndex(PreferredButtonIndex) ? PreferredButtonIndex : 0;
+
+	if (MenuButtons.IsValidIndex(Index) && MenuButtons[Index])
+	{
+		return FReply::Handled().SetUserFocus(MenuButtons[Index]->TakeWidget(), EFocusCause::Navigation);
+	}
+
+	return Super::NativeOnFocusReceived(InGeometry, InFocusEvent);
+}
+
+FNavigationReply UPauseMenuWidget::NativeOnNavigation(
+	const FGeometry& InGeometry,
+	const FNavigationEvent& InNavigationEvent,
+	const FNavigationReply& InDefaultReply
+)
+{
+	// 빈 목적지를 지정해야 메뉴 안쪽 이동까지 막힌다(Stop은 바깥으로 나가는 것만 막는다).
+	if (InNavigationEvent.GetNavigationGenesis() == ENavigationGenesis::Controller)
+	{
+		return FNavigationReply::Explicit(nullptr);
+	}
+
+	return Super::NativeOnNavigation(InGeometry, InNavigationEvent, InDefaultReply);
+}
+
+void UPauseMenuWidget::MoveButtonFocus(int32 Direction)
+{
+	if (MenuButtons.IsEmpty())
+	{
+		return;
+	}
+
+	const int32 Current = MenuButtons.IndexOfByPredicate([this](const UButton* Button)
+	{
+		return Button && Button->HasUserFocus(GetOwningPlayer());
+	});
+
+	// 아직 버튼에 포커스가 없으면 첫 버튼부터 고른다.
+	const int32 Next = Current == INDEX_NONE
+		? 0
+		: (Current + Direction + MenuButtons.Num()) % MenuButtons.Num();
+	FocusMenuButton(Next);
+}
+
+void UPauseMenuWidget::FocusMenuButton(int32 Index)
+{
+	if (!MenuButtons.IsValidIndex(Index) || !MenuButtons[Index] || !FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+
+	ULocalPlayer* LocalPlayer = GetOwningLocalPlayer();
+	TSharedPtr<FSlateUser> SlateUser = LocalPlayer ? LocalPlayer->GetSlateUser() : nullptr;
+
+	if (!SlateUser)
+	{
+		return;
+	}
+
+	// 같은 위젯에 다시 포커스를 줘도 이전 원인이 남으므로, 먼저 지워 포커스 테두리가 보이게 한다.
+	UButton* Button = MenuButtons[Index];
+	if (Button->HasUserFocus(GetOwningPlayer()))
+	{
+		SlateUser->ClearFocus(EFocusCause::SetDirectly);
+	}
+	SlateUser->SetFocus(Button->TakeWidget(), EFocusCause::Navigation);
+	PreferredButtonIndex = Index;
 }
 
 void UPauseMenuWidget::HandleResumeClicked()
@@ -140,6 +247,8 @@ void UPauseMenuWidget::HandleSettingsClicked()
 	APlayerCharacterController* Controller = GetOwningPlayer<APlayerCharacterController>();
 	if (!Controller) return;
 
+	// 설정을 닫고 돌아오면 설정 버튼에 포커스를 둔다.
+	PreferredButtonIndex = 1;
 	Controller->OpenPauseSettings();
 }
 
