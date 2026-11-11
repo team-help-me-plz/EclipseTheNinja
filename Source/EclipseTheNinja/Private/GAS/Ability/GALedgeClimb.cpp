@@ -44,6 +44,21 @@ UGALedgeClimb::UGALedgeClimb()
 	ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
 }
 
+void UGALedgeClimb::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	Super::OnGiveAbility(ActorInfo, Spec);
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+	// 시전할 때 쓰는 몽타주를 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
+	AssetPreloader.Request({ ClimbMontage.ToSoftObjectPath() });
+}
+
+void UGALedgeClimb::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	AssetPreloader.Cancel();
+	Super::OnRemoveAbility(ActorInfo, Spec);
+}
+
 bool UGALedgeClimb::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
 	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags)) return false;

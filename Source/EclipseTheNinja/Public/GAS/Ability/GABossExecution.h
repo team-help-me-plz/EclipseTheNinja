@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
 #include "Containers/Ticker.h"
+#include "GAS/Ability/AbilityAssetPreloader.h"
 #include "GABossExecution.generated.h"
 
 class ABossEnemy;
@@ -41,6 +42,10 @@ public:
 		bool bReplicateEndAbility,
 		bool bWasCancelled
 	) override;
+
+	// 어빌리티를 받을 때 보스의 처형 몽타주와 피 이펙트를 미리 불러 둔다. 첫 처형 때 로딩으로 멈추지 않게 한다.
+	virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
+	virtual void OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 
 protected:
 	// 보스를 플레이어 등 뒤로 옮기고 플레이어와 같은 방향을 보게 한다.
@@ -178,6 +183,9 @@ protected:
 	bool bReturnBossOnEnd = false;
 
 private:
+	// 미리 불러 둔 몽타주·피 이펙트를 메모리에 잡아 둔다. 어빌리티를 잃으면 놓는다.
+	FAbilityAssetPreloader AssetPreloader;
+
 	UFUNCTION()
 	void OnImpactEvent(FGameplayEventData Payload);
 

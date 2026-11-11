@@ -4,6 +4,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "Containers/Ticker.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GAS/Ability/AbilityAssetPreloader.h"
 #include "GAAssassinateBase.generated.h"
 
 class APlayerCharacter;
@@ -41,6 +42,9 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
 		bool bReplicateEndAbility, bool bWasCancelled) override;
+	// 어빌리티를 받을 때 암살·피격 몽타주와 임팩트 VFX를 미리 불러 둔다. 첫 암살 때 로딩으로 멈추지 않게 한다.
+	virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
+	virtual void OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 
 protected:
 	// 공통 조건을 통과한 대상에 대해 이 암살 방식으로 실행할 수 있는지 확인한다.
@@ -269,4 +273,8 @@ protected:
 	bool bMovementLocked = false;
 	bool bTargetReserved = false;
 	bool bEnding = false;
+
+private:
+	// 미리 불러 둔 몽타주·VFX를 메모리에 잡아 둔다. 어빌리티를 잃으면 놓는다.
+	FAbilityAssetPreloader AssetPreloader;
 };
