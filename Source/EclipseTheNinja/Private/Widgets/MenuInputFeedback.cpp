@@ -4,6 +4,7 @@
 #include "Components/ComboBoxString.h"
 #include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateApplication.h"
+#include "EclipseUISound.h"
 
 namespace MenuFeedback
 {
@@ -65,6 +66,8 @@ bool FMenuInputFeedback::IsUsingGamepad() { return MenuFeedback::bGamepad; }
 
 void FMenuInputFeedback::Update(UUserWidget* Owner, const TArray<FMenuFocusFeedbackBinding>& Bindings, bool bActive)
 {
+	UWidget* FocusedControl = nullptr;
+
 	for (const FMenuFocusFeedbackBinding& Binding : Bindings)
 	{
 		UWidget* Control = Owner->GetWidgetFromName(Binding.ControlName);
@@ -72,6 +75,10 @@ void FMenuInputFeedback::Update(UUserWidget* Owner, const TArray<FMenuFocusFeedb
 		const bool bFocused = bActive && Control && Control->GetIsEnabled() && Control->IsVisible()
 			&& ((Combo && Combo->IsOpen()) || (MenuFeedback::bPointer ? Control->IsHovered()
 				: (Control->HasUserFocus(Owner->GetOwningPlayer()) || Control->HasUserFocusedDescendants(Owner->GetOwningPlayer()))));
+		if (bFocused && !FocusedControl)
+		{
+			FocusedControl = Control;
+		}
 		if (UButton* Button = Cast<UButton>(Control))
 		{
 			const FButtonStyle& BaseStyle = ButtonStyles.FindOrAdd(Button, Button->GetStyle());
@@ -84,6 +91,18 @@ void FMenuInputFeedback::Update(UUserWidget* Owner, const TArray<FMenuFocusFeedb
 		if (UWidget* Icon = Owner->GetWidgetFromName(Binding.AcceptIconName))
 			Icon->SetVisibility(bFocused && MenuFeedback::bGamepad ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
+
+	// 마우스 호버는 버튼 스타일 사운드가 맡는다. 키보드·게임패드로 포커스를 옮긴 경우만 여기서 재생한다
+	// (메뉴가 처음 열리며 기본 포커스를 받을 때는 이전 포커스가 없으므로 소리를 내지 않는다)
+	const bool bMovedFocus = FocusedControl
+		&& LastFocusedControl.IsValid()
+		&& LastFocusedControl.Get() != FocusedControl;
+
+	if (bMovedFocus && !MenuFeedback::bPointer)
+	{
+		EclipseUISound::PlayHoverSound();
+	}
+	LastFocusedControl = FocusedControl;
 	if (UWidget* Hints = Owner->GetWidgetFromName(TEXT("GamepadHints")))
 		Hints->SetVisibility(bActive && MenuFeedback::bGamepad ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (UWidget* Hints = Owner->GetWidgetFromName(TEXT("KeyboardHints")))

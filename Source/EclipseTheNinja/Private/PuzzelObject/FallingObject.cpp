@@ -15,7 +15,9 @@
 #include "AbilitySystemComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
+#include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
@@ -68,6 +70,21 @@ AFallingObject::AFallingObject()
 	if (LandSystem.Succeeded())
 	{
 		this->LandEffect->SetAsset(LandSystem.Object);
+	}
+
+	// 발동·충돌 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
+	static ConstructorHelpers::FObjectFinder<USoundBase> DropSoundFinder(
+		TEXT("/Game/Audio/dropping_tool_v1.dropping_tool_v1"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> LandSoundFinder(
+		TEXT("/Game/Audio/UI_PopUp_02.UI_PopUp_02"));
+
+	if (DropSoundFinder.Succeeded())
+	{
+		this->DropSound = DropSoundFinder.Object;
+	}
+	if (LandSoundFinder.Succeeded())
+	{
+		this->LandSound = LandSoundFinder.Object;
 	}
 }
 
@@ -178,6 +195,7 @@ void AFallingObject::ResetToInitial_Implementation()
 	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다
 	GetWorldTimerManager().ClearTimer(this->LandEffectTimer);
 	this->LandEffect->DeactivateImmediate();
+	this->StopDropSound();
 	// 원위치로 옮길 때 그 자리에 캐릭터가 있으면 끼이므로, Overlap 상태로 옮긴 뒤 겹친 캐릭터가 없을 때만 Block한다
 	this->FallingBody->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	this->FallingBody->SetCollisionResponseToChannel(ECC_Monster, ECR_Overlap);
@@ -308,9 +326,27 @@ void AFallingObject::ObjectDrop()
 	this->bIsFalling = true;
 	this->FallSpeed = this->InitFallSpeed;
 	this->HitActors.Reset();
+	// 발동 사운드는 앞부분만 쓰도록 DropSoundDuration 뒤에 끊는다
 	if (this->DropSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, this->DropSound, this->FallingBody->GetComponentLocation());
+		this->StopDropSound();
+		this->DropAudio = UGameplayStatics::SpawnSoundAtLocation(
+			this,
+			this->DropSound,
+			this->FallingBody->GetComponentLocation(),
+			FRotator::ZeroRotator,
+			this->DropSoundVolume
+		);
+	}
+	if (this->DropAudio && this->DropSoundDuration > 0.f)
+	{
+		GetWorldTimerManager().SetTimer(
+			this->DropSoundTimer,
+			this,
+			&AFallingObject::StopDropSound,
+			this->DropSoundDuration,
+			false
+		);
 	}
 	//SetActorTickEnabled(true);
 	// 매달려 있을 때는 Pawn을 Ignore하므로, 이미 겹쳐 있던 대상도 첫 이동 시 BeginOverlap이 발생한다
@@ -362,6 +398,18 @@ void AFallingObject::StopLandEffect()
 {
 	// 새 파티클 생성만 멈추고, 남은 먼지는 수명대로 자연스럽게 사라지게 한다
 	this->LandEffect->Deactivate();
+}
+
+void AFallingObject::StopDropSound()
+{
+	GetWorldTimerManager().ClearTimer(this->DropSoundTimer);
+
+	// 뚝 끊기는 소리가 나지 않도록 아주 짧게 줄이며 멈춘다
+	if (IsValid(this->DropAudio))
+	{
+		this->DropAudio->FadeOut(0.05f, 0.f);
+	}
+	this->DropAudio = nullptr;
 }
 
 bool AFallingObject::IgnorePawnWhileFalling(AActor* InActor)

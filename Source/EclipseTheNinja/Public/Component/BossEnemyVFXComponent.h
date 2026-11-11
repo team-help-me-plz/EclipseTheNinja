@@ -10,6 +10,7 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class USoundBase;
 struct FAbilityEndedData;
 struct FGameplayEffectContextHandle;
 
@@ -128,6 +129,9 @@ protected:
 	/** 실드가 켜져 있을 때 공격이 튕겨 나가는 이펙트. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss VFX|Hit")
 	TSoftObjectPtr<UNiagaraSystem> ShieldHitSystem;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TArray<TObjectPtr<USoundBase>> ShieldHitSounds;
 
 	/** 실드 튕김 이펙트 크기 배율. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss VFX|Hit", meta = (ClampMin = "0.01"))

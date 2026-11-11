@@ -2,6 +2,7 @@
 
 
 #include "Character/Enemy.h"
+#include "Sound/SoundBase.h"
 #include "Clone/CloneCharacter.h"
 #include "Component/EnemyDetectionComponent.h"
 #include "GAS/StatAttributeSet.h"
@@ -35,14 +36,15 @@
 #include "Noise/NoiseTypes.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
 #include "Util/EclipseCollisionChannels.h"
+#include "Util/NiagaraWarmup.h"
 #include "Component/EnemySpacingComponent.h"
+#include "Component/MovementLoopSoundComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 // Sets default values
 AEnemy::AEnemy()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 	EnemyDetectComponent = CreateDefaultSubobject<UEnemyDetectionComponent>(TEXT("EnemyDetectionComp"));
 
 	// 추격·공격 중 간격 유지, 포위, 낭떠러지 검사
@@ -77,6 +79,10 @@ AEnemy::AEnemy()
 
 	// 시체가 사라질 때까지 기다리지 않고 암살 시작 4초 뒤에 떨어뜨린다.
 	AssassinationDropComp->SetDropDelay(true, 4.0f);
+
+	// 몬스터 걷기 발소리. 지금은 기본 사운드를 비워 꺼 둔다.
+	// 다시 켜려면 BP의 WalkSoundComp에서 Loop Sound를 지정한다 (예: /Game/Audio/A_army_walk_loop)
+	WalkSoundComp = CreateDefaultSubobject<UMovementLoopSoundComponent>(TEXT("WalkSoundComp"));
 
 	NoiseDetectComponent = CreateDefaultSubobject<USphereComponent>(TEXT("NoiseDetectComponent"));
 	NoiseDetectComponent->SetupAttachment(RootComponent);
@@ -211,6 +217,11 @@ void AEnemy::BeginPlay()
 	EnemyDetectComponent->OnAwarenessChanged.AddDynamic(this, &AEnemy::HandleAwarenessChanged);
 	// 소리 감지 원 크기 초기화
 	SyncNoiseDetectRadius(this->LastNoiseSyncLevel);
+
+	StartOverheadWidgetFacingTimer();
+
+	// 전용 패링 불꽃(예: 보스)을 보이지 않게 한 번 재생해 둔다. 처음 패링당할 때 이펙트 생성으로 멈추지 않게 한다.
+	EclipseVFX::WarmupNiagaraSystem(this, ParrySparkEffect, GetActorLocation());
 }
 
 void AEnemy::InitializeBehaviorArea()
@@ -227,6 +238,7 @@ void AEnemy::InitializeBehaviorArea()
 void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(DeathDeactivateTimer);
+	GetWorldTimerManager().ClearTimer(OverheadWidgetFacingTimer);
 
 	// 메시 Y 오프셋용 루트 트랜스폼 바인딩 해제
 	if (GetRootComponent())
@@ -262,6 +274,11 @@ void AEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 	if (bIsDead)
 	{
 		return;
+	}
+	if (!bIsDoT && Data.NewValue < Data.OldValue
+		&& (Data.NewValue > 0.0f || !IsValid(PendingAssassinationMontage)))
+	{
+		PlayEnemySound(MonsterHitSound);
 	}
 	if (Data.NewValue <= 0.0f)
 	{
@@ -418,6 +435,7 @@ void AEnemy::Die()
 
 	// 오버헤드 위젯 제거
 	OverHeadWidgetComponent->SetVisibility(false, true);
+	GetWorldTimerManager().ClearTimer(OverheadWidgetFacingTimer);
 	SetActorTickEnabled(false);
 
 	if (ASC->HasMatchingGameplayTag(EclipseGameplayTags::State_Debuff_Burning))
@@ -546,10 +564,11 @@ void AEnemy::ResetToInitial_Implementation()
 	Movement->SetDefaultMovementMode();
 	Movement->SetPlaneConstraintOrigin(BehaviorOrigin);
 
-	// 외형, UI, 틱 복원
+	// 외형, UI, 파생 적의 틱 복원
 	SetActorHiddenInGame(false);
 	OverHeadWidgetComponent->SetVisibility(true, true);
 	SetActorTickEnabled(true);
+	StartOverheadWidgetFacingTimer();
 
 	// 감지 게이지/경계 단계 초기화
 	EnemyDetectComponent->ResetDetection();
@@ -573,6 +592,7 @@ void AEnemy::OnSpawnFromPool_Implementation()
 void AEnemy::OnReturnToPool_Implementation()
 {
 	GetWorldTimerManager().ClearTimer(DeathDeactivateTimer);
+	GetWorldTimerManager().ClearTimer(OverheadWidgetFacingTimer);
 
 	// 진행 중인 공격 어빌리티 정리
 	ASC->CancelAllAbilities();
@@ -688,18 +708,26 @@ void AEnemy::ResumeAIAfterScriptedMove(AActor* CombatActor)
 	RestartAI();
 }
 
-// Called every frame
-void AEnemy::Tick(float DeltaTime)
+void AEnemy::StartOverheadWidgetFacingTimer()
 {
-	Super::Tick(DeltaTime);
+	if (bIsDead) return;
+	if (GetNetMode() == NM_DedicatedServer) return;
 
-	// 위젯 빌보드
-	if (bFaceCamera)
-	{
-		UpdateOverheadWidgetRotation();
-	}
+	// 리스폰 직후에도 위젯이 바로 카메라를 향하도록 먼저 한 번 갱신한다.
+	UpdateOverheadWidgetFacing();
+
+	FTimerManagerTimerParameters TimerParameters;
+	TimerParameters.bLoop = true;
+	TimerParameters.bMaxOncePerFrame = true;
+	GetWorldTimerManager().SetTimer(OverheadWidgetFacingTimer, this, &AEnemy::UpdateOverheadWidgetFacing, 0.1f, TimerParameters);
 }
 
+void AEnemy::UpdateOverheadWidgetFacing()
+{
+	if (!bFaceCamera) return;
+
+	UpdateOverheadWidgetRotation();
+}
 
 bool AEnemy::IsLivingPlayer(const APawn* Player) const
 {
@@ -728,6 +756,23 @@ void AEnemy::HandleAwarenessChanged(float Gauge, EEnemyAlertLevel Level)
 	if (Level != LastNoiseSyncLevel)
 	{
 		SyncNoiseDetectRadius(Level);
+		if (Level == EEnemyAlertLevel::Combat && !bIsDead)
+		{
+			PlayEnemySound(MonsterDetectionSound);
+		}
+	}
+}
+
+void AEnemy::PlayAttackSound() const
+{
+	PlayEnemySound(AttackSound);
+}
+
+void AEnemy::PlayEnemySound(USoundBase* Sound) const
+{
+	if (Sound && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
 	}
 }
 

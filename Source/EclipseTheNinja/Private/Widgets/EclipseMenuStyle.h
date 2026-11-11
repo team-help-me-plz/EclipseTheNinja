@@ -7,6 +7,7 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Styling/CoreStyle.h"
+#include "EclipseUISound.h"
 
 namespace EclipseMenuStyle
 {
@@ -37,6 +38,9 @@ namespace EclipseMenuStyle
 		Style.SetPressed(Box(Tile, 3.f, Corona, 1.5f));
 		Style.SetNormalPadding(FMargin(0.f));
 		Style.SetPressedPadding(FMargin(0.f));
+
+		// 스타일을 다시 만들어 덮어써도 호버·선택 사운드가 빠지지 않게 한다
+		EclipseUISound::ApplyButtonSounds(Style);
 		return Style;
 	}
 

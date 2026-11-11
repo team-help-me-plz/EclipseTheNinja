@@ -12,6 +12,7 @@ class UArrowComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
 class UMaterialInterface;
+class USoundBase;
 
 /**
  * 체크포인트 액터.
@@ -74,6 +75,10 @@ protected:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Checkpoint|Lamp")
     TObjectPtr<UMaterialInterface> LampOnMaterial = nullptr;
+
+    // 플레이어가 닿아 이 체크포인트로 갱신될 때 재생할 사운드. 레벨 시작 자동 활성화와 이어하기 복원 때는 재생하지 않는다
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Checkpoint|Sound")
+    TObjectPtr<USoundBase> ActivateSound = nullptr;
 
     UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category = "Checkpoint")
     bool bCheckpointActive = false;

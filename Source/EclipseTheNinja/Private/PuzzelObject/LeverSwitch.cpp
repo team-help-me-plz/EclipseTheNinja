@@ -7,6 +7,8 @@
 #include "Subsystem/UIMessageSubsystem.h"
 
 #include "Components/BoxComponent.h"
+#include "Sound/SoundBase.h"
+#include "UObject/ConstructorHelpers.h"
 
 ALeverSwitch::ALeverSwitch()
 {
@@ -26,6 +28,15 @@ ALeverSwitch::ALeverSwitch()
 	// 분신 조준 커서 트레이스(Visibility)에 걸리도록 부모 BeginPlay의 스태틱 메시 설정과 맞춘다
 	this->InteractCollision->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	this->InteractCollision->SetGenerateOverlapEvents(true);
+
+	// 레버 동작 기본 사운드(에셋 시트). 부모(버튼) 기본값을 덮어쓴다
+	static ConstructorHelpers::FObjectFinder<USoundBase> LeverSoundFinder(
+		TEXT("/Game/Audio/Wood_Move_1-1_wav.Wood_Move_1-1_wav"));
+
+	if (LeverSoundFinder.Succeeded())
+	{
+		this->InteractSound = LeverSoundFinder.Object;
+	}
 }
 
 void ALeverSwitch::Interact_Implementation(AActor* InActor)

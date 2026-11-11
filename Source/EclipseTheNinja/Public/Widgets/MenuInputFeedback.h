@@ -6,6 +6,7 @@
 
 class UUserWidget;
 class UButton;
+class UWidget;
 class IInputProcessor;
 
 /** Designer-owned visuals associated with one focusable menu control. */
@@ -29,4 +30,7 @@ public:
 private:
 	TSharedPtr<IInputProcessor> InputProcessor;
 	TMap<TWeakObjectPtr<UButton>, FButtonStyle> ButtonStyles;
+
+	// 직전 Update에서 포커스된 컨트롤. 키보드·게임패드로 다른 컨트롤로 옮겨 가면 호버 사운드를 낸다
+	TWeakObjectPtr<UWidget> LastFocusedControl;
 };

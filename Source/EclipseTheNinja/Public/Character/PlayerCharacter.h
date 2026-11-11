@@ -26,7 +26,14 @@ class UMinimapComponent;
 class UGAAssassinate;
 class AEnemy;
 class UUserWidget;
+class USoundBase;
 struct FInputActionValue;
+
+UENUM()
+enum class EPlayerActionSound : uint8
+{
+	Kunai, SwiftStrike, Parry, Clone, BelowAssassination, Jump, Land, Hit, AssassinationStab, ParrySuccess, LedgeClimb
+};
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlayerConditionChanged, EPlayerCondition);
 
@@ -43,6 +50,27 @@ class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter, public IInte
 	UCameraComponent* Camera;
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TMap<EPlayerActionSound, TObjectPtr<USoundBase>> ActionSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> SwordAttackSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> FireAttackSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> AssassinationSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> WalkSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> CrouchWalkSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> WallClimbSounds;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
 	TObjectPtr<UInteractBoxComponent> InteractComponent;
 
@@ -179,6 +207,10 @@ protected:
 	EPlayerCondition	PlayerCondition = EPlayerCondition::Normal;
 
 public:
+	void PlayActionSound(EPlayerActionSound Action, float Volume = 1.0f) const;
+	void PlaySwordAttackSound(int32 ComboIndex, bool bFire) const;
+	void PlayAssassinationWithdrawalSound() const;
+
     const UInputAction* GetAbilityInputAction(EAbilityInputID InputID) const;
     const UInputAction* GetCloneRecallInputAction() const { return CloneRecallAction; }
 
@@ -314,6 +346,12 @@ protected:
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
+	void PlayCharacterSound(USoundBase* Sound, float Volume = 1.0f) const;
+	void PlayRandomCharacterSound(const TArray<TObjectPtr<USoundBase>>& Sounds) const;
+	void UpdateMovementSound(float DeltaSeconds);
+	float DistanceSinceMovementSound = 0.0f;
+	const TArray<TObjectPtr<USoundBase>>* PreviousMovementSounds = nullptr;
+
 	FTransform SafePointTransform;
 	bool bHasSafePoint = false;
 	// 커서의 위치 갱신

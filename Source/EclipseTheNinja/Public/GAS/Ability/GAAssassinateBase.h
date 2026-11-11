@@ -4,6 +4,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "Containers/Ticker.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GAS/Ability/AbilityAssetPreloader.h"
 #include "GAAssassinateBase.generated.h"
 
 class APlayerCharacter;
@@ -41,6 +42,9 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
 		bool bReplicateEndAbility, bool bWasCancelled) override;
+	// 어빌리티를 받을 때 암살·피격 몽타주와 임팩트 VFX를 미리 불러 둔다. 첫 암살 때 로딩으로 멈추지 않게 한다.
+	virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
+	virtual void OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 
 protected:
 	// 공통 조건을 통과한 대상에 대해 이 암살 방식으로 실행할 수 있는지 확인한다.
@@ -130,6 +134,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (Units = "s"))
 	float ImpactFallbackTime = 0.4f;
 
+	/** 아래 암살 소리를 임팩트보다 얼마나 늦게 낼지(실제 시간). 히트스톱·슬로모에 늘어나지 않는다. 아래 암살에서만 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Sound", meta = (ClampMin = "0.0", Units = "s"))
+	float BelowAssassinationSoundDelay = 0.1f;
+
 	/** 히트스톱 동안의 게임 속도 배율 */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", ClampMin = "0.001", ClampMax = "1.0"))
 	float HitStopTimeScale = 0.02f;
@@ -214,6 +222,11 @@ protected:
 private:
 	bool StartAttackMontageTask(float StartTime);
 	void TriggerImpact();
+
+	UFUNCTION()
+	void PlayAssassinationStabSound();
+	// 아래 암살 소리를 BelowAssassinationSoundDelay만큼 실제 시간으로 늦춰 낸다.
+	void PlayBelowAssassinationSound();
 	void PlayImpactVFX();
 	UFUNCTION()
 	void OnVFXEvent(FGameplayEventData Payload);
@@ -248,6 +261,7 @@ private:
 	float ImpactElapsed = 0.0f;
 	float SavedTimeDilation = 1.0f;
 	bool bImpactTriggered = false;
+	bool bPlayBossImpactSound = false;
 	bool bImpactVFXTriggered = false;
 	bool bTimeDilationApplied = false;
 
@@ -259,4 +273,8 @@ protected:
 	bool bMovementLocked = false;
 	bool bTargetReserved = false;
 	bool bEnding = false;
+
+private:
+	// 미리 불러 둔 몽타주·VFX를 메모리에 잡아 둔다. 어빌리티를 잃으면 놓는다.
+	FAbilityAssetPreloader AssetPreloader;
 };

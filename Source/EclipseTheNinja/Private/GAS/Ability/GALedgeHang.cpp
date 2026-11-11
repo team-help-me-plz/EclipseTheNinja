@@ -50,6 +50,21 @@ UGALedgeHang::UGALedgeHang()
 	ActivationBlockedTags.AddTag(UGAWallAttach::GetWallAttachingTag());
 }
 
+void UGALedgeHang::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	Super::OnGiveAbility(ActorInfo, Spec);
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+	// 시전할 때 쓰는 몽타주를 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
+	AssetPreloader.Request({ DropMontage.ToSoftObjectPath(), HoldMontage.ToSoftObjectPath() });
+}
+
+void UGALedgeHang::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	AssetPreloader.Cancel();
+	Super::OnRemoveAbility(ActorInfo, Spec);
+}
+
 FGameplayTag UGALedgeHang::GetLedgeHangingTag()
 {
 	return TAG_LedgeHanging;
@@ -187,6 +202,8 @@ void UGALedgeHang::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 		OnInterrupted();
 		return;
 	}
+
+	Player->PlayActionSound(EPlayerActionSound::LedgeClimb);
 
 	// 이동은 루트 모션 태스크가 맡으므로 중력 없는 Flying으로 바꾼다. 종료 시 매달리기나 낙하로 넘긴다.
 	UCharacterMovementComponent* Movement = Player->GetCharacterMovement();

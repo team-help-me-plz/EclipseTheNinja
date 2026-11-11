@@ -1,4 +1,5 @@
 #include "GAS/Ability/GAAssassinateBase.h"
+#include "GAS/Ability/GABelowAssassinate.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "GAS/Task/AbilityTask_MontageRootOffset.h"
@@ -15,6 +16,7 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "BrainComponent.h"
+#include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/AssassinateTargetComponent.h"
@@ -46,6 +48,23 @@ UGAAssassinateBase::UGAAssassinateBase()
 	ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
 	// 벽에 매달린 상태에서 시작하면 매달리기를 먼저 끝낸다 (ActivateAbility 전에 취소된다)
 	CancelAbilitiesWithTag.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
+}
+
+void UGAAssassinateBase::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	Super::OnGiveAbility(ActorInfo, Spec);
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+	// 시전할 때 쓰는 에셋을 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
+	AssetPreloader.Request({
+		AttackMontage.ToSoftObjectPath(), VictimMontage.ToSoftObjectPath(),
+		bUseImpactVFX ? ImpactVFX.ToSoftObjectPath() : FSoftObjectPath() });
+}
+
+void UGAAssassinateBase::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	AssetPreloader.Cancel();
+	Super::OnRemoveAbility(ActorInfo, Spec);
 }
 
 FGameplayTag UGAAssassinateBase::GetAssassinatingTag()
@@ -108,6 +127,7 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	bIgnoringVictimCollision = false;
 	bLedgeWalkLocked = false;
 	bImpactTriggered = false;
+	bPlayBossImpactSound = false;
 	bImpactVFXTriggered = false;
 	PausedBrain.Reset();
 
@@ -219,8 +239,8 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	ExecutionRotation = Enemy->GetActorRotation();
 	Player->SetAssassinationFacing(ExecutionRotation.Yaw);
 
-	// 몽타주 재생 전부터 VFX 전용 노티파이를 기다린다.
-	if (bUseImpactVFX)
+	// 기본·상단 암살은 칼을 뽑는 프레임의 VFX 노티파이에서 사운드도 재생한다.
+	if (bUseImpactVFX || !IsA<UGABelowAssassinate>())
 	{
 		UAbilityTask_WaitGameplayEvent* VFXTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 			this, TAG_AssassinateVFX, nullptr, true, true);
@@ -324,7 +344,10 @@ void UGAAssassinateBase::ExecuteVictim()
 	if (!IsValid(Enemy) || Enemy->IsDead()) { OnInterrupted(); return; }
 
 	// 암살 피격 애니메이션 수신
+	const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy);
+	const float PreviousBossHealthRatio = Boss ? Boss->GetHealthRatio() : 0.0f;
 	Enemy->ReceiveAssassination(VictimExecutionMontage);
+	bPlayBossImpactSound = IsValid(Boss) && Boss->GetHealthRatio() < PreviousBossHealthRatio;
 
 	// 실제 재생 중인 몽타주를 불러옴
 	UAnimInstance* VictimAnimInstance = Enemy->GetMesh()->GetAnimInstance();
@@ -441,6 +464,13 @@ UAbilityTask_ApplyRootMotionMoveToForce* UGAAssassinateBase::MoveAlongAttackRoot
 
 void UGAAssassinateBase::OnVFXEvent(FGameplayEventData Payload)
 {
+	if (!bEnding && IsActive() && !IsA<UGABelowAssassinate>())
+	{
+		if (const APlayerCharacter* Player = Assassin.Get())
+		{
+			Player->PlayAssassinationWithdrawalSound();
+		}
+	}
 	PlayImpactVFX();
 }
 
@@ -448,7 +478,6 @@ void UGAAssassinateBase::WaitForImpact(float CurrentMontageTime)
 {
 	if (bEnding) return;
 	if (!IsActive()) return;
-	if (!bUseImpactTimeDilation) return;
 
 	// 몽타주는 1배속으로 재생하므로, 지금 몽타주 위치부터 잰 게임 시간 대기가 몽타주 시간과 같다.
 	// 예비 동작 슬로모가 걸려도 대기 시간이 같이 늘어나 시점이 어긋나지 않는다.
@@ -474,8 +503,17 @@ void UGAAssassinateBase::WaitForImpact(float CurrentMontageTime)
 		return;
 	}
 
+	if (!IsA<UGABelowAssassinate>())
+	{
+		constexpr float StabSoundLeadTime = 0.08f;
+		UAbilityTask_WaitDelay* StabSoundTask = UAbilityTask_WaitDelay::WaitDelay(
+			this, FMath::Max(0.0f, ImpactTime - CurrentMontageTime - StabSoundLeadTime));
+		StabSoundTask->OnFinish.AddDynamic(this, &UGAAssassinateBase::PlayAssassinationStabSound);
+		StabSoundTask->ReadyForActivation();
+	}
+
 	// 예비 동작: 칼을 뻗기 전까지 느리게 보여 긴장을 만들고, 칼이 들어가는 구간은 원래 속도로 되돌려 빠르게 꽂는다.
-	if (!bUseAnticipation || AnticipationLeadTime <= SnapLeadTime) return;
+	if (!bUseImpactTimeDilation || !bUseAnticipation || AnticipationLeadTime <= SnapLeadTime) return;
 	const float AnticipationStart = ImpactTime - AnticipationLeadTime - CurrentMontageTime;
 	const float SnapTime = ImpactTime - SnapLeadTime - CurrentMontageTime;
 	if (AnticipationStart <= KINDA_SMALL_NUMBER || SnapTime <= KINDA_SMALL_NUMBER) return;
@@ -506,8 +544,62 @@ void UGAAssassinateBase::TriggerImpact()
 	if (!IsActive()) return;
 	bImpactTriggered = true;
 
+	if (IsA<UGABelowAssassinate>())
+	{
+		PlayBelowAssassinationSound();
+	}
+
+	if (bPlayBossImpactSound)
+	{
+		if (ABossEnemy* Boss = Cast<ABossEnemy>(Victim.Get()))
+		{
+			Boss->PlayAssassinationImpactSound();
+		}
+	}
+
 	if (!bUseImpactTimeDilation) return;
 	StartImpactTimeDilation();
+}
+
+void UGAAssassinateBase::PlayAssassinationStabSound()
+{
+	if (!bEnding && IsActive())
+	{
+		if (const APlayerCharacter* Player = Assassin.Get())
+		{
+			Player->PlayActionSound(EPlayerActionSound::AssassinationStab);
+		}
+	}
+}
+
+void UGAAssassinateBase::PlayBelowAssassinationSound()
+{
+	if (BelowAssassinationSoundDelay <= 0.0f)
+	{
+		if (const APlayerCharacter* Player = Assassin.Get())
+		{
+			Player->PlayActionSound(EPlayerActionSound::BelowAssassination);
+		}
+
+		return;
+	}
+
+	// 임팩트 직후 히트스톱으로 게임 시간이 거의 멈추므로 실제 시간으로 잰다
+	const TWeakObjectPtr<APlayerCharacter> WeakPlayer = Assassin;
+	FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateLambda(
+			[WeakPlayer](float DeltaTime)
+			{
+				if (const APlayerCharacter* Player = WeakPlayer.Get())
+				{
+					Player->PlayActionSound(EPlayerActionSound::BelowAssassination);
+				}
+
+				return false;
+			}
+		),
+		BelowAssassinationSoundDelay
+	);
 }
 
 void UGAAssassinateBase::PlayImpactVFX()

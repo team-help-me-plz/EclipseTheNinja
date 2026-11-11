@@ -247,6 +247,10 @@ void UGACloneTech::HandleTargetAccepted(const FCloneCommandType& InCommand)
 		return ;
 	}
 	this->SpawnedClone->SetCommand(InCommand);
+	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(Character))
+	{
+		Player->PlayActionSound(EPlayerActionSound::Clone);
+	}
 	this->SpawnedClone->OnCloneDespawned.AddDynamic(this, &UGACloneTech::HandleCloneDespawned);
 	PlayCloneEffect(this->SpawnedClone->GetActorLocation() + FVector(0.f, this->SpawnedClone->GetMeshWorldOffsetY() + 80.f, 0.f));
 	// 수명이 끝나면 ACloneCharacter::LifeSpanExpired에서 풀에 반환된다

@@ -162,6 +162,9 @@ void USettingsWidget::NativeConstruct()
 	this->LoadCurrentSettings();
 	this->RefreshKeyBindingList();
 	this->SelectTab(ESettingsTab::Display);
+
+	// 키 설정 목록까지 만들어진 뒤에 모든 버튼에 호버·선택 사운드를 넣는다
+	EclipseUISound::ApplyButtonSoundsToTree(this);
 	bTabFocus = true;
 	bConsumeAcceptRelease = false;
 	if (FSlateApplication::IsInitialized() && !GamepadInputProcessor)

@@ -2,6 +2,7 @@
 
 
 #include "GAS/Ability/GABaseAttack.h"
+#include "Character/PlayerCharacter.h"
 
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
@@ -241,6 +242,15 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 	{
 		OnAttackInterrupted();
 		return;
+	}
+
+	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(Character))
+	{
+		Player->PlaySwordAttackSound(ComboIndex, SourceASC->HasMatchingGameplayTag(EclipseGameplayTags::State_Weapon_Element_Fire));
+	}
+	else if (Enemy)
+	{
+		Enemy->PlayAttackSound();
 	}
 
 	//데미지가 유효한 숫자인지 확인

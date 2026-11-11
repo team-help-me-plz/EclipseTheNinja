@@ -10,6 +10,7 @@
 #include "Character/PlayerCharacter.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/WidgetComponent.h"
 #include "GAS/Ability/GAAssassinateBase.h"
 #include "GAS/Animation/AnimNotify_AssassinateImpact.h"
 #include "GAS/Task/AbilityTask_MontageRootOffset.h"
@@ -22,6 +23,20 @@
 #include "NiagaraSystem.h"
 #include "TimerManager.h"
 
+namespace
+{
+void SetExecutionOverheadHidden(ABossEnemy* Boss, bool bHidden)
+{
+	if (!IsValid(Boss)) return;
+
+	UWidgetComponent* OverheadWidget = Cast<UWidgetComponent>(Boss->GetDefaultSubobjectByName(TEXT("OverheadWidgetComp")));
+	if (!IsValid(OverheadWidget)) return;
+
+	// 사망 시 체력바를 끄는 Visibility와 분리해 처형 중에만 숨긴다.
+	OverheadWidget->SetHiddenInGame(bHidden);
+}
+}
+
 UGABossExecution::UGABossExecution()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -32,6 +47,31 @@ UGABossExecution::UGABossExecution()
 		TEXT("/Game/VFX/Vefects/Blood_VFX/VFX/Performance_Versions/Bursts/Looped/Looped_NS_Blood_Burst_Large.Looped_NS_Blood_Burst_Large")));
 	VictimBloodSlashSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
 		TEXT("/Game/VFX/Vefects/Blood_VFX/VFX/Performance_Versions/Slashes/Looped/Looped_NS_Slash_Large.Looped_NS_Slash_Large")));
+}
+
+void UGABossExecution::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	Super::OnGiveAbility(ActorInfo, Spec);
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+	// 시전할 때 쓰는 에셋을 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
+	TArray<FSoftObjectPath> Paths = {
+		VictimBloodSystem.ToSoftObjectPath(), VictimBloodSlashSystem.ToSoftObjectPath() };
+
+	// 처형 몽타주는 보스가 들고 있다.
+	if (const ABossEnemy* Boss = ActorInfo ? Cast<ABossEnemy>(ActorInfo->AvatarActor.Get()) : nullptr)
+	{
+		Paths.Add(Boss->GetExecutionAttackMontage().ToSoftObjectPath());
+		Paths.Add(Boss->GetExecutionVictimMontage().ToSoftObjectPath());
+	}
+
+	AssetPreloader.Request(Paths);
+}
+
+void UGABossExecution::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	AssetPreloader.Cancel();
+	Super::OnRemoveAbility(ActorInfo, Spec);
 }
 
 void UGABossExecution::ActivateAbility(
@@ -56,6 +96,7 @@ void UGABossExecution::ActivateAbility(
 	}
 
 	Victim = Player;
+	SetExecutionOverheadHidden(Boss, true);
 
 	// 연출 동안 보스 AI와 이동을 멈춘다.
 	if (AAIController* AI = Cast<AAIController>(Boss->GetController()))
@@ -618,6 +659,7 @@ void UGABossExecution::EndAbility(
 
 	// 보스가 살아 있으면 AI를 다시 켠다.
 	ABossEnemy* Boss = Cast<ABossEnemy>(GetAvatarActorFromActorInfo());
+	SetExecutionOverheadHidden(Boss, false);
 
 	// 끝까지 연출했으면 화면이 어두운 동안 보스를 처형 직전 자리로 되돌린다. 플레이어 높이(공중)에 남아 떨어지지 않게 한다.
 	if (bReturnBossOnEnd && IsValid(Boss) && !Boss->IsDead())

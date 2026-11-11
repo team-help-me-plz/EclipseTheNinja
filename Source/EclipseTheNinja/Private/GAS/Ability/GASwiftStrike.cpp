@@ -3,6 +3,7 @@
 
 
 #include "GAS/Ability/GASwiftStrike.h"
+#include "Character/PlayerCharacter.h"
 #include "NativeGameplayTags.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "GAS/Ability/GAAssassinateBase.h"
@@ -86,27 +87,16 @@ void UGASwiftStrike::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, c
 	if (HasAnyFlags(RF_ClassDefaultObject)) return;
 
 	// 시전할 때 쓰는 에셋을 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
-	TArray<FSoftObjectPath> Paths;
-	for (const FSoftObjectPath& Path : {
+	AssetPreloader.Request({
 		SwiftStrikeMontage.ToSoftObjectPath(), AirSwiftStrikeMontage.ToSoftObjectPath(),
 		DashSlashEffect.ToSoftObjectPath(), AfterimageEffect.ToSoftObjectPath(),
-		AfterimageMaterial.ToSoftObjectPath(), ImpactEffect.ToSoftObjectPath() })
-	{
-		if (!Path.IsNull()) Paths.AddUnique(Path);
-	}
-	if (Paths.IsEmpty()) return;
-
-	PreloadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
-		Paths, FStreamableDelegate::CreateUObject(this, &UGASwiftStrike::OnAssetsPreloaded));
+		AfterimageMaterial.ToSoftObjectPath(), ImpactEffect.ToSoftObjectPath() },
+		FStreamableDelegate::CreateUObject(this, &UGASwiftStrike::OnAssetsPreloaded));
 }
 
 void UGASwiftStrike::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
 {
-	if (PreloadHandle.IsValid())
-	{
-		PreloadHandle->CancelHandle();
-		PreloadHandle.Reset();
-	}
+	AssetPreloader.Cancel();
 	if (IsValid(AfterimageCapture))
 	{
 		AfterimageCapture->DestroyComponent();
@@ -285,6 +275,10 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 
 	// 몽타주 재생 실패로 취소되었다면 이동을 시작하지 않는다.
 	if (!IsActive()) return;
+	if (const APlayerCharacter* Ninja = Cast<APlayerCharacter>(Player))
+	{
+		Ninja->PlayActionSound(EPlayerActionSound::SwiftStrike);
+	}
 
 	UCharacterMovementComponent* DashMovement = Player->GetCharacterMovement();
 	if (!IsValid(DashMovement))

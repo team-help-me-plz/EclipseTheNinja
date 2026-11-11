@@ -11,6 +11,7 @@ class UBoxComponent;
 class UInteractHighlightComponent;
 class UWidgetComponent;
 class ACharacter;
+class USoundBase;
 
 UCLASS()
 class ECLIPSETHENINJA_API AVentPassage : public AActor, public IInteractable
@@ -95,6 +96,14 @@ protected:
 	// 이 환풍구로 들어갈 때 재생하는 전용 몽타주. 이 환풍구로 나올 때는 같은 몽타주를 역재생한다
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interact|Montage")
 	TObjectPtr<UAnimMontage>			EnterMontage = nullptr;
+
+	// 이 환풍구로 들어갈 때 환풍구 위치에서 재생할 사운드
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interact|Sound")
+	TObjectPtr<USoundBase>				EnterSound = nullptr;
+
+	// 이 환풍구로 나올 때 환풍구 위치에서 재생할 사운드
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interact|Sound")
+	TObjectPtr<USoundBase>				ExitSound = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact|Cooldown", meta = (ClampMin = "0.05"))
 	float	InteractInterval = 1.5f;

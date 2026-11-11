@@ -136,6 +136,7 @@ void UGASummonAllies::OnSummonEvent(FGameplayEventData Payload)
 {
 	if (IsActive())
 	{
+		// 외치는 소리는 몽타주의 Play Sound 노티파이가 따로 낸다
 		SummonNow();
 	}
 }

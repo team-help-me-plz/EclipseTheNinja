@@ -29,6 +29,8 @@ public:
     virtual void EndAbility(const FGameplayAbilitySpecHandle Handle,
         const FGameplayAbilityActorInfo* ActorInfo,
         const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+    // 어빌리티를 받을 때 기본 불꽃을 보이지 않게 한 번 재생해 둔다. 첫 패링 성공 때 이펙트 생성으로 멈추지 않게 한다.
+    virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 
     /**
      * 플레이어 ASC의 GE 적용 질의에서 호출한다. 판정 창이 열려 있을 때 들어온 공격을 원인에 따라 처리한다.

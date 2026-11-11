@@ -16,6 +16,7 @@ class AMeshAssembly;
 class UActivateHighlightComponent;
 class UNiagaraComponent;
 class USoundBase;
+class UAudioComponent;
 
 UCLASS()
 class ECLIPSETHENINJA_API AFallingObject : public AActor, public IActivatable, public ICheckpointResettable
@@ -66,6 +67,9 @@ protected:
 
 	void	StopLandEffect();
 
+	// 발동 사운드를 DropSoundDuration에서 끊는다
+	void	StopDropSound();
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TObjectPtr<USceneComponent>		RootScene = nullptr;
 
@@ -95,6 +99,14 @@ protected:
 	// 줄이 끊겨 떨어지기 시작할 때 재생할 사운드. 비워 두면 재생하지 않는다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
 	TObjectPtr<USoundBase>	DropSound = nullptr;
+
+	// 발동 사운드 볼륨 배율
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound", meta = (ClampMin = "0"))
+	float	DropSoundVolume = 2.0f;
+
+	// 발동 사운드를 이 시간(초)까지만 재생한다. 기본 사운드 뒤쪽의 유리 깨지는 소리(0.3초~)를 자르기 위함. 0이면 끝까지 재생
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound", meta = (ClampMin = "0"))
+	float	DropSoundDuration = 0.28f;
 
 	// 떨어진 물체가 바닥에 부딪혔을 때 착지 지점에서 재생할 사운드. 비워 두면 재생하지 않는다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
@@ -142,4 +154,10 @@ private:
 	TArray<TWeakObjectPtr<APawn>>	IgnoredPawns;
 
 	FTimerHandle	LandEffectTimer;
+
+	// 재생 중인 발동 사운드. DropSoundDuration이 지나면 끊는다
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent>	DropAudio = nullptr;
+
+	FTimerHandle	DropSoundTimer;
 };

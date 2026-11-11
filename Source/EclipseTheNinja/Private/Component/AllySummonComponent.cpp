@@ -169,7 +169,7 @@ AEnemy* UAllySummonComponent::SpawnAlly(const FEnemyClimbEntrance& InEntrance, A
 	AEnemy* Ally = PoolSubsystem->SpawnActor<AEnemy>(
 		SummonClass,
 		SpawnTransform,
-		nullptr,
+		OwnerEnemy.Get(),
 		nullptr
 	);
 

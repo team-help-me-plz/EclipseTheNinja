@@ -48,6 +48,9 @@ public:
 	/** 보스의 링크 상태를 반영한다. 보스 스테이지 포탈은 열리고 닫히며, 기믹 스테이지 포탈은 레이저를 켜고 끈다. */
 	void SetLinkActive(bool bActive);
 
+	/** 레벨이 표시된 뒤, 로딩 중 먼저 트리거에 닿은 플레이어의 입장을 다시 확인한다. */
+	void RefreshBossStageEntry();
+
 	/** 지금 플레이어를 들여보내는지. */
 	UFUNCTION(BlueprintPure, Category = "Gimmick Portal")
 	bool IsPortalOpen() const;

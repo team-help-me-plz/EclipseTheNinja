@@ -25,6 +25,8 @@
 
 ACeilingEnemy::ACeilingEnemy()
 {
+	PrimaryActorTick.bCanEverTick = true;
+
 	// 기본 애니메이션. 블루프린트에서 다른 에셋으로 바꿀 수 있다.
 	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> HangAnimFinder(
 		TEXT("/Game/Anims/Anim_Seq/CeilingHide/Ninja_CeilingHide_from_Floor_StandingDrawn")
@@ -123,6 +125,12 @@ void ACeilingEnemy::Tick(float DeltaTime)
 	{
 		AmbushBodyCorrection = NewAmbushBodyCorrection;
 		ApplyHangMeshOffset(HangMeshOffsetAlpha);
+	}
+
+	// 착지 때 분신과 겹쳐 있어 미뤄 둔 충돌 복원을, 떨어지고 나면 마친다.
+	if (Phase == ECeilingEnemyPhase::Grounded && bPawnCollisionIgnored)
+	{
+		TryRestorePawnCollision();
 	}
 
 	if (Phase == ECeilingEnemyPhase::Grounded)
@@ -380,6 +388,9 @@ void ACeilingEnemy::StartAmbush(APawn* Target)
 	bLandedDuringAmbush = false;
 	DescentStartTime = GetWorld()->GetTimeSeconds();
 
+	// 내려오는 동안 대상(분신) 머리에 막혀 튀지 않도록 플레이어·분신과의 충돌을 끈다.
+	SetIgnorePawnCollision(true);
+
 	EnsureAmbushProfile();
 
 	// 대상 쪽으로 방향을 돌린다. 매달린 몸은 천장을 따라 가로로 뻗어 있어 한 번에 뒤집으면 순간이동처럼 보이므로,
@@ -567,6 +578,9 @@ void ACeilingEnemy::StartDropWithoutAttack(AActor* DamageInstigator)
 	PendingCombatActor = DamageInstigator;
 	DescentStartTime = GetWorld()->GetTimeSeconds();
 
+	// 기습과 같이 떨어지는 동안에는 아래 있는 분신에 막히지 않게 한다.
+	SetIgnorePawnCollision(true);
+
 	ReleaseHangPose(DropBlendOutTime);
 
 	// 공격 없이 중력으로만 떨어진다.
@@ -658,6 +672,9 @@ void ACeilingEnemy::FinishDescent()
 		Movement->SetDefaultMovementMode();
 	}
 
+	// 일반 적으로 돌아가므로 분신과 다시 부딪히게 한다. 겹쳐 있으면 Tick에서 떨어진 뒤 되돌린다.
+	TryRestorePawnCollision();
+
 	AActor* CombatActor = PendingCombatActor.Get();
 	AmbushTarget.Reset();
 	PendingCombatActor.Reset();
@@ -736,6 +753,9 @@ void ACeilingEnemy::ResetToInitial_Implementation()
 
 		bRootMotionOverridden = false;
 	}
+
+	// 기습 중에 리스폰되면 꺼 둔 충돌을 바로 되돌린다.
+	SetIgnorePawnCollision(false);
 
 	// 기본 초기화가 배치 위치, 메시 위치, 이동 모드, 감지 상태를 되돌린다.
 	Super::ResetToInitial_Implementation();
@@ -1112,4 +1132,64 @@ bool ACeilingEnemy::IsAmbushAbilityActive() const
 {
 	const FGameplayAbilitySpec* Spec = FindAbilitySpecByInputID(EAbilityInputID::CeilingAmbush);
 	return Spec && Spec->IsActive();
+}
+
+void ACeilingEnemy::SetIgnorePawnCollision(bool bIgnore)
+{
+	if (bIgnore == bPawnCollisionIgnored)
+	{
+		return;
+	}
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+
+	// 플레이어는 원래 Monster 채널을 무시하므로, 실제로 막히던 상대는 분신 캡슐이다.
+	if (bIgnore)
+	{
+		SavedPawnResponse = Capsule->GetCollisionResponseToChannel(ECC_Pawn);
+		Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	}
+	else
+	{
+		Capsule->SetCollisionResponseToChannel(ECC_Pawn, SavedPawnResponse);
+	}
+
+	bPawnCollisionIgnored = bIgnore;
+}
+
+void ACeilingEnemy::TryRestorePawnCollision()
+{
+	if (!bPawnCollisionIgnored)
+	{
+		return;
+	}
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CeilingPawnRestore), false, this);
+
+	// 맞닿기만 한 경우는 겹침으로 보지 않도록 캡슐을 살짝 줄여 검사한다.
+	TArray<FOverlapResult> Overlaps;
+	GetWorld()->OverlapMultiByObjectType(
+		Overlaps,
+		Capsule->GetComponentLocation(),
+		Capsule->GetComponentQuat(),
+		FCollisionObjectQueryParams(ECC_Pawn),
+		Capsule->GetCollisionShape(-1.0f),
+		Params
+	);
+
+	// 이 적을 막는 Pawn(분신 캡슐)과 아직 겹쳐 있으면 다음 틱에 다시 확인한다.
+	const ECollisionChannel MyObjectType = Capsule->GetCollisionObjectType();
+
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		const UPrimitiveComponent* Other = Overlap.GetComponent();
+
+		if (Other && Other->GetCollisionResponseToChannel(MyObjectType) == ECR_Block)
+		{
+			return;
+		}
+	}
+
+	SetIgnorePawnCollision(false);
 }
