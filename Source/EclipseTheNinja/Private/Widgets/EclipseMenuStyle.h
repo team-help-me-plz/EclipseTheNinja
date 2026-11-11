@@ -19,6 +19,9 @@ namespace EclipseMenuStyle
 	inline const FLinearColor Paper = FLinearColor::FromSRGBColor(FColor(247, 240, 229));
 	inline const FLinearColor Edge = FLinearColor::FromSRGBColor(FColor(68, 81, 108));
 
+	// 게임패드 포커스 버튼 채움색(설정 메뉴의 선택 탭과 같은 붉은색).
+	inline const FLinearColor Ember = FLinearColor(0.35f, 0.045f, 0.04f, 1.f);
+
 	inline FSlateBrush Box(FLinearColor Fill, float Radius = 0.f, FLinearColor Outline = FLinearColor::Transparent, float Width = 0.f)
 	{
 		FSlateBrush Brush;

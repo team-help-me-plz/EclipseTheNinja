@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Widgets/MenuInputFeedback.h"
 #include "PauseMenuWidget.generated.h"
 
 class UButton;
@@ -16,6 +17,15 @@ public:
 	virtual bool Initialize() override;
 
 protected:
+	// 입력 장치 추적을 시작하고, 메뉴를 연 입력이 게임패드였는지 반영한다.
+	virtual void NativeConstruct() override;
+
+	// 입력 장치 추적을 멈추고 버튼 스타일을 되돌린다.
+	virtual void NativeDestruct() override;
+
+	// 게임패드 포커스 버튼을 붉은색으로 칠한다.
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
 	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
@@ -30,7 +40,7 @@ protected:
 	) override;
 
 private:
-	UButton* AddMenuButton(UVerticalBox& Menu, const FText& Label, bool bPrimary = false);
+	UButton* AddMenuButton(UVerticalBox& Menu, const FText& Label);
 
 	// 방향키패드 위아래로 메뉴 버튼 포커스를 옮긴다(양 끝에서 반대쪽으로 돈다).
 	void MoveButtonFocus(int32 Direction);
@@ -44,6 +54,9 @@ private:
 
 	// 메뉴가 다시 포커스를 받을 때 고를 버튼 인덱스(설정에서 돌아오면 1 = 설정 버튼).
 	int32 PreferredButtonIndex = 0;
+
+	// 입력 장치 추적과 포커스 버튼 색 적용.
+	FMenuInputFeedback InputFeedback;
 
 	UFUNCTION()
 	void HandleResumeClicked();

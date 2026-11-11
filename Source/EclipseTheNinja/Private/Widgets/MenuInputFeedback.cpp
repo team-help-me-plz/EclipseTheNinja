@@ -5,6 +5,8 @@
 #include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateApplication.h"
 #include "EclipseUISound.h"
+#include "EclipseMenuStyle.h"
+#include "GameFramework/PlayerController.h"
 
 namespace MenuFeedback
 {
@@ -41,6 +43,24 @@ namespace MenuFeedback
 			return false;
 		}
 	};
+
+	// 호버 브러시 모양(둥근 정도 등)은 두고 채움·테두리만 포커스 색으로 바꾼다.
+	FSlateBrush MakeFocusBrush(const FSlateBrush& Base)
+	{
+		FSlateBrush Brush = Base;
+
+		// 투명 버튼이면 색이 보이도록 둥근 상자로 그린다.
+		if (Brush.DrawAs == ESlateBrushDrawType::NoDrawType)
+		{
+			Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+		}
+
+		Brush.TintColor = FSlateColor(EclipseMenuStyle::Ember);
+		Brush.OutlineSettings.Color = FSlateColor(EclipseMenuStyle::Corona);
+		Brush.OutlineSettings.Width = FMath::Max(Brush.OutlineSettings.Width, 2.f);
+
+		return Brush;
+	}
 }
 
 void FMenuInputFeedback::Start()
@@ -64,6 +84,65 @@ void FMenuInputFeedback::Stop()
 
 bool FMenuInputFeedback::IsUsingGamepad() { return MenuFeedback::bGamepad; }
 
+void FMenuInputFeedback::SetUsingGamepad(bool bInUsingGamepad)
+{
+	MenuFeedback::bGamepad = bInUsingGamepad;
+	MenuFeedback::bPointer = !bInUsingGamepad;
+}
+
+void FMenuInputFeedback::UpdateButtons(
+	const UUserWidget* Owner,
+	TConstArrayView<UButton*> Buttons,
+	bool bActive,
+	const FSlateBrush* FocusBrush
+)
+{
+	APlayerController* Player = Owner ? Owner->GetOwningPlayer() : nullptr;
+
+	for (UButton* Button : Buttons)
+	{
+		if (!Button)
+		{
+			continue;
+		}
+
+		const bool bFocused = bActive
+			&& Button->GetIsEnabled()
+			&& Button->IsVisible()
+			&& (MenuFeedback::bPointer
+				? Button->IsHovered()
+				: Button->HasUserFocus(Player));
+		ApplyButtonStyle(*Button, bFocused, true, FocusBrush);
+	}
+}
+
+void FMenuInputFeedback::ApplyButtonStyle(
+	UButton& Button,
+	bool bFocused,
+	bool bUseFocusColor,
+	const FSlateBrush* FocusBrush
+)
+{
+	const FButtonStyle BaseStyle = ButtonStyles.FindOrAdd(&Button, Button.GetStyle());
+	FButtonStyle Style = BaseStyle;
+
+	// 게임패드 포커스는 호버와 다른 색으로 칠해 어느 버튼에 있는지 바로 보이게 한다.
+	if (bFocused && bUseFocusColor && MenuFeedback::bGamepad)
+	{
+		const FSlateBrush AppliedBrush = FocusBrush
+			? *FocusBrush
+			: MenuFeedback::MakeFocusBrush(BaseStyle.Hovered);
+		Style.SetNormal(AppliedBrush);
+		Style.SetHovered(AppliedBrush);
+	}
+	else if (bFocused)
+	{
+		Style.SetNormal(BaseStyle.Hovered);
+	}
+
+	Button.SetStyle(Style);
+}
+
 void FMenuInputFeedback::Update(UUserWidget* Owner, const TArray<FMenuFocusFeedbackBinding>& Bindings, bool bActive)
 {
 	UWidget* FocusedControl = nullptr;
@@ -81,10 +160,8 @@ void FMenuInputFeedback::Update(UUserWidget* Owner, const TArray<FMenuFocusFeedb
 		}
 		if (UButton* Button = Cast<UButton>(Control))
 		{
-			const FButtonStyle& BaseStyle = ButtonStyles.FindOrAdd(Button, Button->GetStyle());
-			FButtonStyle Style = BaseStyle;
-			if (bFocused) Style.SetNormal(BaseStyle.Hovered);
-			Button->SetStyle(Style);
+			// 바인딩 메뉴(설정)는 WBP 하이라이트가 포커스를 보여 주므로 전용 색은 쓰지 않는다.
+			ApplyButtonStyle(*Button, bFocused, false);
 		}
 		if (UWidget* Highlight = Owner->GetWidgetFromName(Binding.HighlightName))
 			Highlight->SetVisibility(bFocused ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);

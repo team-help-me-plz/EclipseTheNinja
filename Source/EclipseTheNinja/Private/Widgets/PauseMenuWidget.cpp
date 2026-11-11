@@ -79,7 +79,7 @@ bool UPauseMenuWidget::Initialize()
 	KeyHint->SetHorizontalAlignment(HAlign_Center);
 	KeyHint->SetPadding(FMargin(0.f, 14.f, 0.f, 0.f));
 
-	UButton* ResumeButton = AddMenuButton(*Menu, LOCTEXT("Resume", "게임 재개"), true);
+	UButton* ResumeButton = AddMenuButton(*Menu, LOCTEXT("Resume", "게임 재개"));
 	UButton* SettingsButton = AddMenuButton(*Menu, LOCTEXT("Settings", "설정"));
 	UButton* MainMenuButton = AddMenuButton(*Menu, LOCTEXT("MainMenu", "메인 화면으로"));
 	ResumeButton->OnClicked.AddUniqueDynamic(this, &UPauseMenuWidget::HandleResumeClicked);
@@ -92,17 +92,48 @@ bool UPauseMenuWidget::Initialize()
 	return true;
 }
 
-UButton* UPauseMenuWidget::AddMenuButton(UVerticalBox& Menu, const FText& Label, bool bPrimary)
+void UPauseMenuWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	// 메뉴를 연 Start 버튼 입력은 추적 전에 지나가므로 컨트롤러가 기억한 장치로 시작한다.
+	if (const APlayerCharacterController* Controller = GetOwningPlayer<APlayerCharacterController>())
+	{
+		FMenuInputFeedback::SetUsingGamepad(Controller->IsUsingGamepad());
+	}
+
+	InputFeedback.Start();
+}
+
+void UPauseMenuWidget::NativeDestruct()
+{
+	InputFeedback.Stop();
+	Super::NativeDestruct();
+}
+
+void UPauseMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// 설정 창이 열려 메뉴가 접혀 있으면 색을 빼 둔다.
+	TArray<UButton*> Buttons;
+	for (UButton* Button : MenuButtons)
+	{
+		Buttons.Add(Button);
+	}
+
+	// 포커스 버튼은 예전 '게임 재개' 강조 모양(남색 채움, 주황 테두리)으로 칠한다.
+	const FSlateBrush FocusBrush = EclipseMenuStyle::Box(EclipseMenuStyle::Tile, 3.f, EclipseMenuStyle::Lantern, 1.f);
+	InputFeedback.UpdateButtons(this, Buttons, IsVisible(), &FocusBrush);
+}
+
+UButton* UPauseMenuWidget::AddMenuButton(UVerticalBox& Menu, const FText& Label)
 {
 	using namespace EclipseMenuStyle;
 
+	// 모든 버튼을 같은 모양으로 두고, 강조는 포커스 버튼에만 준다.
 	UButton* MenuButton = WidgetTree->ConstructWidget<UButton>();
-	FButtonStyle Style = Button(Ink, Lantern);
-	if (bPrimary)
-	{
-		Style.SetNormal(Box(Tile, 3.f, Lantern, 1.f));
-	}
-	MenuButton->SetStyle(Style);
+	MenuButton->SetStyle(Button(Ink, Lantern));
 	Menu.AddChildToVerticalBox(MenuButton)->SetPadding(FMargin(0.f, 4.f));
 
 	USizeBox* ButtonSize = WidgetTree->ConstructWidget<USizeBox>();

@@ -149,6 +149,18 @@ void UMainMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	InputFeedback.Update(this, FocusFeedbackBindings, !(SettingsWidget && SettingsWidget->IsInViewport()));
+
+	// 게임패드 포커스 버튼을 설정 메뉴의 선택 탭처럼 붉은색으로 칠한다.
+	const TArray<UButton*> MenuButtons = {
+		StartButton.Get(),
+		ContinueButton.Get(),
+		SettingsButton.Get(),
+		QuitButton.Get(),
+		OverwriteConfirmButton.Get(),
+		OverwriteCancelButton.Get()
+	};
+	const bool bMenuActive = !(SettingsWidget && SettingsWidget->IsInViewport());
+	InputFeedback.UpdateButtons(this, MenuButtons, bMenuActive);
 }
 
 void UMainMenuWidget::FocusMenuButton(UButton* Button)

@@ -27,7 +27,27 @@ public:
 	void Stop();
 	void Update(UUserWidget* Owner, const TArray<FMenuFocusFeedbackBinding>& Bindings, bool bActive = true);
 	static bool IsUsingGamepad();
+
+	// 메뉴가 열리기 전에 마지막으로 쓴 입력 장치를 알려 준다(첫 입력 전에도 포커스 색이 맞게).
+	static void SetUsingGamepad(bool bInUsingGamepad);
+
+	// 바인딩 없이 버튼 목록에 포커스 모양을 입힌다. 게임패드 포커스는 전용 색, 마우스는 호버 모양.
+	// FocusBrush를 주면 기본 붉은 포커스 대신 그 브러시를 쓴다.
+	void UpdateButtons(
+		const UUserWidget* Owner,
+		TConstArrayView<UButton*> Buttons,
+		bool bActive = true,
+		const FSlateBrush* FocusBrush = nullptr
+	);
 private:
+	// 포커스 여부에 맞춰 버튼 스타일을 원래 스타일 기준으로 다시 입힌다. bUseFocusColor면 게임패드 포커스에 전용 색.
+	void ApplyButtonStyle(
+		UButton& Button,
+		bool bFocused,
+		bool bUseFocusColor,
+		const FSlateBrush* FocusBrush = nullptr
+	);
+
 	TSharedPtr<IInputProcessor> InputProcessor;
 	TMap<TWeakObjectPtr<UButton>, FButtonStyle> ButtonStyles;
 
