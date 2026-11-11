@@ -261,6 +261,12 @@ void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		StatAttributeSet->OnDamageBlocked.RemoveAll(this);
 	}
 
+	// 감지 상태 바인딩 해제. 기믹 방처럼 숨겼다 다시 보이는 레벨은 BeginPlay가 다시 불려 중복 바인딩된다.
+	if (EnemyDetectComponent)
+	{
+		EnemyDetectComponent->OnAwarenessChanged.RemoveDynamic(this, &AEnemy::HandleAwarenessChanged);
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 

@@ -39,8 +39,9 @@ void ADamageTrap::PostInitializeComponents()
 {
     Super::PostInitializeComponents();
 
-    this->CollisionBox->OnComponentBeginOverlap.AddDynamic(this, &ADamageTrap::OnCollisionBeginOverlap);
-    this->CollisionBox->OnComponentEndOverlap.AddDynamic(this, &ADamageTrap::OnCollisionEndOverlap);
+    // 기믹 방처럼 숨겼다 다시 보이는 레벨은 이 함수가 다시 불리므로 중복 바인딩을 막는다.
+    this->CollisionBox->OnComponentBeginOverlap.AddUniqueDynamic(this, &ADamageTrap::OnCollisionBeginOverlap);
+    this->CollisionBox->OnComponentEndOverlap.AddUniqueDynamic(this, &ADamageTrap::OnCollisionEndOverlap);
 }
 
 void ADamageTrap::OnCollisionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
