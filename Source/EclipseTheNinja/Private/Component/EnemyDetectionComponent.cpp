@@ -26,9 +26,7 @@ namespace EnemyDetectionKeys
 
 UEnemyDetectionComponent::UEnemyDetectionComponent()
 {
-    PrimaryComponentTick.bCanEverTick = true;
-    PrimaryComponentTick.TickInterval = 0.0f;
-    PrimaryComponentTick.TickGroup = TG_PostPhysics;
+    PrimaryComponentTick.bCanEverTick = false;
     static ConstructorHelpers::FClassFinder<UEnemyAwarenessWidget> WidgetBlueprint(TEXT("/Game/Widgets/WBP_EnemyAwareness"));
     AwarenessWidgetClass = WidgetBlueprint.Class;
     if (!AwarenessWidgetClass) AwarenessWidgetClass = UEnemyAwarenessWidget::StaticClass();
@@ -66,14 +64,11 @@ void UEnemyDetectionComponent::BeginPlay()
     Super::BeginPlay();
 
     Owner = Cast<AEnemy>(GetOwner());
-    if (!Owner.IsValid())
-    {
-        SetComponentTickEnabled(false);
-        return;
-    }
+    if (!Owner.IsValid()) return;
 
     UpdateBlackboard();
     CreatePresentationWidget();
+    StartDetectionTimer();
 }
 
 float UEnemyDetectionComponent::GetCurrentDetectionRadius() const
@@ -123,7 +118,10 @@ void UEnemyDetectionComponent::NotifyDamaged(AActor* DamageInstigator)
     CurrentTarget = Attacker;
 
     // 다음 판정 주기를 기다리지 않고 시야와 Blackboard를 바로 갱신한다.
-    DetectionElapsed = 0.0f;
+    if (UWorld* World = GetWorld())
+    {
+        LastDetectionTime = World->GetTimeSeconds();
+    }
     UpdateDetection(0.0f);
 }
 
@@ -137,13 +135,12 @@ void UEnemyDetectionComponent::ResetDetection()
     LastKnownLocation = FVector::ZeroVector;
     bHasLastKnownLocation = false;
     TimeWithoutSight = 0.0f;
-    DetectionElapsed = 0.0f;
     SyncPlayerEngagement();
 
     if (!Owner.IsValid()) return;
 
-    // 사망 시 꺼진 틱과 발각 범위 UI를 복원한다.
-    SetComponentTickEnabled(true);
+    // 사망 시 멈춘 감지 타이머와 발각 범위 UI를 복원한다.
+    StartDetectionTimer();
     if (PresentationWidget)
     {
         if (!PresentationWidget->IsInViewport())
@@ -182,13 +179,13 @@ void UEnemyDetectionComponent::StopDetection()
 {
     if (UWorld* World = GetWorld())
     {
+        World->GetTimerManager().ClearTimer(DetectionTimer);
         World->GetTimerManager().ClearTimer(PresentationRetryTimer);
     }
 
     if (PresentationWidget)
         PresentationWidget->RemoveFromParent();
 
-    SetComponentTickEnabled(false);
 	NoiseAlertReset();
 
     // 단계는 그대로 두므로 대상을 먼저 비워야 플레이어에게 해제가 전달된다.
@@ -343,43 +340,51 @@ APawn* UEnemyDetectionComponent::FindSharedCombatTarget() const
     return nullptr;
 }
 
-void UEnemyDetectionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+void UEnemyDetectionComponent::StartDetectionTimer()
 {
-    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    LastDetectionTime = World->GetTimeSeconds();
+
+    FTimerManagerTimerParameters TimerParameters;
+    TimerParameters.bLoop = true;
+    TimerParameters.bMaxOncePerFrame = true;
+    World->GetTimerManager().SetTimer(DetectionTimer, this, &UEnemyDetectionComponent::UpdateDetectionFromTimer,
+        FMath::Max(0.1f, DetectionInterval), TimerParameters);
+}
+
+void UEnemyDetectionComponent::UpdateDetectionFromTimer()
+{
     AEnemy* OwnerEnemy = Owner.Get();
-    if (!OwnerEnemy) return;
-
-    // 소유 액터가 죽은 상태이면 
-    if (OwnerEnemy->IsDead())
+    if (!OwnerEnemy)
     {
-        UpdateDetection(0.0f);
-        GetWorld()->GetTimerManager().ClearTimer(PresentationRetryTimer);
-        
-        // 발각 범위를 나타내는 UI를 제거
-        if (PresentationWidget) 
-            PresentationWidget->RemoveFromParent();
-
-        // 틱 비활성화
-        SetComponentTickEnabled(false);
-		NoiseAlertReset();
+        StopDetection();
         return;
     }
 
-    //시간 누적
-    DetectionElapsed += DeltaTime;
-
-    // 최대 0.02f초에 한 번 감지상태 갱신
-    if (DetectionElapsed >= FMath::Max(0.02f, DetectionInterval))
+    if (OwnerEnemy->IsDead())
     {
-
-        const float Elapsed = DetectionElapsed;
-        DetectionElapsed = 0.0f;
-        UpdateDetection(Elapsed);
+        UpdateDetection(0.0f);
+        StopDetection();
+        return;
     }
 
-    // 경계 단계가 Normal이면 
-    // 표시 값을 실제 값으로 보간 (게이지가 차오르는 형태) 
-    // 경계/공격 상태에는 가득찬 상태로 표시
+    const UWorld* World = GetWorld();
+    if (!World) return;
+
+    // 프레임이 늦어져도 실제 경과 시간으로 감지 게이지와 시야 상실 시간을 계산한다.
+    const double Now = World->GetTimeSeconds();
+    const float Elapsed = static_cast<float>(Now - LastDetectionTime) * OwnerEnemy->CustomTimeDilation;
+    LastDetectionTime = Now;
+    if (Elapsed <= 0.0f) return;
+
+    UpdateDetection(Elapsed);
+}
+
+void UEnemyDetectionComponent::UpdateDisplayedGauge(float DeltaTime)
+{
+    // 일반 상태에서는 표시 값을 보간하고 경계·전투 상태에서는 가득 채운다.
     DisplayedGauge = AlertLevel == EEnemyAlertLevel::Normal
         ? FMath::FInterpTo(DisplayedGauge, AlertGauge, DeltaTime, 12.0f) : 1.0f;
 
@@ -534,7 +539,7 @@ void UEnemyDetectionComponent::UpdateBlackboard()
     if (!AI) return;
 
     UBlackboardComponent* BB = AI->GetBlackboardComponent();
-    if (!BB) return; // 컨트롤러/BT가 나중에 준비되어도 다음 Tick에서 다시 연결한다.
+    if (!BB) return; // 컨트롤러/BT가 나중에 준비되어도 다음 감지 갱신에서 다시 연결한다.
 
     APawn* Target = CurrentTarget.Get();
 
@@ -644,18 +649,8 @@ void UEnemyDetectionComponent::CreatePresentationWidget()
 
 void UEnemyDetectionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    if (UWorld* World = GetWorld())
-    {
-        World->GetTimerManager().ClearTimer(PresentationRetryTimer);
-    }
+    StopDetection();
+    PresentationWidget = nullptr;
 
-    if (PresentationWidget)
-    {
-        PresentationWidget->RemoveFromParent();
-        PresentationWidget = nullptr;
-    }
-
-    CurrentTarget.Reset();
-    SyncPlayerEngagement();
     Super::EndPlay(EndPlayReason);
 }

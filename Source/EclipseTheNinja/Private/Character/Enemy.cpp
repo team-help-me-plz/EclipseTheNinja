@@ -43,8 +43,7 @@
 // Sets default values
 AEnemy::AEnemy()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 	EnemyDetectComponent = CreateDefaultSubobject<UEnemyDetectionComponent>(TEXT("EnemyDetectionComp"));
 
 	// 추격·공격 중 간격 유지, 포위, 낭떠러지 검사
@@ -217,6 +216,8 @@ void AEnemy::BeginPlay()
 	EnemyDetectComponent->OnAwarenessChanged.AddDynamic(this, &AEnemy::HandleAwarenessChanged);
 	// 소리 감지 원 크기 초기화
 	SyncNoiseDetectRadius(this->LastNoiseSyncLevel);
+
+	StartOverheadWidgetFacingTimer();
 }
 
 void AEnemy::InitializeBehaviorArea()
@@ -233,6 +234,7 @@ void AEnemy::InitializeBehaviorArea()
 void AEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(DeathDeactivateTimer);
+	GetWorldTimerManager().ClearTimer(OverheadWidgetFacingTimer);
 
 	// 메시 Y 오프셋용 루트 트랜스폼 바인딩 해제
 	if (GetRootComponent())
@@ -429,6 +431,7 @@ void AEnemy::Die()
 
 	// 오버헤드 위젯 제거
 	OverHeadWidgetComponent->SetVisibility(false, true);
+	GetWorldTimerManager().ClearTimer(OverheadWidgetFacingTimer);
 	SetActorTickEnabled(false);
 
 	if (ASC->HasMatchingGameplayTag(EclipseGameplayTags::State_Debuff_Burning))
@@ -557,10 +560,11 @@ void AEnemy::ResetToInitial_Implementation()
 	Movement->SetDefaultMovementMode();
 	Movement->SetPlaneConstraintOrigin(BehaviorOrigin);
 
-	// 외형, UI, 틱 복원
+	// 외형, UI, 파생 적의 틱 복원
 	SetActorHiddenInGame(false);
 	OverHeadWidgetComponent->SetVisibility(true, true);
 	SetActorTickEnabled(true);
+	StartOverheadWidgetFacingTimer();
 
 	// 감지 게이지/경계 단계 초기화
 	EnemyDetectComponent->ResetDetection();
@@ -584,6 +588,7 @@ void AEnemy::OnSpawnFromPool_Implementation()
 void AEnemy::OnReturnToPool_Implementation()
 {
 	GetWorldTimerManager().ClearTimer(DeathDeactivateTimer);
+	GetWorldTimerManager().ClearTimer(OverheadWidgetFacingTimer);
 
 	// 진행 중인 공격 어빌리티 정리
 	ASC->CancelAllAbilities();
@@ -699,18 +704,26 @@ void AEnemy::ResumeAIAfterScriptedMove(AActor* CombatActor)
 	RestartAI();
 }
 
-// Called every frame
-void AEnemy::Tick(float DeltaTime)
+void AEnemy::StartOverheadWidgetFacingTimer()
 {
-	Super::Tick(DeltaTime);
+	if (bIsDead) return;
+	if (GetNetMode() == NM_DedicatedServer) return;
 
-	// 위젯 빌보드
-	if (bFaceCamera)
-	{
-		UpdateOverheadWidgetRotation();
-	}
+	// 리스폰 직후에도 위젯이 바로 카메라를 향하도록 먼저 한 번 갱신한다.
+	UpdateOverheadWidgetFacing();
+
+	FTimerManagerTimerParameters TimerParameters;
+	TimerParameters.bLoop = true;
+	TimerParameters.bMaxOncePerFrame = true;
+	GetWorldTimerManager().SetTimer(OverheadWidgetFacingTimer, this, &AEnemy::UpdateOverheadWidgetFacing, 0.1f, TimerParameters);
 }
 
+void AEnemy::UpdateOverheadWidgetFacing()
+{
+	if (!bFaceCamera) return;
+
+	UpdateOverheadWidgetRotation();
+}
 
 bool AEnemy::IsLivingPlayer(const APawn* Player) const
 {

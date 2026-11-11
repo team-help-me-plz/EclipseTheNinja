@@ -17,7 +17,6 @@ class ECLIPSETHENINJA_API UEnemyDetectionComponent : public UActorComponent
     GENERATED_BODY()
 public:
     UEnemyDetectionComponent();
-    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
     /** UI용 0~1 게이지와 경계 수준. 값이 변경될 때만 알린다. */
     UPROPERTY(BlueprintAssignable, Category="AI|Detection|UI")
@@ -71,11 +70,14 @@ public:
     UFUNCTION(BlueprintCallable, Category="AI|Detection")
     void NotifyDamaged(AActor* DamageInstigator);
 
-    /** 체크포인트 리스폰용. 경계 게이지/단계와 마지막 목격 정보를 초기화하고, 사망 시 꺼진 틱과 UI를 되살린다. */
+    /** 체크포인트 리스폰용. 감지 상태를 초기화하고 타이머와 UI를 다시 시작한다. */
     void ResetDetection();
 
-    /** 오브젝트 풀 반환용. 감지 틱과 위젯 재시도 타이머를 멈추고 발각 범위 UI를 제거한다. (ResetDetection으로 다시 시작) */
+    /** 감지와 위젯 재시도 타이머를 멈추고 발각 범위 UI를 제거한다. */
     void StopDetection();
+
+    /** 화면 위젯이 표시되는 동안 게이지를 보간한다. */
+    void UpdateDisplayedGauge(float DeltaTime);
 
     /** 현재 감지 상태를 Blackboard에 다시 기록한다. (BT 재시작 시 사용) */
     void RefreshBlackboard() { UpdateBlackboard(); }
@@ -133,8 +135,8 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|Awareness", meta=(ClampMin="0.0", Units="s"))
     float ForgetDelay = 10.0f;
 
-    /** 레이캐스트 검사 간격. 화면 표시는 이 값과 무관하게 매 프레임 갱신한다. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|Sight", meta=(ClampMin="0.02", Units="s"))
+    /** 감지 타이머 간격. 위젯의 게이지 보간 주기와는 별개다. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Detection|Sight", meta=(ClampMin="0.1", Units="s"))
     float DetectionInterval = 0.1f;
 
     /** Noise 감지 시 주목도가 내려가지 않는 시간 */
@@ -161,6 +163,8 @@ private:
     // 전투 중 근처 동료가 직접 보고 있는 대상을 찾는다. 빌릴 시야가 없으면 nullptr.
     APawn* FindSharedCombatTarget() const;
     // 감지 로직 업데이트 함수
+    void StartDetectionTimer();
+    void UpdateDetectionFromTimer();
     void UpdateDetection(float DeltaTime);
     // BB용 변수 업데이트 함수
     void UpdateBlackboard();
@@ -169,6 +173,7 @@ private:
     // 발각 범위 위젯 생성. 플레이어가 준비되지 않았을 때만 재시도한다.
     void CreatePresentationWidget();
 
+    FTimerHandle DetectionTimer;
     FTimerHandle PresentationRetryTimer;
 
     UPROPERTY(Transient)
@@ -188,7 +193,7 @@ private:
     FVector LastKnownLocation = FVector::ZeroVector;
     bool bHasLastKnownLocation = false;
     float TimeWithoutSight = 0.0f;
-    float DetectionElapsed = 0.0f;
+    double LastDetectionTime = 0.0;
 
     // 직접 본 시야. 빌린 시야끼리 서로 이어 주지 않도록 bHasLineOfSight와 따로 둔다.
     bool bHasDirectSight = false;

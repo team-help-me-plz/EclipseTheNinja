@@ -25,6 +25,8 @@
 
 ACeilingEnemy::ACeilingEnemy()
 {
+	PrimaryActorTick.bCanEverTick = true;
+
 	// 기본 애니메이션. 블루프린트에서 다른 에셋으로 바꿀 수 있다.
 	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> HangAnimFinder(
 		TEXT("/Game/Anims/Anim_Seq/CeilingHide/Ninja_CeilingHide_from_Floor_StandingDrawn")

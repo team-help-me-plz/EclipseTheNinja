@@ -66,6 +66,10 @@ private:
 	FDelegateHandle AppearanceTableChangedHandle;
 	void UpdateAppearanceTableBinding();
 
+	FTimerHandle OverheadWidgetFacingTimer;
+	void StartOverheadWidgetFacingTimer();
+	void UpdateOverheadWidgetFacing();
+
 public:
 	// Sets default values for this character's properties
 	AEnemy();
@@ -256,8 +260,6 @@ protected:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
 
 	/** Overhead Widget 초기화 함수**/
 	UFUNCTION(BlueprintCallable, Category = "UI|Overhead")
