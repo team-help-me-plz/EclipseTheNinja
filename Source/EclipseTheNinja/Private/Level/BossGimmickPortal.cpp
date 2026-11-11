@@ -124,6 +124,23 @@ void ABossGimmickPortal::BlockEntry(float Duration)
 	EntryBlockedUntil = GetWorld()->GetTimeSeconds() + Duration;
 }
 
+void ABossGimmickPortal::RestoreCheckpointBeforeGimmick()
+{
+	if (!bHasCheckpointBeforeGimmick)
+	{
+		return;
+	}
+
+	UCheckpointSubsystem* CP = GetWorld() ? GetWorld()->GetSubsystem<UCheckpointSubsystem>() : nullptr;
+	if (!CP)
+	{
+		return;
+	}
+
+	CP->RestoreCheckpoint(CheckpointBeforeGimmick);
+	bHasCheckpointBeforeGimmick = false;
+}
+
 void ABossGimmickPortal::ToggleActivate_Implementation()
 {
 	UBossEnemyGimmickComponent* Gimmick = UBossEnemyGimmickComponent::FindByLinkId(this, LinkId);
@@ -331,10 +348,9 @@ void ABossGimmickPortal::HandleStageChange(ABossGimmickPortal* Destination)
 		BossSide->CheckpointBeforeGimmick = CP->GetCurrentCheckpoint();
 		BossSide->bHasCheckpointBeforeGimmick = true;
 	}
-	else if (BossSide->bHasCheckpointBeforeGimmick)
+	else
 	{
-		CP->RestoreCheckpoint(BossSide->CheckpointBeforeGimmick);
-		BossSide->bHasCheckpointBeforeGimmick = false;
+		BossSide->RestoreCheckpointBeforeGimmick();
 	}
 }
 

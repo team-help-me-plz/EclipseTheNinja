@@ -142,6 +142,21 @@ void UBossEnemyGimmickComponent::HandleEnergyLinkEnded()
 
 void UBossEnemyGimmickComponent::HandleEnergyLinkFailed()
 {
+	// 기믹 방에서 시간이 다 되어도 처형 뒤에는 보스 스테이지 체크포인트에서 다시 시작한다.
+	// 기믹 방은 리스폰 위치가 방 밖이면 스스로 닫힌다(ABossGimmickStage::HandleRespawned).
+	const FName FailedLinkId = GetActiveLinkId();
+	UWorld* World = GetWorld();
+	if (World && !FailedLinkId.IsNone())
+	{
+		for (TActorIterator<ABossGimmickPortal> It(World); It; ++It)
+		{
+			if (It->GetLinkId() == FailedLinkId && It->GetPortalSide() == EBossGimmickPortalSide::BossStage)
+			{
+				It->RestoreCheckpointBeforeGimmick();
+			}
+		}
+	}
+
 	HandleEnergyLinkEnded();
 
 	// 실패하면 바로 처형 컷신이 나오므로 남은 레이저 입자까지 즉시 지운다.
