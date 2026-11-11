@@ -50,6 +50,23 @@ UGAAssassinateBase::UGAAssassinateBase()
 	CancelAbilitiesWithTag.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
 }
 
+void UGAAssassinateBase::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	Super::OnGiveAbility(ActorInfo, Spec);
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+	// 시전할 때 쓰는 에셋을 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
+	AssetPreloader.Request({
+		AttackMontage.ToSoftObjectPath(), VictimMontage.ToSoftObjectPath(),
+		bUseImpactVFX ? ImpactVFX.ToSoftObjectPath() : FSoftObjectPath() });
+}
+
+void UGAAssassinateBase::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	AssetPreloader.Cancel();
+	Super::OnRemoveAbility(ActorInfo, Spec);
+}
+
 FGameplayTag UGAAssassinateBase::GetAssassinatingTag()
 {
 	return TAG_Assassinating;

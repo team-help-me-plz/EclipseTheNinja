@@ -37,6 +37,21 @@ UGAWallSlide::UGAWallSlide()
     ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
 }
 
+void UGAWallSlide::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+    Super::OnGiveAbility(ActorInfo, Spec);
+    if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+    // 시전할 때 쓰는 몽타주를 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
+    AssetPreloader.Request({ SlideMontage.ToSoftObjectPath() });
+}
+
+void UGAWallSlide::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+    AssetPreloader.Cancel();
+    Super::OnRemoveAbility(ActorInfo, Spec);
+}
+
 FGameplayTag UGAWallSlide::GetWallSlideAbilityTag()
 {
     return TAG_WallSlide;

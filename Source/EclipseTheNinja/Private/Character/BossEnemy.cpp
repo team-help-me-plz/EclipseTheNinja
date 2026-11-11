@@ -83,6 +83,12 @@ void ABossEnemy::BeginPlay()
     if (ASC)
     {
         PatternEndedHandle = ASC->OnAbilityEnded.AddUObject(this, &ABossEnemy::OnPatternAbilityEnded);
+
+        // 처형 어빌리티를 미리 부여해 처형 몽타주와 피 이펙트를 전투 전에 불러 두게 한다. (부여 시점에 사전 로딩된다)
+        if (ExecutionAbilityClass && HasAuthority() && !ASC->FindAbilitySpecFromClass(ExecutionAbilityClass))
+        {
+            ASC->GiveAbility(FGameplayAbilitySpec(ExecutionAbilityClass, 1));
+        }
     }
 }
 

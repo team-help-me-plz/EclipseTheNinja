@@ -49,6 +49,31 @@ UGABossExecution::UGABossExecution()
 		TEXT("/Game/VFX/Vefects/Blood_VFX/VFX/Performance_Versions/Slashes/Looped/Looped_NS_Slash_Large.Looped_NS_Slash_Large")));
 }
 
+void UGABossExecution::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	Super::OnGiveAbility(ActorInfo, Spec);
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+	// 시전할 때 쓰는 에셋을 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
+	TArray<FSoftObjectPath> Paths = {
+		VictimBloodSystem.ToSoftObjectPath(), VictimBloodSlashSystem.ToSoftObjectPath() };
+
+	// 처형 몽타주는 보스가 들고 있다.
+	if (const ABossEnemy* Boss = ActorInfo ? Cast<ABossEnemy>(ActorInfo->AvatarActor.Get()) : nullptr)
+	{
+		Paths.Add(Boss->GetExecutionAttackMontage().ToSoftObjectPath());
+		Paths.Add(Boss->GetExecutionVictimMontage().ToSoftObjectPath());
+	}
+
+	AssetPreloader.Request(Paths);
+}
+
+void UGABossExecution::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	AssetPreloader.Cancel();
+	Super::OnRemoveAbility(ActorInfo, Spec);
+}
+
 void UGABossExecution::ActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
