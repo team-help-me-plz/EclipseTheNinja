@@ -36,6 +36,7 @@
 #include "Noise/NoiseTypes.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
 #include "Util/EclipseCollisionChannels.h"
+#include "Util/NiagaraWarmup.h"
 #include "Component/EnemySpacingComponent.h"
 #include "Component/MovementLoopSoundComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -218,6 +219,9 @@ void AEnemy::BeginPlay()
 	SyncNoiseDetectRadius(this->LastNoiseSyncLevel);
 
 	StartOverheadWidgetFacingTimer();
+
+	// 전용 패링 불꽃(예: 보스)을 보이지 않게 한 번 재생해 둔다. 처음 패링당할 때 이펙트 생성으로 멈추지 않게 한다.
+	EclipseVFX::WarmupNiagaraSystem(this, ParrySparkEffect, GetActorLocation());
 }
 
 void AEnemy::InitializeBehaviorArea()
