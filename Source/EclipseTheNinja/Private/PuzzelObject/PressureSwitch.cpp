@@ -59,7 +59,8 @@ APressureSwitch::APressureSwitch(const FObjectInitializer& ObjectInitializer)
 	this->MeshAssembly->SetupAttachment(this->PressureTrigger);
 
 	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
-	this->InteractHighlight = CreateDefaultSubobject<UInteractHighlightComponent>(TEXT("InteractHighlight"));
+	// 플레이어 감지 함정처럼 테두리가 필요 없는 자식이 DoNotCreateDefaultSubobject로 뺄 수 있게 선택 컴포넌트로 만든다
+	this->InteractHighlight = CreateOptionalDefaultSubobject<UInteractHighlightComponent>(TEXT("InteractHighlight"));
 
 	// 발판 동작 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
 	static ConstructorHelpers::FObjectFinder<USoundBase> PressSoundFinder(

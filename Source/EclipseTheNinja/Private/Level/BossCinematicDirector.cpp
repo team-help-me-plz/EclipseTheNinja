@@ -135,7 +135,6 @@ void ABossCinematicDirector::HandlePortalArrived(ABossGimmickPortal* Portal, APa
         return;
     }
     const bool bInGimmickStage = Portal->GetPortalSide() == EBossGimmickPortalSide::GimmickStage;
-    this->Boss->SetPlayerInGimmickStage(bInGimmickStage);
     if (bInGimmickStage || !this->bGroggyPending || !IsValid(this->GroggySequence) || this->Boss->IsDead())
     {
         return;

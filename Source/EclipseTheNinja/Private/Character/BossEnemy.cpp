@@ -13,6 +13,7 @@
 #include "Component/MovementLoopSoundComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/DataTable.h"
 #include "Engine/Engine.h"
@@ -31,6 +32,7 @@
 
 ABossEnemy::ABossEnemy()
 {
+    PrimaryActorTick.bCanEverTick = true;
     DefaultStatsEffect = UGEBossEnemyDefaultStats::StaticClass();
 
     // 처치 후 엔딩 컷신에서도 쓰러진 보스가 보여야 한다.

@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Level/BossGimmickPortal.h"
+#include "Level/BossGimmickStage.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -116,6 +117,10 @@ void UBossEnemyGimmickComponent::HandleEnergyLinkActivated(int32 LinkIndex)
 
 	StartLaser(Step.BeamTarget);
 	NotifyPortals(Step.LinkId, true);
+	if (ABossGimmickStage* Stage = ABossGimmickStage::FindByLinkId(GetWorld(), Step.LinkId))
+	{
+		Stage->SetLinkActive(true);
+	}
 }
 
 void UBossEnemyGimmickComponent::HandleEnergyLinkEnded()
@@ -127,6 +132,10 @@ void UBossEnemyGimmickComponent::HandleEnergyLinkEnded()
 
 	if (!EndedLinkId.IsNone())
 	{
+		if (ABossGimmickStage* Stage = ABossGimmickStage::FindByLinkId(GetWorld(), EndedLinkId))
+		{
+			Stage->SetLinkActive(false);
+		}
 		NotifyPortals(EndedLinkId, false);
 	}
 }

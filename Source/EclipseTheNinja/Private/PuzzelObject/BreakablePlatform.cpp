@@ -12,6 +12,7 @@
 #include "NiagaraSystem.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
@@ -95,6 +96,22 @@ void ABreakablePlatform::BeginPlay()
 	}
 }
 
+void ABreakablePlatform::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (EndPlayReason == EEndPlayReason::RemovedFromWorld)
+	{
+		// 다시 표시할 때 끊긴 복구 타이머를 기다리지 않도록 초기 상태로 돌린다.
+		this->ResetToInitial_Implementation();
+		this->OverlapCount = 0;
+	}
+	else
+	{
+		GetWorldTimerManager().ClearAllTimersForObject(this);
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 // Called every frame
 void ABreakablePlatform::Tick(float DeltaTime)
 {
@@ -106,8 +123,8 @@ void ABreakablePlatform::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 
-	this->CollisionBox->OnComponentBeginOverlap.AddDynamic(this, &ABreakablePlatform::OnCollisionBeginOverlap);
-	this->CollisionBox->OnComponentEndOverlap.AddDynamic(this, &ABreakablePlatform::OnCollisionEndOverlap);
+	this->CollisionBox->OnComponentBeginOverlap.AddUniqueDynamic(this, &ABreakablePlatform::OnCollisionBeginOverlap);
+	this->CollisionBox->OnComponentEndOverlap.AddUniqueDynamic(this, &ABreakablePlatform::OnCollisionEndOverlap);
 }
 
 void ABreakablePlatform::OnCollisionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

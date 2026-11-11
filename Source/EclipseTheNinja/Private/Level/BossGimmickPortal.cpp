@@ -1,4 +1,5 @@
 #include "Level/BossGimmickPortal.h"
+#include "Level/BossGimmickStage.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Character/BossEnemy.h"
@@ -81,8 +82,36 @@ void ABossGimmickPortal::SetLinkActive(bool bActive)
 
 bool ABossGimmickPortal::IsPortalOpen() const
 {
-	// 기믹 스테이지 포탈은 레버를 당긴 뒤에도 돌아갈 수 있어야 하므로 항상 열려 있다.
-	return PortalSide == EBossGimmickPortalSide::GimmickStage || bLinkActive;
+	// 기믹 방에서는 링크를 해제한 뒤에도 돌아갈 수 있어야 한다.
+	if (PortalSide == EBossGimmickPortalSide::GimmickStage) return true;
+	if (!bLinkActive) return false;
+
+	if (const ABossGimmickStage* Stage = ABossGimmickStage::FindByLinkId(GetWorld(), LinkId))
+	{
+		return Stage->IsReadyForEntry();
+	}
+
+	return true;
+}
+
+void ABossGimmickPortal::RefreshBossStageEntry()
+{
+	RefreshPortalVisual();
+	if (!IsPortalOpen()) return;
+	if (GetWorldTimerManager().IsTimerActive(TeleportTimer)) return;
+	if (GetWorld()->GetTimeSeconds() < EntryBlockedUntil) return;
+
+	TArray<AActor*> Players;
+	Trigger->GetOverlappingActors(Players, APlayerCharacter::StaticClass());
+	for (AActor* Actor : Players)
+	{
+		APlayerCharacter* Player = CastChecked<APlayerCharacter>(Actor);
+		if (Player->IsPlayerControlled())
+		{
+			BeginTeleport(Player);
+			return;
+		}
+	}
 }
 
 FTransform ABossGimmickPortal::GetArrivalTransform() const
@@ -147,7 +176,7 @@ ABossGimmickPortal* ABossGimmickPortal::FindDestination() const
 {
 	for (TActorIterator<ABossGimmickPortal> It(GetWorld()); It; ++It)
 	{
-		if (*It != this && It->LinkId == LinkId && It->PortalSide != PortalSide)
+		if (*It != this && It->LinkId == LinkId && It->PortalSide != PortalSide && It->HasActorBegunPlay())
 		{
 			// 출구 전용 포탈은 보스 스테이지에서 들어갈 도착지가 아니다
 			if (It->bExitOnly)
@@ -214,6 +243,11 @@ void ABossGimmickPortal::FinishTeleport()
 
 	APlayerController* PC = Cast<APlayerController>(Player->GetController());
 
+	if (!IsPortalOpen())
+	{
+		Destination = nullptr;
+	}
+
 	if (IsValid(Destination))
 	{
 		// 도착한 포탈에 바로 다시 들어가지 않게 막는다.
@@ -272,10 +306,16 @@ void ABossGimmickPortal::HandleStageChange(ABossGimmickPortal* Destination)
 	}
 
 	const bool bEnteringGimmick = Destination->GetPortalSide() == EBossGimmickPortalSide::GimmickStage;
+	ABossGimmickPortal* RoomPortal = bEnteringGimmick ? Destination : this;
+	if (ABossGimmickStage* Stage = ABossGimmickStage::FindOwningStage(RoomPortal))
+	{
+		Stage->SetPlayerInside(bEnteringGimmick);
+	}
 
 	// 기믹 방에 있는 동안 링크 제한시간을 멈춘다. 기믹 방은 숙련자 기준 약 3분이라 60초 제한으로는 깰 수 없다
 	for (TActorIterator<ABossEnemy> It(World); It; ++It)
 	{
+		It->SetPlayerInGimmickStage(bEnteringGimmick);
 		It->SetEnergyLinkTimerPaused(bEnteringGimmick);
 	}
 
