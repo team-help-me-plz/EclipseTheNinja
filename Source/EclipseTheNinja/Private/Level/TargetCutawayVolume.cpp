@@ -31,10 +31,15 @@ void ATargetCutawayVolume::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 벽 붙기 트레이스(WallAttach)가 트리거 상자에 막히지 않게 한다. Trigger 프로필에는 WallAttach 채널이 없어 기본값 Block이 적용된다.
-	this->InteriorArea->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Ignore);
-	// 몬스터가 영역 안에 갇히지 않게 한다. Trigger 프로필에는 Monster 채널이 없어 기본값 Block이 적용된다.
-	this->InteriorArea->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+	// 벽 붙기 트레이스(WallAttach)가 트리거 상자에 막히지 않게 하고, 몬스터가 영역 안에 갇히지 않게 한다.
+	// Trigger 프로필에는 두 채널이 없어 기본값 Block이 적용된다.
+	// 레벨에서 상자를 더 붙인 경우(디테일 패널 복제 등)에도 막지 않도록 이 액터의 모든 충돌 컴포넌트에 적용한다.
+	TInlineComponentArray<UPrimitiveComponent*> Primitives(this);
+	for (UPrimitiveComponent* Primitive : Primitives)
+	{
+		Primitive->SetCollisionResponseToChannel(ECC_GameTraceChannel2, ECR_Ignore);
+		Primitive->SetCollisionResponseToChannel(ECC_Monster, ECR_Ignore);
+	}
 
 	// 미니맵: 들어가 본 적이 없으면 InteriorArea가 시야를 막는 마스크가 된다. 세이브에 남은 발견 여부를 먼저 읽는다
 	if (const UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this))
