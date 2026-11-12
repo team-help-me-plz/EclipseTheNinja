@@ -83,6 +83,10 @@ protected:
 	UFUNCTION()
 	void StartVictimSlide();
 
+	// 살아남은 피격자(보스)를 옆으로 옮긴 만큼 되돌려 원래 이동 평면에 세운다.
+	UFUNCTION()
+	void ReturnSlidVictim();
+
 	/** 피격자를 옆으로 옮기는 시간. 칼이나 손이 닿기 직전 이 시간 동안만 움직인다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.05", Units = "s"))
 	float VictimSlideTime = 0.3f;
@@ -220,6 +224,11 @@ protected:
 	float PendingVictimSideOffset = 0.0f;
 	float PendingVictimForwardOffset = 0.0f;
 	float PendingVictimSlideDuration = 0.0f;
+	// 피격자를 옮긴 양. 살아남으면 암살이 끝나기 전에 이만큼 되돌린다.
+	FVector VictimSlideDelta = FVector::ZeroVector;
+	FVector VictimSlideOrigin = FVector::ZeroVector;
+	// 옮긴 뒤 아직 원래 평면으로 완전히 돌아오지 않았으면 true. 종료 시 남은 만큼 되돌린다.
+	bool bVictimSlidePending = false;
 	bool bLedgeWalkLocked = false;
 	bool bSavedCanWalkOffLedges = true;
 

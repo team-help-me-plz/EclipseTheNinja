@@ -305,11 +305,47 @@ void UGAAssassinateBase::StartVictimSlide()
 
 	// 피격자는 암살자와 같은 방향을 보므로 피격자의 오른쪽·앞이 곧 암살자의 오른쪽·앞이다.
 	// 옆은 화면 깊이 방향(월드 Y축), 앞은 피격자가 바라보는 방향이다.
-	const FVector Target = Enemy->GetActorLocation()
-		+ Enemy->GetActorRightVector().GetSafeNormal2D() * PendingVictimSideOffset
+	VictimSlideDelta = Enemy->GetActorRightVector().GetSafeNormal2D() * PendingVictimSideOffset
 		+ Enemy->GetActorForwardVector().GetSafeNormal2D() * PendingVictimForwardOffset;
+	VictimSlideOrigin = Enemy->GetActorLocation();
+	bVictimSlidePending = true;
 
-	UAbilityTask_SlideActor* SlideTask = UAbilityTask_SlideActor::SlideActor(this, Enemy, Target, PendingVictimSlideDuration);
+	UAbilityTask_SlideActor* SlideTask = UAbilityTask_SlideActor::SlideActor(
+		this, Enemy, Enemy->GetActorLocation() + VictimSlideDelta, PendingVictimSlideDuration);
+	SlideTask->ReadyForActivation();
+
+	// 살아남는 피격자(보스)는 암살자 몽타주가 끝나기 직전에 원래 평면으로 되돌린다.
+	if (Enemy->IsDead()) return;
+	const APlayerCharacter* Player = Assassin.Get();
+	const UAnimInstance* AnimInstance = IsValid(Player) ? Player->GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInstance || !IsValid(ExecutionMontage)) return;
+
+	const float Remaining = ExecutionMontage->GetPlayLength() - AnimInstance->Montage_GetPosition(ExecutionMontage);
+	const float ReturnDelay = FMath::Max(PendingVictimSlideDuration, Remaining - VictimSlideTime - 0.05f);
+	UAbilityTask_WaitDelay* ReturnTask = UAbilityTask_WaitDelay::WaitDelay(this, ReturnDelay);
+	ReturnTask->OnFinish.AddDynamic(this, &UGAAssassinateBase::ReturnSlidVictim);
+	ReturnTask->ReadyForActivation();
+}
+
+void UGAAssassinateBase::ReturnSlidVictim()
+{
+	if (!bVictimSlidePending) return;
+
+	AEnemy* Enemy = Victim.Get();
+	if (!IsValid(Enemy) || Enemy->IsDead()) return;
+
+	// 옮긴 방향으로 남아 있는 거리만 되돌린다. 되돌리는 도중에 끊겨도 남은 만큼만 옮긴다.
+	const FVector SlideDirection = VictimSlideDelta.GetSafeNormal();
+	const float RemainingDistance = FVector::DotProduct(Enemy->GetActorLocation() - VictimSlideOrigin, SlideDirection);
+	const FVector Target = Enemy->GetActorLocation() - SlideDirection * RemainingDistance;
+	if (bEnding || !IsActive())
+	{
+		// 암살이 먼저 끝났으면 태스크를 쓸 수 없으므로 바로 옮긴다.
+		Enemy->SetActorLocation(Target, false, nullptr, ETeleportType::TeleportPhysics);
+		bVictimSlidePending = false;
+		return;
+	}
+	UAbilityTask_SlideActor* SlideTask = UAbilityTask_SlideActor::SlideActor(this, Enemy, Target, VictimSlideTime);
 	SlideTask->ReadyForActivation();
 }
 
@@ -873,6 +909,9 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 			// 살아남았으면 평소 오프셋으로 되돌린다. 죽었으면 리스폰 때 되돌린다.
 			Enemy->SetMeshYOffsetSuppressed(false);
 
+			// 중간에 끊겨 아직 원래 평면으로 돌아오지 않았으면 지금 되돌린다.
+			ReturnSlidVictim();
+
 			// 암살 피해 시점에는 IsReadyForAI()가 false라 감지 갱신이 건너뛰어진다.
 			// 예약을 푼 지금 암살자를 공격자로 알려 BT 재개 전에 전투 상태로 만든다.
 			UEnemyDetectionComponent* Detection = Enemy->GetEneymDetectionComponent();
@@ -889,6 +928,7 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	}
 
 	// 각종 변수 초기화
+	bVictimSlidePending = false;
 	bMovementLocked = false;
 	bTargetReserved = false;
 	Assassin.Reset();
