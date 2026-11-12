@@ -136,6 +136,9 @@ public:
 	// 체력이 낮으면 즉시 처치하고, 아니면 가장 가까운 아래쪽 에너지 링크 체력까지 깎는다.
 	virtual void ReceiveAssassination(UAnimMontage* Montage) override;
 
+	/** 암살 피해를 적용하는 중이면 true. 일반 피격 연출(피 튀김)을 건너뛰는 데 쓴다. */
+	bool IsApplyingAssassinationDamage() const { return bApplyingAssassinationDamage; }
+
 	/** 다음 암살이 어떤 방식인지 알린다. 살아남을 때 그 방식에 맞는 리액션 몽타주를 고른다. */
 	void SetIncomingAssassinationType(EAssassinationType Type) { IncomingAssassinationType = Type; }
 
