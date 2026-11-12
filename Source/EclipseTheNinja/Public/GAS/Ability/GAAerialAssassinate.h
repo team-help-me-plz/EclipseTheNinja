@@ -38,6 +38,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (Units = "cm"))
 	float VictimSideOffset = -23.0f;
 
+	/**
+	 * 피격자가 보스일 때 VictimSideOffset 대신 쓰는 거리(cm). 보스는 쓰러지는 자세가 일반 적과 달라서
+	 * 일반 적 값으로 옮기면 몸통이 칼날에서 벗어난다. 임팩트 순간 칼날과 보스 목·윗등이 겹치는 값이다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (Units = "cm"))
+	float BossVictimSideOffset = -15.0f;
+
 private:
 	// 암살을 위한 점프 시작
 	UFUNCTION()

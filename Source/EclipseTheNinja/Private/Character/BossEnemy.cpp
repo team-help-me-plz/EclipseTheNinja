@@ -4,6 +4,7 @@
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Character/PlayerCharacter.h"
+#include "Component/AssassinateTargetComponent.h"
 #include "Component/AssassinationDropComponent.h"
 #include "Component/BossEnemyGimmickComponent.h"
 #include "Component/BossEnemyVFXComponent.h"
@@ -64,6 +65,9 @@ ABossEnemy::ABossEnemy()
 
     // 기믹 실패 시 처형 연출. 피격자 몽타주는 보스 Blueprint에서 지정한다.
     ExecutionAbilityClass = UGABossExecution::StaticClass();
+
+    // 보스는 캡슐이 커서 일반 적 거리로 착지하면 겹쳐 밀려난다. 공중 암살은 캡슐 밖 뒤에서 찌른다.
+    AssassinateTargetComt->SetAerialLandOutsideCapsule(true);
 }
 
 void ABossEnemy::BeginPlay()
