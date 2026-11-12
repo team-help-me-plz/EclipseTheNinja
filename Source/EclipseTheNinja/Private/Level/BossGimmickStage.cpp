@@ -1,9 +1,11 @@
 #include "Level/BossGimmickStage.h"
 
 #include "AbilitySystemComponent.h"
+#include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
 #include "Checkpoint/Checkpoint.h"
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "Component/BossEnemyGimmickComponent.h"
 #include "Engine/Level.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -194,10 +196,19 @@ void ABossGimmickStage::HandleRespawned(ECheckpointId CheckpointId)
 	FTransform RespawnTransform;
 	if (!Checkpoints->GetCheckpointTransformById(CheckpointId, RespawnTransform)) return;
 
+	UBossEnemyGimmickComponent* Gimmick = UBossEnemyGimmickComponent::FindByLinkId(this, LinkId);
+	ABossEnemy* Boss = Gimmick ? Cast<ABossEnemy>(Gimmick->GetOwner()) : nullptr;
+
 	for (TActorIterator<ACheckpoint> It(GetWorld()); It; ++It)
 	{
 		if (It->GetCheckpointId() == CheckpointId && FindOwningStage(*It) == this)
 		{
+			// 방 안 체크포인트에서 부활하면 리셋된 보스도 다시 멈춘다.
+			if (Boss)
+			{
+				Boss->SetPlayerInGimmickStage(true);
+			}
+
 			if (!bLinkActive)
 			{
 				UpdateEnemies(false);
@@ -207,6 +218,10 @@ void ABossGimmickStage::HandleRespawned(ECheckpointId CheckpointId)
 	}
 
 	SetPlayerInside(false);
+	if (Boss)
+	{
+		Boss->SetPlayerInGimmickStage(false);
+	}
 }
 
 void ABossGimmickStage::UpdateEnemies(bool bEnableAI)

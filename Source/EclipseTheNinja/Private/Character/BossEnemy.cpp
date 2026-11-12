@@ -113,7 +113,7 @@ void ABossEnemy::HandleBossAwarenessChanged(float Gauge, EEnemyAlertLevel Level)
 {
     const bool bEnteredCombat = Level == EEnemyAlertLevel::Combat && !bInCombatAwareness;
     bInCombatAwareness = Level == EEnemyAlertLevel::Combat;
-    if (!bEnteredCombat || bIsDead || GetNetMode() == NM_DedicatedServer)
+    if (!bEnteredCombat || bIsDead || bPlayerInGimmickStage || GetNetMode() == NM_DedicatedServer)
     {
         return;
     }
@@ -155,11 +155,55 @@ void ABossEnemy::StartBattleMusic()
 
 void ABossEnemy::SetPlayerInGimmickStage(bool bInStage)
 {
-    if (bPlayerInGimmickStage != bInStage)
+    if (bPlayerInGimmickStage == bInStage) return;
+    bPlayerInGimmickStage = bInStage;
+
+    if (bInStage && !bIsDead)
     {
-        bPlayerInGimmickStage = bInStage;
-        StartBattleMusic();
+        // 링크 타이머와 실패 처형은 계속 동작하고, 일반 전투만 멈춘다.
+        bGimmickAISuspended = true;
+        LostTargetComp->InterruptLostTarget();
+        SuspendAIForScriptedMove();
+
+        if (ASC)
+        {
+            const FGameplayTagContainer AttackTags(EclipseGameplayTags::Ability_Attack);
+            ASC->CancelAbilities(&AttackTags);
+        }
+
+        ConsumeMovementInputVector();
+        GetCharacterMovement()->StopMovementImmediately();
+        bTurning = false;
     }
+    else
+    {
+        ResumeAIFromGimmickStage();
+    }
+
+    StartBattleMusic();
+}
+
+void ABossEnemy::SetCinematicLocked(bool bLocked)
+{
+    bCinematicLocked = bLocked;
+    if (!bLocked)
+    {
+        ResumeAIFromGimmickStage();
+    }
+}
+
+void ABossEnemy::ResumeAIFromGimmickStage()
+{
+    if (!bGimmickAISuspended) return;
+    if (bPlayerInGimmickStage) return;
+    if (bCinematicLocked) return;
+    if (bIsDead) return;
+
+    // 이전 수색 위치 대신 복귀한 플레이어를 기준으로 전투를 재개한다.
+    bGimmickAISuspended = false;
+    EnemyDetectComponent->ResetDetection();
+    EnemyDetectComponent->NotifyDamaged(UGameplayStatics::GetPlayerPawn(this, 0));
+    RestartAI();
 }
 
 void ABossEnemy::PlayGroggySound() const
@@ -633,6 +677,7 @@ void ABossEnemy::ResetToInitial_Implementation()
 {
     StopBattleMusic();
     bPlayerInGimmickStage = false;
+    bGimmickAISuspended = false;
     bInCombatAwareness = false;
     AssassinationReadyTime = 0.0;
     bAssassinationBlockedUntilRoar = false;
@@ -737,6 +782,7 @@ void ABossEnemy::MoveAlongX(float DestinationX, float Speed, float DeltaTime)
 
 bool ABossEnemy::CanStartAIAttack(AActor* Target) const
 {
+    if (bPlayerInGimmickStage) return false;
     if (PendingEnergyLinkIndex != INDEX_NONE) return false;
     // 패턴 사이 휴식 중에는 공격 분기로 넘어가지 않고 추격 분기에서 대상을 바라보며 거리를 맞춘다.
     if (IsRestingBetweenPatterns())
@@ -846,6 +892,7 @@ bool ABossEnemy::ActivateAIAttack()
 
 bool ABossEnemy::ActivatePatternAgainst(const FBossPatternRow& Row, APawn* Target)
 {
+    if (bPlayerInGimmickStage) return false;
     if (!IsValidAITarget(Target))
     {
         return false;
@@ -859,6 +906,7 @@ bool ABossEnemy::ActivatePatternAgainst(const FBossPatternRow& Row, APawn* Targe
 
 bool ABossEnemy::ActivatePatternAbility(const FBossPatternRow& Row)
 {
+    if (bPlayerInGimmickStage) return false;
     if (IsCinematicLocked()) return false;
     // BT 밖에서 요청한 패턴도 암살 접근·연출 중에는 시작하지 않는다.
     if (IsBeingAssassinated()) return false;
