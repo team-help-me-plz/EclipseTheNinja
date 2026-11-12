@@ -342,6 +342,12 @@ APawn* UEnemyDetectionComponent::FindSharedCombatTarget() const
 
 void UEnemyDetectionComponent::StartDetectionTimer()
 {
+    // 층 비활성화 중이면 리셋 등이 불러도 시작하지 않는다. 깨어날 때 SetDormant가 시작한다.
+    if (bDormant)
+    {
+        return;
+    }
+
     UWorld* World = GetWorld();
     if (!World) return;
 
@@ -635,16 +641,65 @@ void UEnemyDetectionComponent::CreatePresentationWidget()
     if (!PresentationWidget) return;
 
     PresentationWidget->InitializeDetection(this);
-	if (bShowAwarenessWidget)
-	{
-	    PresentationWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
-	}
-	else
-	{
-	    PresentationWidget->SetVisibility(ESlateVisibility::Collapsed);
-	}
+    ApplyPresentationVisibility();
     PresentationWidget->ForceVolatile(true);
     PresentationWidget->AddToViewport(5);
+}
+
+void UEnemyDetectionComponent::ApplyPresentationVisibility()
+{
+    if (!PresentationWidget)
+    {
+        return;
+    }
+
+    // Collapsed면 Slate가 틱·레이아웃·그리기를 모두 건너뛴다.
+    const bool bVisible = bShowAwarenessWidget && !bDormant;
+    PresentationWidget->SetVisibility(
+        bVisible
+            ? ESlateVisibility::HitTestInvisible
+            : ESlateVisibility::Collapsed
+    );
+}
+
+void UEnemyDetectionComponent::SetDormant(bool bInDormant)
+{
+    if (bDormant == bInDormant)
+    {
+        return;
+    }
+
+    bDormant = bInDormant;
+    ApplyPresentationVisibility();
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    // 잠들 때는 판정만 멈춘다. 소리 반응 타이머와 게이지·대상 값은 그대로 둔다.
+    if (bDormant)
+    {
+        World->GetTimerManager().ClearTimer(DetectionTimer);
+        return;
+    }
+
+    // 사망·풀 대기·EndPlay 중이면 각자의 복원 흐름(ResetDetection)이 판정을 시작한다.
+    // 다시 시작하면 경과 시간이 초기화되어 잠든 동안의 시간이 게이지에 반영되지 않는다.
+    const AEnemy* OwnerEnemy = Owner.Get();
+    if (OwnerEnemy && !OwnerEnemy->IsDead() && HasBegunPlay())
+    {
+        StartDetectionTimer();
+    }
+}
+
+bool UEnemyDetectionComponent::IsCalm() const
+{
+    return AlertLevel == EEnemyAlertLevel::Normal
+        && AlertGauge <= 0.0f
+        && !bIsNoise
+        && !CurrentTarget.IsValid();
 }
 
 void UEnemyDetectionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
