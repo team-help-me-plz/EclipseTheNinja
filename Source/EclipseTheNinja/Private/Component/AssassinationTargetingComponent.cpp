@@ -58,6 +58,17 @@ void UAssassinationTargetingComponent::TickComponent(float DeltaTime, ELevelTick
 	// ...
 }
 
+void UAssassinationTargetingComponent::SetTargetingEnabled(bool bEnabled)
+{
+	bTargetingEnabled = bEnabled;
+	if (!bEnabled && CurrentTarget)
+	{
+		CurrentTarget->SetTargetHighlighted(false);
+		CurrentTarget = nullptr;
+		CurrentTargetType = EAssassinationType::None;
+	}
+}
+
 void UAssassinationTargetingComponent::SelectCandidate()
 {
 	APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(GetOwner());
@@ -75,7 +86,7 @@ void UAssassinationTargetingComponent::SelectCandidate()
 	if (Movement->IsMovingOnGround() || bWallAttached) SearchType = EAssassinationType::Ground;
 
 	// 서 있는 상태가 아닌 경우
-	if (SearchType == EAssassinationType::None)
+	if (SearchType == EAssassinationType::None || !bTargetingEnabled)
 	{
 		if (CurrentTarget)
 		{

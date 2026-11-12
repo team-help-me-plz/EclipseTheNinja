@@ -37,6 +37,9 @@ public:
 	void AddTargetCandidate(UAssassinateTargetComponent* Enemy);
 	void RemoveTargetCandidate(UAssassinateTargetComponent* Enemy);
 
+	/** 끄면 암살 대상을 고르지 않고 지금 표시 중인 대상의 테두리를 지운다. 엔딩 컷신처럼 조작이 없는 동안 쓴다. */
+	void SetTargetingEnabled(bool bEnabled);
+
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
@@ -62,6 +65,8 @@ protected:
 	EAssassinationType CurrentTargetType = EAssassinationType::None;
 
 private:
+	bool bTargetingEnabled = true;
+
 	FTimerHandle  SearchCandidateTimer;
 
 

@@ -5,6 +5,8 @@
 #include "Engine/GameInstance.h"
 
 #include "Character/BossEnemy.h"
+#include "Component/AssassinationTargetingComponent.h"
+#include "Component/InteractBoxComponent.h"
 #include "Level/TutorialSequenceTrigger.h"
 #include "LevelSequence.h"
 #include "Components/BoxComponent.h"
@@ -135,6 +137,16 @@ void ALevelClearTrigger::ClearLevel()
         {
             PlayerPawn->DisableInput(PlayerController);
 
+            // 엔딩 동안 주변 물체의 상호작용 테두리·키 안내와 암살 대상 표시가 뜨지 않게 감지를 끈다.
+            // 감지 상자의 충돌을 끄면 겹쳐 있던 물체에 끝 겹침이 전달돼 이미 켜진 표시도 사라진다
+            if (UInteractBoxComponent* Interact = PlayerPawn->FindComponentByClass<UInteractBoxComponent>())
+            {
+                Interact->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            }
+            if (UAssassinationTargetingComponent* Targeting = PlayerPawn->FindComponentByClass<UAssassinationTargetingComponent>())
+            {
+                Targeting->SetTargetingEnabled(false);
+            }
         }
     }
 
