@@ -67,6 +67,9 @@ public:
     UFUNCTION(BlueprintPure, Category = "Tutorial")
     ULevelSequence* GetSequenceAsset() const;
 
+    // 시퀀스가 끝난 뒤 맵 이름을 띄우는 입장 시퀀스 트리거인지
+    bool ShowsMapNameOnEnd() const { return this->bShowMapNameOnEnd; }
+
     // 시퀀스가 끝나 조작을 돌려준 직후 호출된다
     UPROPERTY(BlueprintAssignable, Category = "Tutorial")
     FOnTutorialSequenceEnded OnSequenceEnded;
@@ -159,6 +162,11 @@ protected:
     // 인트로가 끝난 뒤 등록하고 활성화할 시작 체크포인트.
     UPROPERTY(EditInstanceOnly, Category = "Tutorial")
     TObjectPtr<ACheckpoint> CheckpointOnFinish = nullptr;
+
+    // 켜면 시퀀스가 끝나 화면 위젯을 되돌린 뒤 맵 이름 표시를 요청한다 (입장 시퀀스 트리거에서만 켠다)
+    // 레벨에 이 값이 켜진 트리거가 있으면 입장 즉시 띄우지 않고 이 시퀀스가 끝날 때까지 기다린다. 맵 이름은 레벨당 한 번만 뜬다
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial")
+    bool bShowMapNameOnEnd = false;
 
     // 켜면 한 번 재생한 뒤에는 다시 들어와도 재생하지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")

@@ -9,6 +9,7 @@
 #include "Component/AssassinateTargetComponent.h"
 #include "GAS/Ability/GACloneTech.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Subsystem/MapNameSubsystem.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -630,6 +631,11 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
     if (IsValid(this->CheckpointOnFinish))
     {
         this->CheckpointOnFinish->RegisterAfterSequence();
+    }
+
+    if (this->bShowMapNameOnEnd)
+    {
+        UMapNameSubsystem::ShowMapName(this);
     }
 
     this->OnSequenceEnded.Broadcast(this);
