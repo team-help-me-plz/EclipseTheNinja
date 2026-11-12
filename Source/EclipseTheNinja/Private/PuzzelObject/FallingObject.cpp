@@ -16,6 +16,8 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "Components/AudioComponent.h"
+#include "GameFramework/ForceFeedbackEffect.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
@@ -85,6 +87,15 @@ AFallingObject::AFallingObject()
 	if (LandSoundFinder.Succeeded())
 	{
 		this->LandSound = LandSoundFinder.Object;
+	}
+
+	// 착지 진동 기본값은 2단계. BP에서 바꿀 수 있다
+	static ConstructorHelpers::FObjectFinder<UForceFeedbackEffect> LandForceFeedbackFinder(
+		TEXT("/Game/Data/ForceFeedback/FFE_Level2.FFE_Level2"));
+
+	if (LandForceFeedbackFinder.Succeeded())
+	{
+		this->LandForceFeedback = LandForceFeedbackFinder.Object;
 	}
 }
 
@@ -376,6 +387,9 @@ void AFallingObject::ObjectLand()
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, this->LandSound, LandLocation);
 	}
+
+	this->PlayLandForceFeedback(LandLocation);
+
 	GetWorldTimerManager().SetTimer(
 		this->LandEffectTimer,
 		this,
@@ -392,6 +406,38 @@ void AFallingObject::ObjectLand()
 		State.Location = this->FallingBody->GetRelativeLocation();
 		Save->RecordActorState(this, State);
 	}
+}
+
+void AFallingObject::PlayLandForceFeedback(const FVector& InLandLocation) const
+{
+	if (!this->LandForceFeedback)
+	{
+		return;
+	}
+
+	APlayerController*	PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	const APawn*		PlayerPawn = PlayerController ? PlayerController->GetPawn() : nullptr;
+
+	if (!PlayerPawn)
+	{
+		return;
+	}
+
+	// 화면 밖 먼 곳에서 떨어진 물체에는 진동하지 않는다
+	const bool	bOutOfRange = this->LandForceFeedbackRadius > 0.f
+		&& FVector::DistSquared(PlayerPawn->GetActorLocation(), InLandLocation) > FMath::Square(this->LandForceFeedbackRadius);
+
+	if (bOutOfRange)
+	{
+		return;
+	}
+
+	FForceFeedbackParameters	Params;
+	Params.Tag = TEXT("FallingObjectLand");
+	PlayerController->ClientPlayForceFeedback(
+		this->LandForceFeedback,
+		Params
+	);
 }
 
 void AFallingObject::StopLandEffect()
