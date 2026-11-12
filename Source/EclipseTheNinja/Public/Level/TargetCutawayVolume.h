@@ -10,7 +10,7 @@ class UBoxComponent;
 class UStaticMeshComponent;
 
 /**
- * 지정한 액터를 숨기는 단면 볼륨. 플레이어가 InteriorArea에 들어와 있는 동안 TargetActors를 숨긴다.
+ * 지정한 액터를 숨기는 단면 볼륨. 플레이어나 분신(IInteractor)이 InteriorArea에 들어와 있는 동안 TargetActors를 숨긴다.
  *  - 숨기는 방식은 AHouseCutawayVolume과 같다 (HiddenInGame, 그림자 유지)
  *  - 대상 액터와 그 자식 액터(ChildActorComponent)의 정적 메시를 모두 숨긴다
  *  - MeshNameFilter를 채우면 메시 에셋 이름에 그 글자가 들어간 것만 숨긴다
@@ -43,7 +43,11 @@ protected:
 	// 숨긴 메시를 되돌린다
 	void CloseCutaway();
 
-	static bool IsPlayerPawn(const AActor* InActor);
+	// 단면을 여는 대상인지 (플레이어·분신 등 IInteractor 구현 액터)
+	static bool IsCutawayViewer(const AActor* InActor);
+
+	// 단면을 여는 대상이 아직 InteriorArea 안에 있는지
+	bool HasViewerInside() const;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
