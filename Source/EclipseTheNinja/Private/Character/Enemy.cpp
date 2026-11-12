@@ -39,6 +39,7 @@
 #include "Util/NiagaraWarmup.h"
 #include "Component/EnemySpacingComponent.h"
 #include "Component/MovementLoopSoundComponent.h"
+#include "Component/EnemyFloorActivationComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 // Sets default values
@@ -91,6 +92,9 @@ AEnemy::AEnemy()
 	NoiseDetectComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 	NoiseDetectComponent->SetCollisionResponseToChannel(ECC_Noise, ECR_Overlap);
 	NoiseDetectComponent->SetGenerateOverlapEvents(false);
+
+	// 먼 층에 있을 때 활동을 멈춘다. 소리 감지 구는 그대로 두어 멈춘 동안에도 소리를 듣고 깨어난다.
+	FloorActivationComp = CreateDefaultSubobject<UEnemyFloorActivationComponent>(TEXT("FloorActivationComp"));
 }
 
 void AEnemy::OnConstruction(const FTransform& Transform)
@@ -308,6 +312,9 @@ void AEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 
 void AEnemy::OnDamageReceived(const FGameplayEffectContextHandle& Context)
 {
+	// 먼 층에서 표창에 맞아도 바로 반응하도록 먼저 깨운다.
+	FloorActivationComp->WakeUp();
+
 	// 치명타는 OnHealthChanged에서 이미 사망 처리했으므로 감지/AI를 다시 켜지 않는다.
 	if (!IsReadyForAI() || !EnemyDetectComponent)
 	{
@@ -414,6 +421,9 @@ void AEnemy::Die()
 	{
 		return;
 	}
+
+	// 멈춘 상태로 죽으면 사망 몽타주가 재생되지 않는다. 살아 있는 동안 먼저 깨워 AI를 정상 재개한 뒤 아래에서 정지한다.
+	FloorActivationComp->WakeUp();
 
 	//사망 처리
 	bIsDead = true;
@@ -531,6 +541,9 @@ void AEnemy::ResetToInitial_Implementation()
 	// 트랜스폼은 CheckpointBound 컴포넌트가 이미 복원했다. 여기서는 자기 자신의 상태만 초기화한다.
 	GetWorldTimerManager().ClearTimer(DeathDeactivateTimer);
 
+	// 층 비활성화로 멈춘 것을 먼저 되돌리고 복원 위치를 층 기준으로 삼는다. 다시 잠들지는 다음 층 판정이 정한다.
+	FloorActivationComp->HandleOwnerReset();
+
 	// 진행 중인 공격 어빌리티 정리 (EndAbility가 몽타주 태스크와 태그를 정리)
 	ASC->CancelAllAbilities();
 
@@ -629,6 +642,9 @@ void AEnemy::OnReturnToPool_Implementation()
 
 	// 뷰포트에 붙은 발각 범위 UI는 액터 숨김으로 가려지지 않으므로 직접 제거
 	EnemyDetectComponent->StopDetection();
+
+	// 층 비활성화 기록을 비운다. 이어서 풀이 모든 틱을 끄고, 꺼낼 때 기본값으로 다시 켠다.
+	FloorActivationComp->HandleReturnToPool();
 }
 
 void AEnemy::RestartAI()
@@ -674,6 +690,9 @@ void AEnemy::RestartAI()
 
 void AEnemy::SuspendAIForScriptedMove()
 {
+	// 연출이 직접 움직이므로 층 비활성화로 멈춘 몸을 먼저 깨운다. 연출 중에는 BT가 정지 상태라 다시 잠들지 않는다.
+	FloorActivationComp->WakeUp();
+
 	// BT가 이동 입력을 넣지 않도록 먼저 멈춘다.
 	if (AAIController* AIController = Cast<AAIController>(GetController()))
 	{
@@ -1040,6 +1059,9 @@ void AEnemy::FaceLocation(const FVector& Location)
 
 void AEnemy::NotifyNoise(const FVector& InLocation, const float InRadius, const float InStrength)
 {
+	// 먼 층에서도 걸음·표창 소리는 듣는다. 깨운 뒤 소리를 전달해야 감지 타이머가 이어서 게이지를 올린다.
+	FloorActivationComp->WakeUp();
+
 	this->EnemyDetectComponent->NotifyNoise(InLocation, InRadius, InStrength);
 }
 
