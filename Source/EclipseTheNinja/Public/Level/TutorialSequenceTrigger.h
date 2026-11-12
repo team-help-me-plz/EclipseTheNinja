@@ -52,8 +52,9 @@ public:
 
     // 시퀀스의 절대 위치 트랜스폼(스포너블 카메라·연출 메시)을 Origin 기준으로 옮겨 재생하는 함수
     // 원점 근처에 만든 시퀀스를 처형·그로기처럼 매번 위치가 다른 곳에서 재생할 때 쓴다
+    // StartTime(초)을 주면 시퀀스를 그 위치부터 재생한다
     UFUNCTION(BlueprintCallable, Category = "Tutorial")
-    void PlaySequenceAt(APlayerController* PlayerController, const FTransform& Origin);
+    void PlaySequenceAt(APlayerController* PlayerController, const FTransform& Origin, float StartTime = 0.0f);
 
     // 지금 재생 중인지
     UFUNCTION(BlueprintPure, Category = "Tutorial")
@@ -271,6 +272,9 @@ private:
 
     // PlaySequenceAt이 원점을 직접 정한 재생이면 마커 원점을 덮어쓰지 않는다
     bool bOriginOverridden = false;
+
+    // 이번 재생을 시작할 시퀀스 위치(초). PlaySequenceAt이 정하고 재생을 시작하면 0으로 되돌린다
+    float PendingStartTime = 0.0f;
 
     // 입력을 막아 둔 폰과 컨트롤러. 시퀀스가 끝나면 되돌린다
     TWeakObjectPtr<APawn> BlockedPawn;
