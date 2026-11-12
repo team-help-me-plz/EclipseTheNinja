@@ -100,6 +100,12 @@ public:
 
 	void NotifyNoise(const FVector& InLocation, const float InRadius, const float InStrength);
 
+    /** 층 비활성화용. 켜면 감지 판정을 멈추고 발각 범위 위젯을 숨긴다. 끄면 살아 있을 때만 판정을 다시 시작한다. 게이지·대상 값은 유지한다. */
+    void SetDormant(bool bInDormant);
+
+    /** 일반 단계이고 게이지·소리 반응·대상이 모두 없는지. 층 비활성화로 잠들어도 되는지 판단할 때 쓴다. */
+    bool IsCalm() const;
+
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -172,6 +178,11 @@ private:
     void SyncPlayerEngagement();
     // 발각 범위 위젯 생성. 플레이어가 준비되지 않았을 때만 재시도한다.
     void CreatePresentationWidget();
+    // 설정(bShowAwarenessWidget)과 층 비활성화 상태에 맞춰 발각 범위 위젯을 보이거나 숨긴다.
+    void ApplyPresentationVisibility();
+
+    // 층 비활성화 중이면 감지 타이머를 시작하지 않는다.
+    bool bDormant = false;
 
     FTimerHandle DetectionTimer;
     FTimerHandle PresentationRetryTimer;
