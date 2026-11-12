@@ -22,6 +22,8 @@
 #include "TimerManager.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Level/EclipseWorldSettings.h"
 #include "Character/PlayerCharacterController.h"
 #include "Character/PlayerCharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -815,7 +817,37 @@ void APlayerCharacter::Die()
 		UE_LOG(LogTemp, Warning, TEXT("%s: Death montage was not set or could not be played."), *GetName());
 	}
 	// SetLifeSpan(0) cancels destruction, so keep a small positive minimum.
-	SetLifeSpan(FMath::Max(0.01f, MontageDuration));
+	const float DeathLifeSpan = FMath::Max(0.01f, MontageDuration);
+	SetLifeSpan(DeathLifeSpan);
+
+	// 이전 맵으로 돌아가 부활하는 맵이면 몽타주 끝 무렵 화면을 검게 덮는다. 같은 맵 부활은 기존처럼 화면을 그대로 둔다
+	if (AEclipseWorldSettings::ShouldReturnToPreviousStageOnDeath(this))
+	{
+		const float FadeDuration = FMath::Min(DeathFadeOutTime, DeathLifeSpan);
+		const float Delay = DeathLifeSpan - FadeDuration;
+		if (Delay > KINDA_SMALL_NUMBER)
+		{
+			GetWorldTimerManager().SetTimer(DeathFadeTimer,
+				FTimerDelegate::CreateUObject(this, &APlayerCharacter::StartDeathFadeOut, FadeDuration), Delay, false);
+		}
+		else
+		{
+			StartDeathFadeOut(FadeDuration);
+		}
+	}
+}
+
+void APlayerCharacter::StartDeathFadeOut(float Duration)
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	APlayerCameraManager* CameraManager = PC ? PC->PlayerCameraManager.Get() : nullptr;
+	if (!IsValid(CameraManager))
+	{
+		return;
+	}
+
+	// 처형 연출처럼 이미 어두워진 상태면 그 밝기에서 이어서 어둡게 한다
+	CameraManager->StartCameraFade(CameraManager->FadeAmount, 1.0f, Duration, FLinearColor::Black, false, true);
 }
 
 void APlayerCharacter::ReceiveAssassination(UAnimMontage* Montage)

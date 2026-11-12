@@ -457,6 +457,18 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
 	void Die();
 
+	/**
+	 * 죽으면 이전 맵으로 돌아가는 맵(AEclipseWorldSettings::bReturnToPreviousStageOnDeath, 보스 아레나)에서
+	 * 사망 몽타주가 끝나기 이 시간(초) 전부터 화면을 검게 덮는다. 이전 맵을 불러오는 동안 죽은 맵 화면이 보이지 않게 한다
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Death", meta = (ClampMin = "0.0", Units = "s"))
+	float DeathFadeOutTime = 0.5f;
+
+	// 사망 몽타주 끝 무렵 화면을 검게 덮기 시작한다
+	void StartDeathFadeOut(float Duration);
+
+	FTimerHandle DeathFadeTimer;
+
 	// ReceiveAssassination 안에서만 유효하다. Die가 사망 몽타주 대신 재생한다.
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> PendingAssassinationMontage;

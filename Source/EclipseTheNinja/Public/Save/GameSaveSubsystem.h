@@ -157,6 +157,9 @@ private:
 	// 이동 대기 중 이전 맵에서 받은 피해 등이 다음 스테이지의 저장값을 바꾸지 못하게 한다.
 	bool bStageTravel = false;
 
+	// 죽어서 이전 맵으로 돌아가는 중이면 true. 도착한 플레이어가 준비되면 검은 화면에서 밝히고 false로 바꾼다
+	bool bFadeInOnArrival = false;
+
 	// 진행 데이터가 없을 때(에디터에서 맵을 바로 실행) 쓰는, 이번 실행 동안 끝까지 본 컷신 기록
 	TSet<FName> SessionSeenSequences;
 

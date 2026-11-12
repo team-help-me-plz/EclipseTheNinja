@@ -431,6 +431,13 @@ void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
     // 보스 아레나처럼 사망 시 이전 맵으로 돌아가는 맵이면, 이전 맵의 마지막 체크포인트에서 부활한다
     if (AEclipseWorldSettings::ShouldReturnToPreviousStageOnDeath(this))
     {
+        // 이전 맵을 불러오는 동안 화면이 멈춰 죽은 맵이 보이지 않게, 맵을 열기 전 프레임을 완전히 검게 한다.
+        // 사망 몽타주 끝에서 이미 어두워지고 있다(APlayerCharacter::StartDeathFadeOut). 이 맵에서 부활하게 되면 FadeInAfterRespawn이 다시 밝힌다
+        if (IsValid(PlayerCameraManager))
+        {
+            PlayerCameraManager->SetManualCameraFade(1.0f, FLinearColor::Black, false);
+        }
+
         UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);
         if (Save && Save->ReturnToPreviousStage(this))
         {

@@ -1,6 +1,8 @@
 #include "Save/GameSaveSubsystem.h"
 
 #include "Character/PlayerCharacter.h"
+#include "Character/PlayerCharacterController.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "GAS/StatAttributeSet.h"
@@ -236,6 +238,20 @@ void UGameSaveSubsystem::PlayerReady(APlayerCharacter* Player)
 		&& MoveToArrival(Player, Progress->ArrivalCheckpoint, ArrivalTransform);
 	Progress->ArrivalCheckpoint = ECheckpointId::None;
 
+	// 죽어서 이전 맵으로 돌아왔으면 검은 화면에서 시작해 체크포인트 위치에서 서서히 밝힌다
+	if (bFadeInOnArrival)
+	{
+		bFadeInOnArrival = false;
+		if (APlayerCharacterController* PC = Cast<APlayerCharacterController>(Player->GetController()))
+		{
+			if (IsValid(PC->PlayerCameraManager))
+			{
+				PC->PlayerCameraManager->SetManualCameraFade(1.0f, FLinearColor::Black, false);
+			}
+			PC->FadeInAfterRespawn();
+		}
+	}
+
 	bApplyingRestore = false;
 	bPendingRestore = false;
 	bStageTravel = false;
@@ -424,6 +440,7 @@ bool UGameSaveSubsystem::ReturnToPreviousStage(const UObject* WorldContext)
 	CurrentPlayer.Reset();
 	bStageTravel = true;
 	bPendingRestore = true;
+	bFadeInOnArrival = true;
 	UGameplayStatics::OpenLevelBySoftObjectPtr(this, ReturnLevel);
 	return true;
 }
