@@ -43,7 +43,9 @@ ABossGimmickPortal::ABossGimmickPortal()
 	PortalVFX->SetRelativeScale3D(FVector(0.3f));
 	PortalVFX->SetAutoActivate(false);
 
-	// 포탈과 레이저 에셋은 Blueprint 기본값 또는 레벨 인스턴스에서 지정한다.
+	// 입구와 레버 사이에도 보스와 같은 링크 이펙트를 사용한다.
+	LaserSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
+		TEXT("/Game/VFX/LaserFX_BP/Niagara/NormalType/NS_Laser_Twist_2.NS_Laser_Twist_2")));
 }
 
 void ABossGimmickPortal::BeginPlay()
@@ -378,15 +380,12 @@ void ABossGimmickPortal::RefreshPortalVisual()
 
 void ABossGimmickPortal::RefreshStageLaser()
 {
-	const bool bShowLaser = bLinkActive
-		&& PortalSide == EBossGimmickPortalSide::GimmickStage
-		&& IsValid(StageLever);
-
-	if (!bShowLaser)
+	if (!bLinkActive || !bGenerateStageEnergyLink || bExitOnly
+		|| PortalSide != EBossGimmickPortalSide::GimmickStage || !IsValid(StageLever))
 	{
 		if (LaserComp)
 		{
-			LaserComp->Deactivate();
+			LaserComp->DeactivateImmediate();
 		}
 		return;
 	}
