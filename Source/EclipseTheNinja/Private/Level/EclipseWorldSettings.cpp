@@ -24,3 +24,11 @@ bool AEclipseWorldSettings::GetMapDisplayName(const UObject* WorldContextObject,
     OutMapName = Settings->MapDisplayName;
     return true;
 }
+
+bool AEclipseWorldSettings::ShouldReturnToPreviousStageOnDeath(const UObject* WorldContextObject)
+{
+    const UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+    const AEclipseWorldSettings* Settings = World ? Cast<AEclipseWorldSettings>(World->GetWorldSettings()) : nullptr;
+
+    return Settings && Settings->bReturnToPreviousStageOnDeath;
+}

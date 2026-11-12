@@ -360,6 +360,12 @@ bool UGameSaveSubsystem::SaveStageClear(TSoftObjectPtr<UWorld> NextLevel, bool b
 	Progress->bGameCompleted |= bFinalStage;
 	if (!bFinalStage && !NextLevel.IsNull())
 	{
+		// 다음 맵에서 죽으면 돌아올 수 있게, 떠나는 맵과 그 맵의 마지막 체크포인트를 남긴다
+		Progress->ReturnLevel = WithoutPIEPrefix(Progress->Level);
+		Progress->ReturnCheckpoint = Progress->Checkpoint;
+		Progress->ReturnRespawnTransform = Progress->RespawnTransform;
+		Progress->bHasReturnRespawnTransform = Progress->bHasRespawnTransform;
+
 		Progress->Level = WithoutPIEPrefix(NextLevel);
 		// 다음 맵은 체크포인트 없이 연다(시작 체크포인트 규칙을 따른다). 도착 지점은 PlayerReady에서 위치로만 쓴다
 		Progress->Checkpoint = ECheckpointId::None;
@@ -374,6 +380,52 @@ bool UGameSaveSubsystem::SaveStageClear(TSoftObjectPtr<UWorld> NextLevel, bool b
 	bPendingRestore = !bFinalStage && !NextLevel.IsNull();
 
 	return bSaved;
+}
+
+bool UGameSaveSubsystem::ReturnToPreviousStage(const UObject* WorldContext)
+{
+	// 에디터에서 맵을 바로 실행했거나 진행 맵이 아니면 이 맵에서 부활하게 둔다
+	if (!Progress || bStageTravel || !IsProgressLevel(WorldContext))
+	{
+		return false;
+	}
+
+	const TSoftObjectPtr<UWorld> ReturnLevel = Progress->ReturnLevel;
+	if (ReturnLevel.IsNull() || !FPackageName::DoesPackageExist(ReturnLevel.ToSoftObjectPath().GetLongPackageName()))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[GameSave] 돌아갈 이전 맵 기록이 없어 이 맵에서 부활합니다."));
+		return false;
+	}
+
+	if (UMinimapSubsystem* Minimap = UMinimapSubsystem::Get(WorldContext))
+	{
+		Minimap->FlushReveal();
+	}
+
+	// 이어하기와 같은 방식으로 이전 맵의 마지막 체크포인트·재시작 위치를 복원한다. 체력은 기본값(가득)으로 시작한다
+	Progress->Level = ReturnLevel;
+	Progress->Checkpoint = Progress->ReturnCheckpoint;
+	Progress->RespawnTransform = Progress->ReturnRespawnTransform;
+	Progress->bHasRespawnTransform = Progress->bHasReturnRespawnTransform;
+	Progress->ArrivalCheckpoint = ECheckpointId::None;
+	Progress->bHasHealth = false;
+
+	// 이전 맵에 도착하면 그 맵이 현재 맵이므로 복귀 기록을 비운다. 다시 출구를 지나면 새로 기록한다
+	Progress->ReturnLevel.Reset();
+	Progress->ReturnCheckpoint = ECheckpointId::None;
+	Progress->bHasReturnRespawnTransform = false;
+
+	WriteSave();
+
+	UE_LOG(LogTemp, Log, TEXT("[GameSave] 사망: 이전 맵 %s의 체크포인트 %s에서 부활합니다."),
+		*ReturnLevel.ToSoftObjectPath().GetLongPackageName(), *UEnum::GetValueAsString(Progress->Checkpoint));
+
+	// 맵을 여는 동안 죽은 플레이어의 값이 저장되지 않게 막고, 새 맵에서 플레이어가 준비되면 복원한다
+	CurrentPlayer.Reset();
+	bStageTravel = true;
+	bPendingRestore = true;
+	UGameplayStatics::OpenLevelBySoftObjectPtr(this, ReturnLevel);
+	return true;
 }
 
 bool UGameSaveSubsystem::UnlockAbility(EAbilityInputID Ability)
@@ -507,4 +559,32 @@ void UGameSaveSubsystem::RecordMinimapReveal(const UObject* WorldContext, int32 
 	FSavedLevelState& LevelState = Progress->LevelStates.FindOrAdd(GetProgressLevelKey());
 	LevelState.MinimapGridHash = GridHash;
 	LevelState.MinimapRevealed = Bits;
+}
+
+bool UGameSaveSubsystem::HasSeenSequence(FName SequenceKey) const
+{
+	if (SequenceKey.IsNone())
+	{
+		return false;
+	}
+	return Progress ? Progress->SeenSequences.Contains(SequenceKey) : SessionSeenSequences.Contains(SequenceKey);
+}
+
+void UGameSaveSubsystem::MarkSequenceSeen(FName SequenceKey)
+{
+	if (SequenceKey.IsNone())
+	{
+		return;
+	}
+	if (!Progress)
+	{
+		SessionSeenSequences.Add(SequenceKey);
+		return;
+	}
+	if (Progress->SeenSequences.Contains(SequenceKey))
+	{
+		return;
+	}
+	Progress->SeenSequences.Add(SequenceKey);
+	SaveProgress();
 }

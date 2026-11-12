@@ -17,6 +17,7 @@ class UActivateHighlightComponent;
 class UNiagaraComponent;
 class USoundBase;
 class UAudioComponent;
+class UForceFeedbackEffect;
 
 UCLASS()
 class ECLIPSETHENINJA_API AFallingObject : public AActor, public IActivatable, public ICheckpointResettable
@@ -67,6 +68,9 @@ protected:
 
 	void	StopLandEffect();
 
+	// 착지 지점 근처에 있는 플레이어의 게임패드를 진동시킨다
+	void	PlayLandForceFeedback(const FVector& InLandLocation) const;
+
 	// 발동 사운드를 DropSoundDuration에서 끊는다
 	void	StopDropSound();
 
@@ -111,6 +115,14 @@ protected:
 	// 떨어진 물체가 바닥에 부딪혔을 때 착지 지점에서 재생할 사운드. 비워 두면 재생하지 않는다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
 	TObjectPtr<USoundBase>	LandSound = nullptr;
+
+	// 떨어진 물체가 바닥에 부딪혔을 때 플레이어 게임패드에 줄 진동. 비워 두면 진동하지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|ForceFeedback")
+	TObjectPtr<UForceFeedbackEffect>	LandForceFeedback = nullptr;
+
+	// 착지 지점과 플레이어가 이 거리(cm) 안에 있을 때만 진동한다. 0이면 거리와 상관없이 진동한다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|ForceFeedback", meta = (ClampMin = "0"))
+	float	LandForceFeedbackRadius = 2000.f;
 
 	// 착지 이펙트를 재생할 시간. 루프 이펙트라서 이 시간이 지나면 새 파티클 생성을 멈춘다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Falling|Effect", meta = (ClampMin = "0.01"))
