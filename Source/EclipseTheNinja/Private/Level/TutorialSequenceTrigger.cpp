@@ -151,7 +151,7 @@ void ATutorialSequenceTrigger::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
-void ATutorialSequenceTrigger::PlaySequenceAt(APlayerController* PlayerController, const FTransform& Origin)
+void ATutorialSequenceTrigger::PlaySequenceAt(APlayerController* PlayerController, const FTransform& Origin, float StartTime)
 {
     if (!IsValid(this->SequenceActor))
     {
@@ -166,8 +166,10 @@ void ATutorialSequenceTrigger::PlaySequenceAt(APlayerController* PlayerControlle
     }
 
     this->bOriginOverridden = true;
+    this->PendingStartTime = FMath::Max(0.0f, StartTime);
     PlaySequence(PlayerController);
     this->bOriginOverridden = false;
+    this->PendingStartTime = 0.0f;
 }
 
 void ATutorialSequenceTrigger::SetSequenceAsset(ULevelSequence* InSequence)
@@ -272,7 +274,7 @@ void ATutorialSequenceTrigger::PlaySequence(APlayerController* PlayerController)
         // Pause At End로 끝 프레임에 멈추면 OnFinished 대신 OnPause가 온다
         SequencePlayer->OnPause.AddUniqueDynamic(this, &ATutorialSequenceTrigger::OnSequencePaused);
     }
-    SequencePlayer->SetPlaybackPosition(FMovieSceneSequencePlaybackParams(0.0f, EUpdatePositionMethod::Jump));
+    SequencePlayer->SetPlaybackPosition(FMovieSceneSequencePlaybackParams(this->PendingStartTime, EUpdatePositionMethod::Jump));
     SequencePlayer->SetPlayRate(1.0f);
     SequencePlayer->Play();
 
