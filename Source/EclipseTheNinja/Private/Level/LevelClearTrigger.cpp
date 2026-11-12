@@ -134,6 +134,7 @@ void ALevelClearTrigger::ClearLevel()
         if (APawn* PlayerPawn = PlayerController->GetPawn())
         {
             PlayerPawn->DisableInput(PlayerController);
+
         }
     }
 
@@ -143,38 +144,79 @@ void ALevelClearTrigger::ClearLevel()
     APawn* PlayerPawn = PlayerController ? PlayerController->GetPawn() : nullptr;
     if (IsValid(this->EndingSequence) && IsValid(PlayerPawn))
     {
+        // 시퀀스는 플레이어가 다가오는 쪽 시체 끝(바닥 높이)을 원점으로, 플레이어가 시체 왼쪽(-X)에서 걸어와
+        // 시체 앞에서 납도·집중한 뒤 연기와 함께 사라지는 기준이다. 시체는 시퀀스에서 원점의 +X쪽에 놓인다.
+        // 보스가 없으면 플레이어 발밑을 원점으로 쓴다
         FVector Origin = PlayerPawn->GetActorLocation();
         if (const UCapsuleComponent* Capsule = PlayerPawn->FindComponentByClass<UCapsuleComponent>())
         {
             Origin.Z -= Capsule->GetScaledCapsuleHalfHeight();
         }
+        if (IsValid(this->BossToDefeat))
+        {
+            Origin = this->BossToDefeat->GetActorLocation();
+            Origin.Z -= this->BossToDefeat->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+        }
 
-        // 시퀀스는 오른쪽(+X)의 보스 시체를 바라보며 납도한 뒤 왼쪽(-X)으로 뒤돌아 퇴장하는 기준이다.
-        // 컷신 시작 시점에 보스 시체가 플레이어보다 왼쪽(-X)에 있으면 좌우 대칭본을 재생해,
-        // 항상 보스 시체를 먼저 바라본 뒤 반대쪽으로 뒤돌아 퇴장하게 한다
+        float EndingStartTime = 0.0f;
         if (IsValid(this->EndingSequenceFacingLeft))
         {
             if (!IsValid(this->EndingSequenceFacingRight))
             {
                 this->EndingSequenceFacingRight = this->EndingSequence->GetSequenceAsset();
             }
-            bool bCorpseOnLeft = false;
+
+            // 플레이어는 시체에서 항상 같은 거리(EndingApproachDistance)부터 걸어오고, 벽이나 낭떠러지가 없는 쪽에서 온다.
+            // 양쪽 다 트여 있으면 지금 플레이어가 서 있는 쪽에서 오고, 한쪽만 트여 있으면 그쪽에서 온다
+            bool bApproachFromRight = false;
             if (IsValid(this->BossToDefeat))
             {
-                const float DeltaX = this->BossToDefeat->GetActorLocation().X - PlayerPawn->GetActorLocation().X;
-                bCorpseOnLeft = FMath::IsNearlyZero(DeltaX, 1.0f)
-                    ? (this->bHasDefeatFacing ? this->bDefeatFacingLeft : PlayerPawn->GetActorForwardVector().X < 0.0)
-                    : (DeltaX < 0.0f);
+                // 시체는 보스가 바라보던 방향의 뒤쪽으로 누워 있다. 원점을 플레이어가 다가오는 쪽 시체 끝으로 옮겨,
+                // 플레이어가 시체를 밟지 않고 그 끝에서 EndingStopDistance만큼 떨어져 서게 한다
+                const float BackSign = this->BossToDefeat->GetActorForwardVector().X >= 0.0f ? -1.0f : 1.0f;
+                const float CorpseMinX = FMath::Min(BackSign * this->EndingCorpseNearOffset, BackSign * this->EndingCorpseFarOffset);
+                const float CorpseMaxX = FMath::Max(BackSign * this->EndingCorpseNearOffset, BackSign * this->EndingCorpseFarOffset);
+                const FVector LeftOrigin = Origin + FVector(CorpseMinX, 0.0f, 0.0f);
+                const FVector RightOrigin = Origin + FVector(CorpseMaxX, 0.0f, 0.0f);
+
+                const float LeftClearance = GetEndingApproachClearance(PlayerPawn, LeftOrigin, FVector(-1.0f, 0.0f, 0.0f));
+                const float RightClearance = GetEndingApproachClearance(PlayerPawn, RightOrigin, FVector(1.0f, 0.0f, 0.0f));
+                const bool bLeftOpen = LeftClearance >= this->EndingApproachDistance;
+                const bool bRightOpen = RightClearance >= this->EndingApproachDistance;
+                if (bLeftOpen && bRightOpen)
+                {
+                    bApproachFromRight = PlayerPawn->GetActorLocation().X > Origin.X;
+                }
+                else if (bLeftOpen || bRightOpen)
+                {
+                    bApproachFromRight = bRightOpen;
+                }
+                else
+                {
+                    bApproachFromRight = RightClearance > LeftClearance;
+                }
+                Origin = bApproachFromRight ? RightOrigin : LeftOrigin;
+
+                // 양쪽 다 거리가 모자랄 때만 걷기 앞부분을 건너뛰어, 막힌 곳 안쪽에서 걷기 시작하게 한다
+                const float Clearance = bApproachFromRight ? RightClearance : LeftClearance;
+                const float WalkLength = this->EndingApproachDistance - this->EndingStopDistance;
+                if (WalkLength > KINDA_SMALL_NUMBER && Clearance < this->EndingApproachDistance)
+                {
+                    const float StartDistance = FMath::Clamp(Clearance, this->EndingStopDistance, this->EndingApproachDistance);
+                    EndingStartTime = (this->EndingApproachDistance - StartDistance) / WalkLength * this->EndingWalkDuration;
+                }
+                UE_LOG(LogTemp, Log, TEXT("[ALevelClearTrigger::ClearLevel()] 엔딩 걸어올 길 : 왼쪽 %.0f, 오른쪽 %.0f -> %s에서 걸어옴, %.2f초부터 재생"),
+                    LeftClearance, RightClearance, bApproachFromRight ? TEXT("오른쪽") : TEXT("왼쪽"), EndingStartTime);
             }
             else
             {
-                bCorpseOnLeft = this->bHasDefeatFacing ? this->bDefeatFacingLeft : PlayerPawn->GetActorForwardVector().X < 0.0;
+                bApproachFromRight = this->bHasDefeatFacing ? this->bDefeatFacingLeft : PlayerPawn->GetActorForwardVector().X < 0.0;
             }
-            this->EndingSequence->SetSequenceAsset(bCorpseOnLeft ? this->EndingSequenceFacingLeft.Get() : this->EndingSequenceFacingRight.Get());
+            this->EndingSequence->SetSequenceAsset(bApproachFromRight ? this->EndingSequenceFacingLeft.Get() : this->EndingSequenceFacingRight.Get());
         }
 
         this->EndingSequence->OnSequenceEnded.AddUniqueDynamic(this, &ALevelClearTrigger::OnEndingSequenceEnded);
-        this->EndingSequence->PlaySequenceAt(PlayerController, FTransform(Origin));
+        this->EndingSequence->PlaySequenceAt(PlayerController, FTransform(Origin), EndingStartTime);
         if (this->EndingSequence->IsPlaying())
         {
             return;
@@ -185,6 +227,48 @@ void ALevelClearTrigger::ClearLevel()
     }
 
     FinishClear();
+}
+
+float ALevelClearTrigger::GetEndingApproachClearance(const APawn* PlayerPawn, const FVector& Origin, const FVector& Direction) const
+{
+    const UCapsuleComponent* Capsule = PlayerPawn->FindComponentByClass<UCapsuleComponent>();
+    UWorld* World = GetWorld();
+    if (!Capsule || !World)
+    {
+        return this->EndingApproachDistance;
+    }
+
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(EndingApproach), false, PlayerPawn);
+    Params.AddIgnoredActor(this->BossToDefeat);
+    FCollisionResponseParams ResponseParams;
+    ResponseParams.CollisionResponse = Capsule->GetCollisionResponseToChannels();
+    const ECollisionChannel Channel = Capsule->GetCollisionObjectType();
+
+    // 시체 자리에서 걸어올 방향으로 플레이어 캡슐을 밀어 벽까지의 거리를 잰다. 바닥에 걸리지 않게 조금 띄운다
+    const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+    const FVector Start = Origin + FVector(0.0f, 0.0f, HalfHeight + 5.0f);
+    const FCollisionShape Shape = FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(), HalfHeight);
+    float Clearance = this->EndingApproachDistance;
+    FHitResult WallHit;
+    if (World->SweepSingleByChannel(WallHit, Start, Start + Direction * this->EndingApproachDistance, FQuat::Identity,
+        Channel, Shape, Params, ResponseParams))
+    {
+        Clearance = WallHit.bStartPenetrating ? 0.0f : WallHit.Distance;
+    }
+
+    // 걸어올 길에 바닥이 끊기는 곳(발판 가장자리)이 있으면 거기까지만 걸어올 수 있다
+    constexpr float FloorStep = 25.0f;
+    for (float Distance = FloorStep; Distance <= Clearance; Distance += FloorStep)
+    {
+        const FVector Probe = Origin + Direction * Distance;
+        FHitResult FloorHit;
+        if (!World->LineTraceSingleByChannel(FloorHit, Probe + FVector(0.0f, 0.0f, 20.0f), Probe - FVector(0.0f, 0.0f, 40.0f),
+            Channel, Params, ResponseParams))
+        {
+            return Distance - FloorStep;
+        }
+    }
+    return Clearance;
 }
 
 void ALevelClearTrigger::OnEndingSequenceEnded(ATutorialSequenceTrigger* Trigger)
