@@ -153,6 +153,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gimmick Portal|VFX")
 	TSoftObjectPtr<UNiagaraSystem> PortalSystem;
 
+	/** 링크가 활성화되면 이 입구에서 해제 레버까지 에너지 빔을 생성한다. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Gimmick Portal|VFX", meta = (EditCondition = "PortalSide == EBossGimmickPortalSide::GimmickStage && !bExitOnly", EditConditionHides))
+	bool bGenerateStageEnergyLink = true;
+
 	/** 스테이지 레버까지 잇는 레이저. 기본은 보스와 같은 NS_Laser_Twist_2. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gimmick Portal|VFX")
 	TSoftObjectPtr<UNiagaraSystem> LaserSystem;
