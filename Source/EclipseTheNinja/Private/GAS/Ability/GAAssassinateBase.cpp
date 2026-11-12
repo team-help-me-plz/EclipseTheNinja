@@ -57,9 +57,11 @@ void UGAAssassinateBase::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInf
 	if (HasAnyFlags(RF_ClassDefaultObject)) return;
 
 	// 시전할 때 쓰는 에셋을 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
-	AssetPreloader.Request({
+	TArray<FSoftObjectPath> Paths = {
 		AttackMontage.ToSoftObjectPath(), VictimMontage.ToSoftObjectPath(),
-		bUseImpactVFX ? ImpactVFX.ToSoftObjectPath() : FSoftObjectPath() });
+		bUseImpactVFX ? ImpactVFX.ToSoftObjectPath() : FSoftObjectPath() };
+	AddPreloadPaths(Paths);
+	AssetPreloader.Request(Paths);
 }
 
 void UGAAssassinateBase::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
@@ -154,7 +156,7 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	if (!IsValid(Enemy)) { OnInterrupted(); return; }
 
 	// 암살 모션과, 암살 피격 모션 동적으로 로딩
-	ExecutionMontage = AttackMontage.LoadSynchronous();
+	ExecutionMontage = ResolveAttackMontage(Enemy).LoadSynchronous();
 	VictimExecutionMontage = VictimMontage.LoadSynchronous();
 
 	// 임팩트 프레임에서 에셋을 읽느라 연출이 멈추지 않도록 미리 준비한다.
@@ -242,7 +244,7 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	Player->SetAssassinationFacing(ExecutionRotation.Yaw);
 
 	// 기본·상단 암살은 칼을 뽑는 프레임의 VFX 노티파이에서 사운드도 재생한다.
-	if (bUseImpactVFX || !IsA<UGABelowAssassinate>())
+	if (bUseImpactVFX || !IsBareHandedExecution())
 	{
 		UAbilityTask_WaitGameplayEvent* VFXTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 			this, TAG_AssassinateVFX, nullptr, true, true);
@@ -507,7 +509,7 @@ UAbilityTask_ApplyRootMotionMoveToForce* UGAAssassinateBase::MoveAlongAttackRoot
 
 void UGAAssassinateBase::OnVFXEvent(FGameplayEventData Payload)
 {
-	if (!bEnding && IsActive() && !IsA<UGABelowAssassinate>())
+	if (!bEnding && IsActive() && !IsBareHandedExecution())
 	{
 		if (const APlayerCharacter* Player = Assassin.Get())
 		{
@@ -546,7 +548,7 @@ void UGAAssassinateBase::WaitForImpact(float CurrentMontageTime)
 		return;
 	}
 
-	if (!IsA<UGABelowAssassinate>())
+	if (!IsBareHandedExecution())
 	{
 		constexpr float StabSoundLeadTime = 0.08f;
 		UAbilityTask_WaitDelay* StabSoundTask = UAbilityTask_WaitDelay::WaitDelay(
@@ -587,7 +589,7 @@ void UGAAssassinateBase::TriggerImpact()
 	if (!IsActive()) return;
 	bImpactTriggered = true;
 
-	if (IsA<UGABelowAssassinate>())
+	if (IsBareHandedExecution())
 	{
 		PlayBelowAssassinationSound();
 	}
