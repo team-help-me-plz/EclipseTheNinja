@@ -17,6 +17,7 @@ protected:
 	virtual bool CanAssassinateTarget(const APlayerCharacter* Player, const UAssassinateTargetComponent* Target,
 		const AEnemy* Enemy) const override;
 	virtual void StartApproach() override;
+	virtual EAssassinationType GetAssassinationType() const override { return EAssassinationType::Aerial; }
 
 	/** 켜면 몽타주 루트 모션으로 이동 시작(루트가 처음 움직이는 때)·착지 시점을 찾는다. 찾지 못하면 아래 값을 쓴다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination")
@@ -36,6 +37,13 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (Units = "cm"))
 	float VictimSideOffset = -23.0f;
+
+	/**
+	 * 피격자가 보스일 때 VictimSideOffset 대신 쓰는 거리(cm). 보스는 쓰러지는 자세가 일반 적과 달라서
+	 * 일반 적 값으로 옮기면 몸통이 칼날에서 벗어난다. 임팩트 순간 칼날과 보스 목·윗등이 겹치는 값이다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (Units = "cm"))
+	float BossVictimSideOffset = -15.0f;
 
 private:
 	// 암살을 위한 점프 시작

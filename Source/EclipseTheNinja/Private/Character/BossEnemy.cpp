@@ -4,6 +4,7 @@
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Character/PlayerCharacter.h"
+#include "Component/AssassinateTargetComponent.h"
 #include "Component/AssassinationDropComponent.h"
 #include "Component/BossEnemyGimmickComponent.h"
 #include "Component/BossEnemyVFXComponent.h"
@@ -64,6 +65,9 @@ ABossEnemy::ABossEnemy()
 
     // 기믹 실패 시 처형 연출. 피격자 몽타주는 보스 Blueprint에서 지정한다.
     ExecutionAbilityClass = UGABossExecution::StaticClass();
+
+    // 보스는 캡슐이 커서 일반 적 거리로 착지하면 겹쳐 밀려난다. 공중 암살은 캡슐 밖 뒤에서 찌른다.
+    AssassinateTargetComt->SetAerialLandOutsideCapsule(true);
 }
 
 void ABossEnemy::BeginPlay()
@@ -419,9 +423,10 @@ void ABossEnemy::TryActivatePendingEnergyLink()
 
     // 플레이어의 암살이 먼저 끝나도 보스의 반응 동작을 시퀀스로 끊지 않는다.
     const UAnimInstance* Animation = GetMesh()->GetAnimInstance();
-    if (IsValid(Animation) && IsValid(AssassinationReactionMontage))
+    if (IsValid(Animation))
     {
-        if (Animation->Montage_IsActive(AssassinationReactionMontage)) return;
+        if (IsValid(AssassinationReactionMontage) && Animation->Montage_IsActive(AssassinationReactionMontage)) return;
+        if (IsValid(AerialAssassinationReactionMontage) && Animation->Montage_IsActive(AerialAssassinationReactionMontage)) return;
     }
 
     const int32 LinkIndex = PendingEnergyLinkIndex;
@@ -631,6 +636,10 @@ void ABossEnemy::NotifyLostTargetRoarStarted()
 
 void ABossEnemy::ReceiveAssassination(UAnimMontage* Montage)
 {
+    // 이번 암살의 방식은 한 번만 쓴다. 다음 암살이 이전 방식을 물려받지 않게 먼저 비운다.
+    const EAssassinationType AssassinationType = IncomingAssassinationType;
+    IncomingAssassinationType = EAssassinationType::None;
+
     if (!CanBeAssassinated()) return;
     if (!IsValid(ASC)) return;
     if (!IsValid(StatAttributeSet)) return;
@@ -665,7 +674,12 @@ void ABossEnemy::ReceiveAssassination(UAnimMontage* Montage)
     }
 
     // 살아남는 체력이면 피해를 적용하고 암살 리액션을 재생한다. 경계 고정과 에너지 링크는 OnHealthChanged()에서 처리한다.
-    Super::ReceiveAssassination(AssassinationReactionMontage, Damage);
+    UAnimMontage* ReactionMontage = AssassinationReactionMontage;
+    if (AssassinationType == EAssassinationType::Aerial && IsValid(AerialAssassinationReactionMontage))
+    {
+        ReactionMontage = AerialAssassinationReactionMontage;
+    }
+    Super::ReceiveAssassination(ReactionMontage, Damage);
 }
 
 void ABossEnemy::ToggleActivate_Implementation()

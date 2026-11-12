@@ -5,6 +5,7 @@
 #include "Containers/Ticker.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GAS/Ability/AbilityAssetPreloader.h"
+#include "Component/AssassinationTargetingComponent.h"
 #include "GAAssassinateBase.generated.h"
 
 class APlayerCharacter;
@@ -51,6 +52,18 @@ protected:
 	virtual bool CanAssassinateTarget(const APlayerCharacter* Player, const UAssassinateTargetComponent* Target,
 		const AEnemy* Enemy) const PURE_VIRTUAL(UGAAssassinateBase::CanAssassinateTarget, return false;);
 
+	// 이 어빌리티의 암살 방식. 보스가 살아남을 때 방식에 맞는 리액션을 고르는 데 쓴다.
+	virtual EAssassinationType GetAssassinationType() const { return EAssassinationType::Ground; }
+
+	// 시전할 때 이 대상에게 쓸 암살자 몽타주를 정한다. 대상에 따라 다른 동작을 쓰는 암살이 바꾼다.
+	virtual const TSoftObjectPtr<UAnimMontage>& ResolveAttackMontage(const AEnemy* Enemy) { return AttackMontage; }
+
+	// 어빌리티를 받을 때 함께 미리 불러 둘 에셋을 더한다.
+	virtual void AddPreloadPaths(TArray<FSoftObjectPath>& OutPaths) const {}
+
+	// 목 꺾기처럼 칼을 쓰지 않는 암살이면 true. 칼 찌르기·뽑기 사운드 대신 목 꺾기 사운드를 쓴다.
+	virtual bool IsBareHandedExecution() const { return false; }
+
 	// 공통 준비가 끝난 뒤 실행 위치까지 접근한다. 도착하면 PlayExecution을 호출한다.
 	virtual void StartApproach() PURE_VIRTUAL(UGAAssassinateBase::StartApproach, );
 
@@ -78,6 +91,10 @@ protected:
 
 	UFUNCTION()
 	void StartVictimSlide();
+
+	// 살아남은 피격자(보스)를 옆으로 옮긴 만큼 되돌려 원래 이동 평면에 세운다.
+	UFUNCTION()
+	void ReturnSlidVictim();
 
 	/** 피격자를 옆으로 옮기는 시간. 칼이나 손이 닿기 직전 이 시간 동안만 움직인다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.05", Units = "s"))
@@ -216,6 +233,11 @@ protected:
 	float PendingVictimSideOffset = 0.0f;
 	float PendingVictimForwardOffset = 0.0f;
 	float PendingVictimSlideDuration = 0.0f;
+	// 피격자를 옮긴 양. 살아남으면 암살이 끝나기 전에 이만큼 되돌린다.
+	FVector VictimSlideDelta = FVector::ZeroVector;
+	FVector VictimSlideOrigin = FVector::ZeroVector;
+	// 옮긴 뒤 아직 원래 평면으로 완전히 돌아오지 않았으면 true. 종료 시 남은 만큼 되돌린다.
+	bool bVictimSlidePending = false;
 	bool bLedgeWalkLocked = false;
 	bool bSavedCanWalkOffLedges = true;
 

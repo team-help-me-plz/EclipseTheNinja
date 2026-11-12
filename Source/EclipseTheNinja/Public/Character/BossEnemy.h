@@ -5,6 +5,7 @@
 #include "Interface/Activatable.h"
 #include "GameplayAbilitySpecHandle.h"
 #include "Character/BossPatternRow.h"
+#include "Component/AssassinationTargetingComponent.h"
 #include "BossEnemy.generated.h"
 
 class UGameplayAbility;
@@ -135,6 +136,12 @@ public:
 
 	// 체력이 낮으면 즉시 처치하고, 아니면 가장 가까운 아래쪽 에너지 링크 체력까지 깎는다.
 	virtual void ReceiveAssassination(UAnimMontage* Montage) override;
+
+	/** 암살 피해를 적용하는 중이면 true. 일반 피격 연출(피 튀김)을 건너뛰는 데 쓴다. */
+	bool IsApplyingAssassinationDamage() const { return bApplyingAssassinationDamage; }
+
+	/** 다음 암살이 어떤 방식인지 알린다. 살아남을 때 그 방식에 맞는 리액션 몽타주를 고른다. */
+	void SetIncomingAssassinationType(EAssassinationType Type) { IncomingAssassinationType = Type; }
 
 	/** 대상을 놓쳐 포효를 시작하면 포효 방식의 재암살 제한을 해제한다. */
 	void NotifyLostTargetRoarStarted();
@@ -416,6 +423,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
 	TObjectPtr<UAnimMontage> AssassinationReactionMontage;
 
+	/** 공중 암살을 당하고 체력이 남아 있을 경우 재생하는 몽타주. 비우면 AssassinationReactionMontage를 쓴다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
+	TObjectPtr<UAnimMontage> AerialAssassinationReactionMontage;
+
 	/** 보스가 플레이어 등 뒤 몇 cm에 서서 처형할지. 두 캡슐이 겹치는 거리보다 가까워지지는 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution", meta = (ClampMin = "0.0", Units = "cm"))
 	float ExecutionBehindDistance = 150.0f;
@@ -500,6 +511,9 @@ protected:
 	int32 PendingEnergyLinkIndex = INDEX_NONE;
 	bool bClampingEnergyLinkHealth = false;
 	bool bReceivingAssassination = false;
+
+	// 다음 ReceiveAssassination이 고를 리액션 종류. 암살 어빌리티가 직전에 정하고, 적용하면 None으로 되돌린다.
+	EAssassinationType IncomingAssassinationType = EAssassinationType::None;
 
 	// 두 값을 함께 기록해 에디터에서 모드를 바꿔도 마지막 암살 이력을 유지한다.
 	double AssassinationReadyTime = 0.0;

@@ -260,6 +260,13 @@ void UBossEnemyVFXComponent::HandleEnergyLinkFailed()
 
 void UBossEnemyVFXComponent::HandleDamageReceived(const FGameplayEffectContextHandle& Context)
 {
+	// 암살 피해는 암살 연출의 임팩트 VFX가 맡으므로 일반 피격 피는 튀기지 않는다.
+	const ABossEnemy* Owner = Boss.Get();
+	if (Owner && Owner->IsApplyingAssassinationDamage())
+	{
+		return;
+	}
+
 	FVector Location;
 	FVector Direction;
 	GetHitPoint(Context, Location, Direction);
