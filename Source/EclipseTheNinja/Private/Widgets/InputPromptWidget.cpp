@@ -14,6 +14,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/Texture2D.h"
 #include "Subsystem/InputGlyphSubsystem.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
 
 void UInputPromptWidget::NativeConstruct()
 {
@@ -92,16 +93,40 @@ FKey UInputPromptWidget::ResolveActionKey(const UObject* WorldContext, APlayerCo
 	TArray<FKey> Keys;
 	APlayerController* PC = Controller;
 	if (!PC && WorldContext && WorldContext->GetWorld()) PC = UGameplayStatics::GetPlayerController(WorldContext, 0);
+	const UEnhancedInputLocalPlayerSubsystem* Subsystem = nullptr;
 	if (PC && PC->GetLocalPlayer())
 	{
-		if (const auto* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
-			Keys = Subsystem->QueryKeysMappedToAction(Action);
+		Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer());
+		if (Subsystem) Keys = Subsystem->QueryKeysMappedToAction(Action);
 	}
 	const bool bHasDeviceKey = Keys.ContainsByPredicate([bGamepad](const FKey& Key) { return Key.IsGamepadKey() == bGamepad; });
-	if (!bHasDeviceKey && MappingContext)
+	if (!bHasDeviceKey)
 	{
-		for (const FEnhancedActionKeyMapping& Mapping : MappingContext->GetMappings())
-			if (Mapping.Action == Action) Keys.AddUnique(Mapping.Key);
+		// 분신 조준·은신처럼 기본 IMC가 잠시 빠져 있으면 적용된 키가 없다.
+		// IMC 에셋의 기본 키 대신, 사용자 키 설정(Key Profile)에서 바꾼 키를 먼저 쓴다.
+		const UEnhancedInputUserSettings* Settings = Subsystem ? Subsystem->GetUserSettings() : nullptr;
+		const UEnhancedPlayerMappableKeyProfile* Profile = Settings ? Settings->GetActiveKeyProfile() : nullptr;
+		TArray<const UInputMappingContext*> Contexts;
+		if (MappingContext) Contexts.Add(MappingContext);
+		if (Settings)
+		{
+			TArray<const UInputMappingContext*> Registered;
+			for (const UInputMappingContext* Context : Settings->GetRegisteredInputMappingContexts()) Registered.Add(Context);
+			Registered.Sort([](const UInputMappingContext& A, const UInputMappingContext& B) { return A.GetPathName() < B.GetPathName(); });
+			for (const UInputMappingContext* Context : Registered) Contexts.AddUnique(Context);
+		}
+		for (const UInputMappingContext* Context : Contexts)
+		{
+			if (!Context) continue;
+			for (const FEnhancedActionKeyMapping& Mapping : Context->GetMappings())
+			{
+				if (Mapping.Action != Action) continue;
+				TArray<FKey> MappedKeys;
+				if (Profile) Profile->GetPlayerMappedKeysForRebuildControlMappings(Mapping, MappedKeys);
+				if (MappedKeys.IsEmpty()) MappedKeys.Add(Mapping.Key);
+				for (const FKey& Key : MappedKeys) Keys.AddUnique(Key);
+			}
+		}
 	}
 	// Keep an existing E/R/mouse caption when it is still one of the real bindings.
 	if (!bGamepad && !KeyboardFallback.IsEmpty())
