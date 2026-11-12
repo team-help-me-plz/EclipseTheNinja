@@ -6,6 +6,7 @@
 #include "Character/BossEnemy.h"
 #include "Character/BossPatternRow.h"
 #include "Component/EnemyDetectionComponent.h"
+#include "Components/AudioComponent.h"
 #include "Engine/DataTable.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -172,6 +173,24 @@ void UBossLostTargetComponent::StopLostTarget()
 	EndLostTarget(false);
 }
 
+void UBossLostTargetComponent::InterruptLostTarget()
+{
+	StopLostTarget();
+
+	if (UAudioComponent* Audio = RoarAudio.Get())
+	{
+		Audio->Stop();
+	}
+	RoarAudio.Reset();
+
+	const ABossEnemy* Owner = Boss.Get();
+	UAnimInstance* AnimInstance = Owner ? Owner->GetMesh()->GetAnimInstance() : nullptr;
+	if (RoarMontage && AnimInstance)
+	{
+		AnimInstance->Montage_Stop(0.0f, RoarMontage);
+	}
+}
+
 bool UBossLostTargetComponent::IsRoaring() const
 {
 	const ABossEnemy* Owner = Boss.Get();
@@ -196,7 +215,7 @@ void UBossLostTargetComponent::StartRoar()
 
 	if (RoarSound)
 	{
-		UGameplayStatics::SpawnSoundAttached(RoarSound, Owner->GetRootComponent());
+		RoarAudio = UGameplayStatics::SpawnSoundAttached(RoarSound, Owner->GetRootComponent());
 	}
 
 	UAnimInstance* AnimInstance = Owner->GetMesh()->GetAnimInstance();

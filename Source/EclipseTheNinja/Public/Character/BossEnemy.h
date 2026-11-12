@@ -47,11 +47,12 @@ public:
 	ABossEnemy();
 	void StartBattleMusic();
 	void SetPlayerInGimmickStage(bool bInStage);
+	bool IsPlayerInGimmickStage() const { return bPlayerInGimmickStage; }
 	void PlayGroggySound() const;
 	void PlayAssassinationImpactSound();
 
 	/** 컷신·그로기처럼 보스가 패턴을 쓰면 안 되는 동안 켠다. 켜져 있으면 패턴 어빌리티가 발동하지 않는다. */
-	void SetCinematicLocked(bool bLocked) { bCinematicLocked = bLocked; }
+	void SetCinematicLocked(bool bLocked);
 	bool IsCinematicLocked() const
 	{
 		if (PendingEnergyLinkIndex != INDEX_NONE) return true;
@@ -507,4 +508,7 @@ protected:
 	FTimerHandle EnergyLinkTimer;
 
 	bool bCinematicLocked = false;
+	bool bGimmickAISuspended = false;
+
+	void ResumeAIFromGimmickStage();
 };

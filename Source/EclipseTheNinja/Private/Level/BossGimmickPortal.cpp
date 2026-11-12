@@ -277,7 +277,7 @@ void ABossGimmickPortal::FinishTeleport()
 		}
 
 		// 카메라 보정(SmoothTeleport)은 쓰지 않는다. 먼 거리라 화면이 끌려가므로 어두운 동안 바로 따라붙게 둔다.
-		Player->SetActorLocationAndRotation(
+		const bool bTeleported = Player->SetActorLocationAndRotation(
 			Arrival.GetLocation(),
 			Arrival.GetRotation(),
 			false,
@@ -285,7 +285,11 @@ void ABossGimmickPortal::FinishTeleport()
 			ETeleportType::ResetPhysics
 		);
 
-		if (PC)
+		if (!bTeleported)
+		{
+			Destination = nullptr;
+		}
+		else if (PC)
 		{
 			PC->SetControlRotation(Arrival.Rotator());
 		}
@@ -330,9 +334,12 @@ void ABossGimmickPortal::HandleStageChange(ABossGimmickPortal* Destination)
 	}
 
 	// 링크 제한시간은 기믹 방에 있는 동안에도 계속 흐른다. 기믹 방 공략 시간은 보스의 EnergyLinkTimeLimit로 맞춘다.
-	for (TActorIterator<ABossEnemy> It(World); It; ++It)
+	if (UBossEnemyGimmickComponent* Gimmick = UBossEnemyGimmickComponent::FindByLinkId(this, LinkId))
 	{
-		It->SetPlayerInGimmickStage(bEnteringGimmick);
+		if (ABossEnemy* Boss = Cast<ABossEnemy>(Gimmick->GetOwner()))
+		{
+			Boss->SetPlayerInGimmickStage(bEnteringGimmick);
+		}
 	}
 
 	// 기믹 방 체크포인트는 그 방 안에서만 쓴다. 보스 스테이지로 돌아오면 들어가기 전 체크포인트로 되돌린다

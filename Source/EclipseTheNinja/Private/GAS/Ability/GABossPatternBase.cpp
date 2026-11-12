@@ -80,9 +80,10 @@ bool UGABossPatternBase::CanActivateAbility(
 
 	// 컷신·시퀀스가 나오는 동안(그로기 유지 시간 포함)에는 패턴을 시작하지 않는다.
 	// 비헤이비어 트리를 멈춰도 놓친 대상 난사(BossLostTargetComponent)처럼 트리 밖에서 부르는 경로가 있다.
-	if (const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy); Boss && Boss->IsCinematicLocked())
+	if (const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy))
 	{
-		return false;
+		if (Boss->IsPlayerInGimmickStage()) return false;
+		if (Boss->IsCinematicLocked()) return false;
 	}
 	if (IsAnyCinematicPlaying(Enemy->GetWorld()))
 	{
