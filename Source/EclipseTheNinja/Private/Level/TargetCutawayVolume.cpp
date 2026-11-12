@@ -2,6 +2,7 @@
 
 #include "Level/TargetCutawayVolume.h"
 #include "Character/PlayerCharacterCameraManager.h"
+#include "Interface/Interactor.h"
 #include "Minimap/MinimapSubsystem.h"
 #include "Save/GameSaveSubsystem.h"
 #include "Util/EclipseCollisionChannels.h"
@@ -69,17 +70,32 @@ void ATargetCutawayVolume::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-bool ATargetCutawayVolume::IsPlayerPawn(const AActor* InActor)
+bool ATargetCutawayVolume::IsCutawayViewer(const AActor* InActor)
 {
-	// 분신 등 AI 폰은 단면을 열지 않는다
-	const APawn* Pawn = Cast<APawn>(InActor);
-	return IsValid(Pawn) && Pawn->IsPlayerControlled();
+	// 플레이어와 분신(IInteractor)이 단면을 연다. 분신으로 건물 안을 미리 볼 수 있다.
+	// 빙의 여부(IsPlayerControlled)로 판정하면 리스폰 스폰 직후(빙의 전)의 첫 겹침과
+	// 사망 시(빙의 해제 후)의 겹침 종료를 놓치므로 인터페이스로 판정한다
+	return IsValid(InActor) && !InActor->IsActorBeingDestroyed() && InActor->Implements<UInteractor>();
+}
+
+bool ATargetCutawayVolume::HasViewerInside() const
+{
+	TArray<AActor*> OverlappingActors;
+	this->InteriorArea->GetOverlappingActors(OverlappingActors);
+	for (const AActor* Actor : OverlappingActors)
+	{
+		if (IsCutawayViewer(Actor))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 void ATargetCutawayVolume::OnInteriorBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (IsPlayerPawn(OtherActor))
+	if (IsCutawayViewer(OtherActor))
 	{
 		OpenCutaway();
 	}
@@ -87,8 +103,9 @@ void ATargetCutawayVolume::OnInteriorBeginOverlap(UPrimitiveComponent* Overlappe
 
 void ATargetCutawayVolume::OnInteriorEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	// 플레이어의 다른 컴포넌트가 아직 겹쳐 있으면 닫지 않는다
-	if (IsPlayerPawn(OtherActor) && !this->InteriorArea->IsOverlappingActor(OtherActor))
+	// 파괴 중인 액터도 나가는 것으로 처리해야 하므로 여기서는 인터페이스만 확인한다.
+	// 플레이어나 분신 중 하나라도(다른 컴포넌트 포함) 아직 안에 있으면 닫지 않는다
+	if (IsValid(OtherActor) && OtherActor->Implements<UInteractor>() && !HasViewerInside())
 	{
 		CloseCutaway();
 	}
