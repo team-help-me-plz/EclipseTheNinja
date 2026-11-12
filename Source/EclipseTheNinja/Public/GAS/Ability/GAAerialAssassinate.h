@@ -17,6 +17,7 @@ protected:
 	virtual bool CanAssassinateTarget(const APlayerCharacter* Player, const UAssassinateTargetComponent* Target,
 		const AEnemy* Enemy) const override;
 	virtual void StartApproach() override;
+	virtual EAssassinationType GetAssassinationType() const override { return EAssassinationType::Aerial; }
 
 	/** 켜면 몽타주 루트 모션으로 이동 시작(루트가 처음 움직이는 때)·착지 시점을 찾는다. 찾지 못하면 아래 값을 쓴다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination")

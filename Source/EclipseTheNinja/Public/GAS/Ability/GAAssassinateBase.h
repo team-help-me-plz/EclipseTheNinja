@@ -5,6 +5,7 @@
 #include "Containers/Ticker.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GAS/Ability/AbilityAssetPreloader.h"
+#include "Component/AssassinationTargetingComponent.h"
 #include "GAAssassinateBase.generated.h"
 
 class APlayerCharacter;
@@ -50,6 +51,9 @@ protected:
 	// 공통 조건을 통과한 대상에 대해 이 암살 방식으로 실행할 수 있는지 확인한다.
 	virtual bool CanAssassinateTarget(const APlayerCharacter* Player, const UAssassinateTargetComponent* Target,
 		const AEnemy* Enemy) const PURE_VIRTUAL(UGAAssassinateBase::CanAssassinateTarget, return false;);
+
+	// 이 어빌리티의 암살 방식. 보스가 살아남을 때 방식에 맞는 리액션을 고르는 데 쓴다.
+	virtual EAssassinationType GetAssassinationType() const { return EAssassinationType::Ground; }
 
 	// 공통 준비가 끝난 뒤 실행 위치까지 접근한다. 도착하면 PlayExecution을 호출한다.
 	virtual void StartApproach() PURE_VIRTUAL(UGAAssassinateBase::StartApproach, );

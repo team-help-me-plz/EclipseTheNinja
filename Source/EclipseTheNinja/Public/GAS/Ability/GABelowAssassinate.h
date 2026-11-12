@@ -21,6 +21,7 @@ protected:
 	virtual bool CanAssassinateTarget(const APlayerCharacter* Player, const UAssassinateTargetComponent* Target,
 		const AEnemy* Enemy) const override;
 	virtual void StartApproach() override;
+	virtual EAssassinationType GetAssassinationType() const override { return EAssassinationType::Below; }
 
 	/** 켜면 몽타주의 두 번째 구간이 시작하는 시점을 올라가기가 끝나는 시점으로 쓴다. 구간이 하나뿐이면 아래 값을 쓴다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination")

@@ -346,8 +346,12 @@ void UGAAssassinateBase::ExecuteVictim()
 	if (!IsValid(Enemy) || Enemy->IsDead()) { OnInterrupted(); return; }
 
 	// 암살 피격 애니메이션 수신
-	const ABossEnemy* Boss = Cast<ABossEnemy>(Enemy);
+	ABossEnemy* Boss = Cast<ABossEnemy>(Enemy);
 	const float PreviousBossHealthRatio = Boss ? Boss->GetHealthRatio() : 0.0f;
+	if (Boss)
+	{
+		Boss->SetIncomingAssassinationType(GetAssassinationType());
+	}
 	Enemy->ReceiveAssassination(VictimExecutionMontage);
 	bVictimExecuted = true;
 	bPlayBossImpactSound = IsValid(Boss) && Boss->GetHealthRatio() < PreviousBossHealthRatio;
