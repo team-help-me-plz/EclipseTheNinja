@@ -8,6 +8,7 @@
 #include "TutorialSequenceTrigger.generated.h"
 
 class UArrowComponent;
+class ACheckpoint;
 class UBoxComponent;
 class ALevelSequenceActor;
 class ULevelSequence;
@@ -152,6 +153,10 @@ protected:
     // 켜면 트리거 대신 레벨 시작 시 재생한다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
     bool bPlayOnBeginPlay = false;
+
+    // 인트로가 끝난 뒤 등록하고 활성화할 시작 체크포인트.
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial")
+    TObjectPtr<ACheckpoint> CheckpointOnFinish = nullptr;
 
     // 켜면 한 번 재생한 뒤에는 다시 들어와도 재생하지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")

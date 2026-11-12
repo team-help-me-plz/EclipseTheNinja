@@ -3,6 +3,7 @@
 #include "Level/TutorialSequenceTrigger.h"
 
 #include "Character/PlayerCharacter.h"
+#include "Checkpoint/Checkpoint.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Clone/CloneCharacter.h"
 #include "Component/AssassinateTargetComponent.h"
@@ -588,6 +589,11 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
     this->HiddenWidgets.Reset();
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::OnSequenceFinished()] %s : 시퀀스 종료, 조작 반환"), *GetActorNameOrLabel());
+
+    if (IsValid(this->CheckpointOnFinish))
+    {
+        this->CheckpointOnFinish->RegisterAfterSequence();
+    }
 
     this->OnSequenceEnded.Broadcast(this);
 }
