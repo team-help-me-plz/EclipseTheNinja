@@ -106,6 +106,8 @@ protected:
     // 재생 위치가 ActivateFrame에 도달했으면 ActivateTargets를 토글하고, 아니면 남은 시간만큼 다시 기다리는 함수
     // QTE로 멈춘 시간이 있어도 실제 재생 위치를 기준으로 맞춘다
     void CheckActivateFrame();
+    void CheckAssassinationStabSoundFrame();
+    void CheckAssassinationWithdrawalSoundFrame();
 
     // 화면에 떠 있는 UMG 위젯(체력바·스킬 아이콘 등)을 숨기고 원래 표시 상태를 기억하는 함수. 이미 숨긴 위젯은 건너뛴다
     void HideScreenWidgets();
@@ -184,6 +186,9 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE")
     TObjectPtr<UInputAction> QTEAction = nullptr;
 
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial|QTE")
+    bool bShowQTEInputGlyph = false;
+
     // QTE에 들어선 직후 잠깐 재생할 속도. 이 속도로 QTEFreezeDelay초 흐른 뒤 완전히 멈춰 입력을 기다린다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float QTESlowPlayRate = 0.15f;
@@ -217,6 +222,13 @@ protected:
     // Activate를 토글할 시퀀스 프레임(표시 프레임 기준). 0보다 작으면 쓰지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Activate")
     int32 ActivateFrame = -1;
+
+    // 암살 어빌리티와 같은 플레이어 사운드를 지정 프레임에서 재생한다.
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial|Assassination Sound")
+    int32 AssassinationStabSoundFrame = -1;
+
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial|Assassination Sound")
+    int32 AssassinationWithdrawalSoundFrame = -1;
 
     // ActivateFrame에 토글할 액터들. Activatable 인터페이스를 구현한 액터만 처리한다 (예: 문)
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Activate")
@@ -268,6 +280,8 @@ private:
     bool bWaitingForQTE = false;
 
     FTimerHandle ActivateTimer;
+    FTimerHandle AssassinationStabSoundTimer;
+    FTimerHandle AssassinationWithdrawalSoundTimer;
     // 이번 재생에서 토글한 액터. bRevertActivateOnFinish일 때 끝나면 다시 토글한다
     TArray<TWeakObjectPtr<AActor>> ActivatedActors;
 
