@@ -100,6 +100,10 @@ public:
 	void HandlePauseMenuBack();
 	bool IsPauseMenuKey(const FKey& Key) const;
 
+	// 컷신 건너뛰기처럼 ESC를 다른 용도로 쓰는 동안 일시정지 메뉴를 열지 않게 한다. 막은 횟수만큼 풀어야 다시 열린다
+	void PushPauseMenuBlock() { ++PauseMenuBlockCount; }
+	void PopPauseMenuBlock() { PauseMenuBlockCount = FMath::Max(0, PauseMenuBlockCount - 1); }
+
 protected:
 
 	/** Gameplay initialization */
@@ -142,6 +146,7 @@ private:
 	TObjectPtr<USettingsWidget> PauseSettingsWidget;
 
 	bool bShowCursorBeforePause = false;
+	int32 PauseMenuBlockCount = 0;
 	bool bUsingGamepad = false;
 	double IgnoreCursorWarpUntil = 0.0;
 	FVector2D LastObservedMousePosition = FVector2D::ZeroVector;

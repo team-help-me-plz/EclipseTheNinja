@@ -16,6 +16,8 @@
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "Character/PlayerCharacterCameraManager.h"
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "Level/EclipseWorldSettings.h"
+#include "Save/GameSaveSubsystem.h"
 #include "Components/InputComponent.h"
 #include "Widgets/PauseMenuWidget.h"
 #include "Widgets/SettingsWidget.h"
@@ -191,6 +193,7 @@ void APlayerCharacterController::OpenPauseMenu()
     if (!IsLocalPlayerController()) return;
     if (PauseMenuWidget) return;
     if (IsPaused()) return;
+    if (PauseMenuBlockCount > 0) return;
 
     UPauseMenuWidget* Menu = CreateWidget<UPauseMenuWidget>(this);
     if (!Menu) return;
@@ -424,6 +427,17 @@ void APlayerCharacterController::OnUnPossess()
 void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
 {
     if (!HasAuthority() || !IsValid(DestroyedActor) || GetWorld()->bIsTearingDown) return;
+
+    // 보스 아레나처럼 사망 시 이전 맵으로 돌아가는 맵이면, 이전 맵의 마지막 체크포인트에서 부활한다
+    if (AEclipseWorldSettings::ShouldReturnToPreviousStageOnDeath(this))
+    {
+        UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);
+        if (Save && Save->ReturnToPreviousStage(this))
+        {
+            return;
+        }
+    }
+
     // A missing Blueprint override should still respawn the same configured player.
     const TSubclassOf<ACharacter> RespawnClass = CharacterClass ? CharacterClass.Get() : DestroyedActor->GetClass();
 
