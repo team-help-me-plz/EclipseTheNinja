@@ -22,6 +22,9 @@
 #include "GAS/Damage/FireDamageType.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/ForceFeedbackEffect.h"
+#include "GameFramework/PlayerController.h"
+#include "UObject/ConstructorHelpers.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_BasicAttack, "Ability.Attack.Basic");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Attacking, "State.Attacking");
@@ -43,6 +46,15 @@ UGABaseAttack::UGABaseAttack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalOnly;
+
+	// 3타 적중 진동 기본값은 2단계. BP에서 바꿀 수 있다
+	static ConstructorHelpers::FObjectFinder<UForceFeedbackEffect> ComboFinisherFeedbackFinder(
+		TEXT("/Game/Data/ForceFeedback/FFE_Level2.FFE_Level2"));
+
+	if (ComboFinisherFeedbackFinder.Succeeded())
+	{
+		ComboFinisherHitForceFeedback = ComboFinisherFeedbackFinder.Object;
+	}
 
 	FGameplayTagContainer Tags;
 	Tags.AddTag(TAG_BasicAttack);
@@ -303,6 +315,9 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 	Character->GetWorld()->SweepMultiByObjectType(Hits, Start, End, FQuat::Identity,
 		ObjectParams, FCollisionShape::MakeSphere(Radius), QueryParams);
 
+	// 이번 판정에서 적에게 데미지를 넣었는지. 3타 적중 진동에 쓴다
+	bool bDamagedEnemy = false;
+
 	// 충돌체들을 순회하면서 확인
 	for (const FHitResult& Hit : Hits)
 	{
@@ -355,6 +370,7 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 			Spec.Data->SetSetByCallerMagnitude(FName(TEXT("Damage")), bIsFire ? FireInfo.HitDamage : Damage);
 			HitActors.Add(Target);
 			SourceASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+			bDamagedEnemy = true;
 
 			// [ElementalFire] 칼에 불이 있다면
 			if (bIsFire)
@@ -409,6 +425,36 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 			}
 		}
 	}
+
+	// 3타가 적에게 맞았을 때만 진동한다. 적이 쓰는 기본 공격은 PlayerCharacter가 아니라 제외된다
+	if (bDamagedEnemy && ComboIndex >= 3 && Cast<APlayerCharacter>(Character))
+	{
+		PlayComboFinisherHitForceFeedback(Character);
+	}
+}
+
+void UGABaseAttack::PlayComboFinisherHitForceFeedback(const ACharacter* InCharacter) const
+{
+	if (!ComboFinisherHitForceFeedback || !InCharacter)
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(InCharacter->GetController());
+
+	if (!PlayerController)
+	{
+		return;
+	}
+
+	// 타격 슬로우 모션이 있어도 진동 길이가 늘어나지 않게 한다
+	FForceFeedbackParameters Params;
+	Params.Tag = TEXT("ComboFinisherHit");
+	Params.bIgnoreTimeDilation = true;
+	PlayerController->ClientPlayForceFeedback(
+		ComboFinisherHitForceFeedback,
+		Params
+	);
 }
 
 void UGABaseAttack::OnComboInput(FGameplayEventData Payload)
