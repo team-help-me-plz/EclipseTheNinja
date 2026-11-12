@@ -3,13 +3,16 @@
 #include "Level/TutorialSequenceTrigger.h"
 
 #include "Character/PlayerCharacter.h"
+#include "Character/PlayerCharacterController.h"
 #include "Checkpoint/Checkpoint.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Clone/CloneCharacter.h"
 #include "Component/AssassinateTargetComponent.h"
 #include "GAS/Ability/GACloneTech.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
+#include "Save/GameSaveSubsystem.h"
 #include "Subsystem/MapNameSubsystem.h"
+#include "Widgets/SkipPromptWidget.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -25,9 +28,12 @@
 #include "Components/WidgetComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Engine/LocalPlayer.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "InputAction.h"
+#include "InputMappingContext.h"
 #include "Interface/Activatable.h"
 #include "Kismet/GameplayStatics.h"
 #include "DefaultLevelSequenceInstanceData.h"
@@ -35,6 +41,7 @@
 #include "LevelSequence.h"
 #include "LevelSequencePlayer.h"
 #include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
 
 ATutorialSequenceTrigger::ATutorialSequenceTrigger()
 {
@@ -62,6 +69,22 @@ ATutorialSequenceTrigger::ATutorialSequenceTrigger()
     this->SequenceOrigin->ArrowColor = FColor::Cyan;
     this->SequenceOrigin->ArrowSize = 2.0f;
     this->SequenceOrigin->SetHiddenInGame(true);
+
+    this->SkipPromptClass = USkipPromptWidget::StaticClass();
+
+    // 건너뛰기 입력 기본 에셋. 레벨에 놓인 인스턴스마다 바꿀 수 있다
+    static ConstructorHelpers::FObjectFinder<UInputAction> SkipActionFinder(
+        TEXT("/Game/Input/IA_SkipCinematic.IA_SkipCinematic"));
+    static ConstructorHelpers::FObjectFinder<UInputMappingContext> SkipContextFinder(
+        TEXT("/Game/Input/IMC_SkipCinematic.IMC_SkipCinematic"));
+    if (SkipActionFinder.Succeeded())
+    {
+        this->SkipAction = SkipActionFinder.Object;
+    }
+    if (SkipContextFinder.Succeeded())
+    {
+        this->SkipMappingContext = SkipContextFinder.Object;
+    }
 }
 
 void ATutorialSequenceTrigger::OnConstruction(const FTransform& Transform)
@@ -119,6 +142,13 @@ void ATutorialSequenceTrigger::BeginPlay()
     }
 
     this->SequenceTrigger->OnComponentBeginOverlap.AddDynamic(this, &ATutorialSequenceTrigger::OnTriggerBeginOverlap);
+}
+
+void ATutorialSequenceTrigger::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    // 재생 도중 맵을 떠나도 일시정지 메뉴 차단과 건너뛰기 IMC가 남지 않게 한다
+    EndSkipInput();
+    Super::EndPlay(EndPlayReason);
 }
 
 void ATutorialSequenceTrigger::PlaySequenceAt(APlayerController* PlayerController, const FTransform& Origin)
@@ -246,6 +276,9 @@ void ATutorialSequenceTrigger::PlaySequence(APlayerController* PlayerController)
     SequencePlayer->SetPlayRate(1.0f);
     SequencePlayer->Play();
 
+    this->bSkipped = false;
+    BeginSkipInput();
+
     if (this->StartFadeInDuration > 0.0f && IsValid(PlayerController) && IsValid(PlayerController->PlayerCameraManager))
     {
         PlayerController->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, this->StartFadeInDuration, FLinearColor::Black, false, false);
@@ -292,18 +325,16 @@ void ATutorialSequenceTrigger::BeginQTE()
 
     // 폰 입력은 막혀 있으므로 이 액터의 입력 컴포넌트를 컨트롤러 입력 스택에 올려 QTE 키만 받는다
     EnableInput(PlayerController);
-    UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(this->InputComponent);
-    if (!EnhancedInput)
+    if (!Cast<UEnhancedInputComponent>(this->InputComponent))
     {
         UE_LOG(LogTemp, Warning, TEXT("[ATutorialSequenceTrigger::BeginQTE()] %s : EnhancedInputComponent 없음, QTE 건너뜀"), *GetActorNameOrLabel());
-        DisableInput(PlayerController);
+        RefreshTriggerInput();
         return;
     }
-    EnhancedInput->ClearActionBindings();
-    EnhancedInput->BindAction(this->QTEAction, ETriggerEvent::Started, this, &ATutorialSequenceTrigger::OnQTEInput);
 
     // 시간이 느려지다 멈추는 느낌을 주고, 기다리는 동안 동작이 저절로 진행되지 않게 완전히 멈춘다
     this->bWaitingForQTE = true;
+    RefreshTriggerInput();
     if (this->QTEFreezeDelay > 0.0f)
     {
         SequencePlayer->SetPlayRate(this->QTESlowPlayRate);
@@ -389,7 +420,8 @@ void ATutorialSequenceTrigger::OnQTEInput()
 
     this->QTEPrompt->SetHiddenInGame(true);
     SetQTEOutlineVisible(false);
-    DisableInput(this->BlockedController.Get());
+    // 건너뛰기 입력은 남기고 QTE 바인딩만 뺀다
+    RefreshTriggerInput();
 
     ULevelSequencePlayer* SequencePlayer = IsValid(this->SequenceActor) ? this->SequenceActor->GetSequencePlayer() : nullptr;
     if (SequencePlayer)
@@ -557,6 +589,10 @@ void ATutorialSequenceTrigger::OnSequencePaused()
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::OnSequencePaused()] %s : 끝 프레임에서 멈춤, 마지막 컷 유지"), *GetActorNameOrLabel());
 
+    // 마지막 컷 위에 결과를 띄우는 동안 ESC는 다시 일시정지 메뉴가 받게 한다
+    EndSkipInput();
+    MarkSequenceSeen();
+
     this->OnSequenceEnded.Broadcast(this);
 }
 
@@ -566,7 +602,8 @@ void ATutorialSequenceTrigger::HideScreenWidgets()
     UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, TopLevelWidgets, UUserWidget::StaticClass(), true);
     for (UUserWidget* Widget : TopLevelWidgets)
     {
-        if (IsValid(Widget) && Widget->IsVisible() && Widget != this->QTEPrompt->GetUserWidgetObject() && !this->HiddenWidgets.Contains(Widget))
+        if (IsValid(Widget) && Widget->IsVisible() && Widget != this->QTEPrompt->GetUserWidgetObject() && Widget != this->SkipPrompt
+            && !this->HiddenWidgets.Contains(Widget))
         {
             this->HiddenWidgets.Add(Widget, Widget->GetVisibility());
             Widget->SetVisibility(ESlateVisibility::Hidden);
@@ -610,6 +647,10 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
         DisableInput(this->BlockedController.Get());
     }
 
+    // BlockedController를 비우기 전에 건너뛰기 입력을 정리한다
+    EndSkipInput();
+    MarkSequenceSeen();
+
     if (this->BlockedPawn.IsValid())
     {
         this->BlockedPawn->EnableInput(this->BlockedController.Get());
@@ -639,4 +680,228 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
     }
 
     this->OnSequenceEnded.Broadcast(this);
+}
+
+FName ATutorialSequenceTrigger::GetSeenSequenceKey() const
+{
+    const ULevelSequence* Sequence = GetSequenceAsset();
+    return Sequence ? Sequence->GetPackage()->GetFName() : NAME_None;
+}
+
+void ATutorialSequenceTrigger::MarkSequenceSeen() const
+{
+    if (!this->bAllowSkip)
+    {
+        return;
+    }
+    if (UGameSaveSubsystem* SaveSubsystem = UGameSaveSubsystem::Get(this))
+    {
+        SaveSubsystem->MarkSequenceSeen(GetSeenSequenceKey());
+    }
+}
+
+void ATutorialSequenceTrigger::BeginSkipInput()
+{
+    APlayerController* PlayerController = this->BlockedController.Get();
+    if (!this->bAllowSkip || this->bSkipEnabled || !IsValid(PlayerController))
+    {
+        return;
+    }
+    if (!IsValid(this->SkipAction) || !IsValid(this->SkipMappingContext))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[ATutorialSequenceTrigger::BeginSkipInput()] %s : SkipAction 또는 SkipMappingContext가 비어 있어 건너뛸 수 없습니다."), *GetActorNameOrLabel());
+        return;
+    }
+
+    // 처음 보는 컷신은 건너뛸 수 없다
+    const UGameSaveSubsystem* SaveSubsystem = UGameSaveSubsystem::Get(this);
+    if (!SaveSubsystem || !SaveSubsystem->HasSeenSequence(GetSeenSequenceKey()))
+    {
+        return;
+    }
+
+    ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer();
+    UEnhancedInputLocalPlayerSubsystem* InputSubsystem = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
+    if (!InputSubsystem)
+    {
+        return;
+    }
+
+    // 트리거가 없는 매핑은 키가 눌려 있는 동안 매 프레임 Triggered가 온다. 누른 시간은 FInputActionInstance가 잰다
+    // 게임플레이 IMC의 같은 키(IA_Pause)보다 먼저 처리되도록 높은 우선순위로 넣는다
+    InputSubsystem->AddMappingContext(this->SkipMappingContext, 1000);
+
+    // ESC는 일시정지 메뉴도 여는 키라서, 건너뛰기를 받는 동안에는 메뉴를 막는다
+    if (APlayerCharacterController* CharacterController = Cast<APlayerCharacterController>(PlayerController))
+    {
+        CharacterController->PushPauseMenuBlock();
+    }
+
+    this->bSkipEnabled = true;
+    RefreshTriggerInput();
+
+    UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::BeginSkipInput()] %s : 이미 본 시퀀스, 건너뛰기 허용"), *GetActorNameOrLabel());
+}
+
+void ATutorialSequenceTrigger::EndSkipInput()
+{
+    if (!this->bSkipEnabled)
+    {
+        return;
+    }
+    this->bSkipEnabled = false;
+
+    if (IsValid(this->SkipPrompt))
+    {
+        this->SkipPrompt->RemoveFromParent();
+    }
+    this->SkipPrompt = nullptr;
+
+    APlayerController* PlayerController = this->BlockedController.Get();
+    if (!IsValid(PlayerController))
+    {
+        return;
+    }
+
+    if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+    {
+        if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+        {
+            InputSubsystem->RemoveMappingContext(this->SkipMappingContext);
+        }
+    }
+
+    if (APlayerCharacterController* CharacterController = Cast<APlayerCharacterController>(PlayerController))
+    {
+        CharacterController->PopPauseMenuBlock();
+    }
+
+    RefreshTriggerInput();
+}
+
+void ATutorialSequenceTrigger::RefreshTriggerInput()
+{
+    APlayerController* PlayerController = this->BlockedController.Get();
+    if (!IsValid(PlayerController))
+    {
+        return;
+    }
+
+    const bool bNeedQTE = this->bWaitingForQTE && IsValid(this->QTEAction);
+    const bool bNeedSkip = this->bSkipEnabled && IsValid(this->SkipAction);
+    if (!bNeedQTE && !bNeedSkip)
+    {
+        DisableInput(PlayerController);
+        return;
+    }
+
+    // 폰 입력은 막혀 있으므로 이 액터의 입력 컴포넌트를 컨트롤러 입력 스택에 올려 필요한 키만 받는다
+    EnableInput(PlayerController);
+    UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(this->InputComponent);
+    if (!EnhancedInput)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[ATutorialSequenceTrigger::RefreshTriggerInput()] %s : EnhancedInputComponent 없음"), *GetActorNameOrLabel());
+        DisableInput(PlayerController);
+        return;
+    }
+
+    // 입력 처리 중에 불려도 엔진이 실행할 바인딩을 복사해 두므로 여기서 지워도 안전하다
+    EnhancedInput->ClearActionBindings();
+    if (bNeedQTE)
+    {
+        EnhancedInput->BindAction(this->QTEAction, ETriggerEvent::Started, this, &ATutorialSequenceTrigger::OnQTEInput);
+    }
+    if (bNeedSkip)
+    {
+        EnhancedInput->BindAction(this->SkipAction, ETriggerEvent::Triggered, this, &ATutorialSequenceTrigger::OnSkipHeld);
+        EnhancedInput->BindAction(this->SkipAction, ETriggerEvent::Completed, this, &ATutorialSequenceTrigger::OnSkipReleased);
+        EnhancedInput->BindAction(this->SkipAction, ETriggerEvent::Canceled, this, &ATutorialSequenceTrigger::OnSkipReleased);
+    }
+}
+
+void ATutorialSequenceTrigger::OnSkipHeld(const FInputActionInstance& Instance)
+{
+    if (!this->bSkipEnabled || this->bSkipped)
+    {
+        return;
+    }
+
+    const float Ratio = Instance.GetElapsedTime() / FMath::Max(this->SkipHoldTime, KINDA_SMALL_NUMBER);
+
+    if (!IsValid(this->SkipPrompt) && this->SkipPromptClass)
+    {
+        APlayerController* PlayerController = this->BlockedController.Get();
+        this->SkipPrompt = PlayerController ? CreateWidget<USkipPromptWidget>(PlayerController, this->SkipPromptClass) : nullptr;
+        if (IsValid(this->SkipPrompt) && this->SkipPrompt->AddToPlayerScreen(50))
+        {
+            // 화면 우측 상단 모서리에 붙인다
+            const FVector2D Margin = this->SkipPrompt->GetScreenMargin();
+            this->SkipPrompt->SetAnchorsInViewport(FAnchors(1.0f, 0.0f));
+            this->SkipPrompt->SetAlignmentInViewport(FVector2D(1.0f, 0.0f));
+            this->SkipPrompt->SetPositionInViewport(FVector2D(-Margin.X, Margin.Y), false);
+            this->SkipPrompt->SetDesiredSizeInViewport(this->SkipPrompt->GetBoxSize());
+        }
+    }
+
+    if (IsValid(this->SkipPrompt))
+    {
+        this->SkipPrompt->SetVisibility(ESlateVisibility::HitTestInvisible);
+        this->SkipPrompt->SetProgress(Ratio);
+    }
+
+    if (Ratio >= 1.0f)
+    {
+        SkipSequence();
+    }
+}
+
+void ATutorialSequenceTrigger::OnSkipReleased()
+{
+    if (IsValid(this->SkipPrompt))
+    {
+        this->SkipPrompt->SetProgress(0.0f);
+        this->SkipPrompt->SetVisibility(ESlateVisibility::Collapsed);
+    }
+}
+
+void ATutorialSequenceTrigger::SkipSequence()
+{
+    ULevelSequencePlayer* SequencePlayer = IsValid(this->SequenceActor) ? this->SequenceActor->GetSequencePlayer() : nullptr;
+    if (this->bSkipped || !SequencePlayer)
+    {
+        return;
+    }
+    this->bSkipped = true;
+
+    APlayerController* PlayerController = this->BlockedController.Get();
+
+    // QTE를 기다리던 중이면 안내와 테두리를 치운다. 끝 프레임으로 넘어가므로 QTE는 더 이상 오지 않는다
+    GetWorldTimerManager().ClearTimer(this->QTETimer);
+    GetWorldTimerManager().ClearTimer(this->QTEFreezeTimer);
+    if (this->bWaitingForQTE)
+    {
+        this->bWaitingForQTE = false;
+        this->QTEPrompt->SetHiddenInGame(true);
+        SetQTEOutlineVisible(false);
+    }
+
+    // 나머지 정리는 OnSequenceFinished가 맡는다. 여기서는 건너뛰기 입력과 안내만 먼저 끈다
+    EndSkipInput();
+
+    // 마지막 프레임으로 바로 넘어간 뒤 재생을 이어 가면 다음 업데이트에 끝에 닿아,
+    // 정상 종료와 같은 OnFinished(또는 Pause At End의 OnPause) 경로로 끝난다
+    const FFrameNumber LastFrame = SequencePlayer->GetEndTime().Time.FrameNumber - 1;
+    SequencePlayer->SetPlayRate(1.0f);
+    SequencePlayer->SetPlaybackPosition(FMovieSceneSequencePlaybackParams(FFrameTime(LastFrame), EUpdatePositionMethod::Jump));
+    if (!SequencePlayer->IsPlaying())
+    {
+        SequencePlayer->Play();
+    }
+
+    if (this->SkipFadeInDuration > 0.0f && IsValid(PlayerController) && IsValid(PlayerController->PlayerCameraManager))
+    {
+        PlayerController->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, this->SkipFadeInDuration, FLinearColor::Black, false, false);
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::SkipSequence()] %s : 시퀀스 건너뜀"), *GetActorNameOrLabel());
 }

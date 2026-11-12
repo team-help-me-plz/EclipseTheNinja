@@ -94,6 +94,22 @@ public:
 	UPROPERTY(SaveGame)
 	ECheckpointId ArrivalCheckpoint = ECheckpointId::None;
 
+	/**
+	 * 지금 맵으로 넘어오기 직전 맵과, 떠날 때 그 맵에서 마지막으로 켠 체크포인트·재시작 위치.
+	 * 스테이지를 넘어갈 때 기록하고, 사망 시 이전 맵으로 돌아가는 맵(AEclipseWorldSettings::bReturnToPreviousStageOnDeath)에서 쓴다.
+	 */
+	UPROPERTY(SaveGame)
+	TSoftObjectPtr<UWorld> ReturnLevel;
+
+	UPROPERTY(SaveGame)
+	ECheckpointId ReturnCheckpoint = ECheckpointId::None;
+
+	UPROPERTY(SaveGame)
+	FTransform ReturnRespawnTransform;
+
+	UPROPERTY(SaveGame)
+	bool bHasReturnRespawnTransform = false;
+
 	/** 마지막으로 저장한 살아 있는 플레이어의 현재 체력. */
 	UPROPERTY(SaveGame)
 	float Health = 0.f;
@@ -117,4 +133,8 @@ public:
 	/** 맵별 퍼즐 액터 상태. 키는 맵 패키지 이름. 다음 맵으로 넘어가도 지우지 않아 이전 맵에 다시 들어가면 그대로 복원한다. */
 	UPROPERTY(SaveGame)
 	TMap<FName, FSavedLevelState> LevelStates;
+
+	/** 끝까지 본 컷신 시퀀스 에셋의 패키지 이름. 다시 재생할 때는 길게 눌러 건너뛸 수 있다. */
+	UPROPERTY(SaveGame)
+	TArray<FName> SeenSequences;
 };

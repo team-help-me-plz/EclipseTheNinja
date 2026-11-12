@@ -32,4 +32,16 @@ public:
      */
     UFUNCTION(BlueprintPure, Category = "Map Name", meta = (WorldContext = "WorldContextObject"))
     static bool GetMapDisplayName(const UObject* WorldContextObject, FText& OutMapName);
+
+    /**
+     * 켜면 이 맵에서 플레이어가 죽었을 때 이 맵에서 부활하지 않고, 이 맵으로 넘어오기 직전 맵을 다시 열어
+     * 그 맵에서 마지막으로 켠 체크포인트에서 부활한다(예: 보스 아레나에서 죽으면 성 안의 마지막 체크포인트).
+     * 이전 맵 기록이 없으면(에디터에서 이 맵을 바로 실행) 원래대로 이 맵에서 부활한다.
+     * 이 맵에 레벨 인스턴스로 들어간 기믹 방도 이 맵의 설정을 따른다.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Respawn")
+    bool bReturnToPreviousStageOnDeath = false;
+
+    /** 현재 월드가 사망 시 이전 맵으로 돌아가는 맵인지 확인한다. */
+    static bool ShouldReturnToPreviousStageOnDeath(const UObject* WorldContextObject);
 };

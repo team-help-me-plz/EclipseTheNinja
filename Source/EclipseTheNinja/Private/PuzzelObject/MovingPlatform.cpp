@@ -72,13 +72,31 @@ void AMovingPlatform::PlatformMovement(float DeltaTime)
     // 막힌 이동을 적용하지 않고 기존 경로 위치에서 반대 방향으로 이어 간다.
     const float PreviousProgress = RouteProgress;
     const bool bPreviousForward = bIsMoveForward;
+    const float PreviousWait = WaitRemaining;
     const float	Step = DeltaTime / this->TargetPointTravelTime;
     if (this->bIsMovementUse)
     {
+        // 도착 대기 중이면 남은 시간만 줄이고 제자리에 머문다
+        if (this->WaitRemaining > 0.f)
+        {
+            this->WaitRemaining -= DeltaTime;
+            return;
+        }
         float	Phase = this->bIsMoveForward
             ? this->RouteProgress
             : this->CycleLength - this->RouteProgress;
-        Phase = FMath::Fmod(Phase + Step, CycleLength);
+        float	NextPhase = Phase + Step;
+        // 왕복 주기에서 정수 위상은 TargetPoint 위치이므로, 넘어서는 순간 그 지점에 맞추고 대기를 건다
+        if (this->ArrivalWaitTime > 0.f)
+        {
+            const float ArrivalPhase = FMath::FloorToFloat(Phase + KINDA_SMALL_NUMBER) + 1.f;
+            if (NextPhase >= ArrivalPhase)
+            {
+                NextPhase = ArrivalPhase;
+                this->WaitRemaining = this->ArrivalWaitTime;
+            }
+        }
+        Phase = FMath::Fmod(NextPhase, CycleLength);
         this->bIsMoveForward = Phase < this->EndPointFloat;
         this->RouteProgress = this->bIsMoveForward
             ? Phase
@@ -86,6 +104,7 @@ void AMovingPlatform::PlatformMovement(float DeltaTime)
     }
     else if (this->bIsResetable)
     {
+        this->WaitRemaining = 0.f;
         this->RouteProgress = FMath::Max(this->RouteProgress - Step, 0.0);
         this->bIsMoveForward = true;
     }
@@ -100,6 +119,7 @@ void AMovingPlatform::PlatformMovement(float DeltaTime)
     {
         RouteProgress = PreviousProgress;
         bIsMoveForward = !bPreviousForward;
+        WaitRemaining = PreviousWait;
         return;
     }
     SetActorLocation(NewLocation);
@@ -190,6 +210,8 @@ void AMovingPlatform::ResetToInitial_Implementation()
 {
     this->bIsMovementUse = this->bIsMovement;
     this->RouteProgress = 0.f;
+    this->bIsMoveForward = true;
+    this->WaitRemaining = 0.f;
     if (this->TargetPoint.Num())
     {
         this->SetActorLocation(this->TargetPoint[0]->GetActorLocation());

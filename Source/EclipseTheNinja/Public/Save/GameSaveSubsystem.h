@@ -69,6 +69,12 @@ public:
 	 */
 	bool SaveStageClear(TSoftObjectPtr<UWorld> NextLevel, bool bFinalStage, ECheckpointId ArrivalCheckpoint = ECheckpointId::None, bool bMarkCleared = true);
 
+	/**
+	 * 플레이어가 죽었을 때, 지금 맵으로 넘어오기 직전 맵을 다시 열어 그 맵에서 마지막으로 켠 체크포인트에서 부활시킨다.
+	 * 체력은 가득 찬 상태로 시작한다. 진행 데이터나 이전 맵 기록이 없으면(에디터에서 맵을 바로 실행) 아무것도 하지 않고 false.
+	 */
+	bool ReturnToPreviousStage(const UObject* WorldContext);
+
 	/** 이어하기로 저장된 체크포인트를 적용할 차례인지 확인한다. true이면 맵 시작 시 자동으로 켜지는 체크포인트가 저장된 진행을 바꾸지 못하게 한다. */
 	bool IsRestoring() const { return bPendingRestore && Progress && Progress->Checkpoint != ECheckpointId::None; }
 
@@ -96,6 +102,12 @@ public:
 
 	/** 현재 맵의 미니맵 기록을 진행 데이터에 남긴다. 자주 불리므로 파일에는 쓰지 않고, 다음 저장(체크포인트 등) 때 함께 기록된다. */
 	void RecordMinimapReveal(const UObject* WorldContext, int32 GridHash, const TArray<uint8>& Bits);
+
+	/** 끝까지 본 컷신인지 확인한다. 진행 데이터가 없으면(에디터에서 맵을 바로 실행) 이번 실행 동안 본 기록으로 판단한다. */
+	bool HasSeenSequence(FName SequenceKey) const;
+
+	/** 컷신을 끝까지 본 것으로 기록하고 파일에 저장한다. 저장할 수 없는 상태면 다음 저장 때 함께 기록된다. */
+	void MarkSequenceSeen(FName SequenceKey);
 
 private:
 	// 체크포인트 리셋 대상인지 확인한다. BoundCheckpoint가 None이 아니거나 bAlwaysResetOnRespawn이 켜져 있으면 true.
@@ -144,5 +156,8 @@ private:
 	// 스테이지 클리어를 저장한 뒤 true로 바꾼다.
 	// 이동 대기 중 이전 맵에서 받은 피해 등이 다음 스테이지의 저장값을 바꾸지 못하게 한다.
 	bool bStageTravel = false;
+
+	// 진행 데이터가 없을 때(에디터에서 맵을 바로 실행) 쓰는, 이번 실행 동안 끝까지 본 컷신 기록
+	TSet<FName> SessionSeenSequences;
 
 };
