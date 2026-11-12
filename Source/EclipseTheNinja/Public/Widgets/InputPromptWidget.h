@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "InputCoreTypes.h"
+#include "Widgets/InputGlyphSet.h"
 #include "InputPromptWidget.generated.h"
 
 class UInputAction;
@@ -19,6 +20,8 @@ class ECLIPSETHENINJA_API UInputPromptWidget : public UUserWidget
 public:
 	UFUNCTION(BlueprintCallable, Category = "Input Prompt")
 	void SetPromptAction(UInputAction* Action, const FText& KeyboardFallback);
+
+	void SetQTEPromptAction(UInputAction* Action, const FText& KeyboardFallback);
 
 	UFUNCTION(BlueprintPure, Category = "Input Prompt")
 	FText GetPromptLabel(bool bGamepad) const;
@@ -50,7 +53,17 @@ protected:
 
 private:
 	void RefreshLabel();
+	static FKey ResolveActionKey(const UObject* WorldContext, APlayerController* Controller,
+		const UInputAction* Action, const UInputMappingContext* MappingContext,
+		const FText& KeyboardFallback, bool bGamepad);
 	static FText FormatKey(const FKey& Key);
+
+	UPROPERTY()
+	TSoftObjectPtr<UInputGlyphSet> GlyphSet{FSoftObjectPath(TEXT("/Game/UI/InputGlyphs/DA_InputGlyphs.DA_InputGlyphs"))};
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputGlyphSet> LoadedGlyphSet;
+
 	FText LastLabel;
 	float OriginalWidth = 0.0f;
 };

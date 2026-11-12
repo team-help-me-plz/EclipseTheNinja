@@ -1,4 +1,5 @@
 #include "Widgets/InputPromptWidget.h"
+#include "Brushes/SlateColorBrush.h"
 #include "Character/PlayerCharacterController.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
@@ -11,6 +12,8 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/Texture2D.h"
+#include "Subsystem/InputGlyphSubsystem.h"
 
 void UInputPromptWidget::NativeConstruct()
 {
@@ -29,6 +32,12 @@ void UInputPromptWidget::SetPromptAction(UInputAction* Action, const FText& Keyb
 	PromptAction = Action;
 	KeyboardFallbackText = KeyboardFallback;
 	RefreshLabel();
+}
+
+void UInputPromptWidget::SetQTEPromptAction(UInputAction* Action, const FText& KeyboardFallback)
+{
+	LoadedGlyphSet = GlyphSet.LoadSynchronous();
+	SetPromptAction(Action, KeyboardFallback);
 }
 
 FText UInputPromptWidget::FormatKey(const FKey& Key)
@@ -71,7 +80,15 @@ FName UInputPromptWidget::GetIconNameForLabel(const FText& Label)
 FText UInputPromptWidget::ResolveActionLabel(const UObject* WorldContext, APlayerController* Controller,
 	const UInputAction* Action, const UInputMappingContext* MappingContext, const FText& KeyboardFallback, bool bGamepad)
 {
-	if (!Action) return bGamepad ? FText::GetEmpty() : KeyboardFallback;
+	const FKey Key = ResolveActionKey(WorldContext, Controller, Action, MappingContext, KeyboardFallback, bGamepad);
+	if (Key.IsValid()) return FormatKey(Key);
+	return bGamepad ? FText::GetEmpty() : KeyboardFallback;
+}
+
+FKey UInputPromptWidget::ResolveActionKey(const UObject* WorldContext, APlayerController* Controller,
+	const UInputAction* Action, const UInputMappingContext* MappingContext, const FText& KeyboardFallback, bool bGamepad)
+{
+	if (!Action) return FKey();
 	TArray<FKey> Keys;
 	APlayerController* PC = Controller;
 	if (!PC && WorldContext && WorldContext->GetWorld()) PC = UGameplayStatics::GetPlayerController(WorldContext, 0);
@@ -89,10 +106,10 @@ FText UInputPromptWidget::ResolveActionLabel(const UObject* WorldContext, APlaye
 	// Keep an existing E/R/mouse caption when it is still one of the real bindings.
 	if (!bGamepad && !KeyboardFallback.IsEmpty())
 		for (const FKey& Key : Keys)
-			if (!Key.IsGamepadKey() && FormatKey(Key).EqualTo(KeyboardFallback)) return FormatKey(Key);
+			if (!Key.IsGamepadKey() && FormatKey(Key).EqualTo(KeyboardFallback)) return Key;
 	for (const FKey& Key : Keys)
-		if (Key.IsGamepadKey() == bGamepad) return FormatKey(Key);
-	return bGamepad ? FText::GetEmpty() : KeyboardFallback;
+		if (Key.IsGamepadKey() == bGamepad) return Key;
+	return FKey();
 }
 
 void UInputPromptWidget::RefreshLabel()
@@ -117,28 +134,74 @@ void UInputPromptWidget::RefreshLabel()
 		if (OriginalWidth <= 0.0f) OriginalWidth = Box->GetWidthOverride();
 	}
 	if (!KeyText) return;
-	const APlayerCharacterController* PC = Cast<APlayerCharacterController>(GetOwningPlayer());
-	if (!PC && GetWorld()) PC = Cast<APlayerCharacterController>(UGameplayStatics::GetPlayerController(this, 0));
-	const bool bGamepad = PC && PC->IsUsingGamepad();
-	const FText Label = GetPromptLabel(bGamepad);
+	APlayerController* PC = GetOwningPlayer();
+	if (!PC && GetWorld()) PC = UGameplayStatics::GetPlayerController(this, 0);
+	const APlayerCharacterController* CharacterController = Cast<APlayerCharacterController>(PC);
+	bool bGamepad = CharacterController && CharacterController->IsUsingGamepad();
+	EInputGlyphDevice Device = bGamepad ? EInputGlyphDevice::Xbox : EInputGlyphDevice::KeyboardMouse;
+	if (LoadedGlyphSet && PC)
+	{
+		if (const UInputGlyphSubsystem* DeviceSubsystem = ULocalPlayer::GetSubsystem<UInputGlyphSubsystem>(PC->GetLocalPlayer()))
+		{
+			Device = DeviceSubsystem->GetDevice();
+			bGamepad = Device != EInputGlyphDevice::KeyboardMouse;
+		}
+	}
+
+	FKey Key = ResolveActionKey(this, PC, PromptAction, FallbackMappingContext, KeyboardFallbackText, bGamepad);
+	// 현재 장치에 연결된 키가 없으면 다른 장치에서 실제로 입력할 수 있는 키를 안내한다.
+	if (LoadedGlyphSet && !Key.IsValid())
+	{
+		Key = ResolveActionKey(this, PC, PromptAction, FallbackMappingContext, KeyboardFallbackText, !bGamepad);
+		if (Key.IsValid())
+		{
+			bGamepad = !bGamepad;
+			Device = bGamepad ? EInputGlyphDevice::Xbox : EInputGlyphDevice::KeyboardMouse;
+		}
+	}
+
+	const FText Label = Key.IsValid() ? FormatKey(Key) : (bGamepad ? FText::GetEmpty() : KeyboardFallbackText);
+	UTexture2D* Glyph = LoadedGlyphSet && Key.IsValid() ? LoadedGlyphSet->FindTexture(Key, Device) : nullptr;
 	const FName IconName = GetIconNameForLabel(Label);
 	const FRichImageRow* IconRow = bGamepad && GamepadIconTable && !IconName.IsNone()
 		? GamepadIconTable->FindRow<FRichImageRow>(IconName, TEXT("InputPrompt"), false) : nullptr;
-	const bool bShowIcon = GamepadIcon && IconRow;
+	const bool bShowIcon = GamepadIcon && (Glyph || IconRow);
+	const bool bShowQTEGlyph = GamepadIcon && Glyph;
 	if (GamepadIcon)
 	{
 		GamepadIcon->SetVisibility(bShowIcon ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-		if (bShowIcon && GamepadIcon->GetBrush().GetResourceObject() != IconRow->Brush.GetResourceObject())
+		if (Glyph && GamepadIcon->GetBrush().GetResourceObject() != Glyph)
+		{
+			GamepadIcon->SetBrushFromTexture(Glyph);
+			GamepadIcon->SetDesiredSizeOverride(FVector2D(72.0f, 72.0f));
+			GamepadIcon->SetColorAndOpacity(FLinearColor::White);
+		}
+		else if (!Glyph && IconRow && GamepadIcon->GetBrush().GetResourceObject() != IconRow->Brush.GetResourceObject())
 			GamepadIcon->SetBrush(IconRow->Brush);
 	}
 	KeyText->SetVisibility(bShowIcon ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	if (KeyboardBackground)
-		KeyboardBackground->SetVisibility(bShowIcon ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	{
+		if (bShowQTEGlyph && KeyboardBackground->GetBrush().GetResourceObject())
+		{
+			// 어두운 장면에서도 마우스 몸체와 밝은 버튼을 구분할 수 있는 배경을 깐다.
+			KeyboardBackground->SetBrush(FSlateColorBrush(FLinearColor(0.18f, 0.21f, 0.26f, 0.97f)));
+			KeyboardBackground->SetDesiredSizeOverride(FVector2D(88.0f, 88.0f));
+			KeyboardBackground->SetColorAndOpacity(FLinearColor::White);
+		}
+		const bool bHideBackground = bShowIcon && !bShowQTEGlyph;
+		KeyboardBackground->SetVisibility(bHideBackground ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
 	if (Box && OriginalWidth > 0.0f)
 	{
 		// Keep the UMG badge's original size for one letter, expanding only for longer captions.
-		const float Width = bShowIcon ? OriginalWidth
+		float Width = bShowIcon ? OriginalWidth
 			: FMath::Max(OriginalWidth, OriginalWidth * (0.35f + 0.65f * Label.ToString().Len()));
+		if (bShowQTEGlyph)
+		{
+			Width = 88.0f;
+			if (!FMath::IsNearlyEqual(Box->GetHeightOverride(), Width)) Box->SetHeightOverride(Width);
+		}
 		if (!FMath::IsNearlyEqual(Box->GetWidthOverride(), Width)) Box->SetWidthOverride(Width);
 	}
 	if (Label.EqualTo(LastLabel) && KeyText->GetText().EqualTo(Label)) return;

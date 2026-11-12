@@ -136,6 +136,8 @@ void ACheckpoint::BeginPlay()
 
     this->ActivationTrigger->OnComponentBeginOverlap.AddDynamic(this, &ACheckpoint::OnTriggerBeginOverlap);
 
+    if (bWaitForSequence) return;
+
     if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
     {
         Subsystem->RegisterCheckpoint(this);
@@ -173,11 +175,32 @@ void ACheckpoint::OnTriggerBeginOverlap(
     bool bFromSweep,
     const FHitResult& SweepResult)
 {
-    const APawn* Pawn = Cast<APawn>(OtherActor);
-    if (!IsValid(Pawn) || !Pawn->IsPlayerControlled())
+    TryActivateForPawn(Cast<APawn>(OtherActor));
+}
+
+void ACheckpoint::RegisterAfterSequence()
+{
+    if (!bWaitForSequence) return;
+    if (bRegisteredAfterSequence) return;
+
+    UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>();
+    if (!Subsystem) return;
+
+    bRegisteredAfterSequence = true;
+    Subsystem->RegisterCheckpoint(this);
+
+    // 이어하기로 이미 복원된 체크포인트가 있으면 진행 상태를 보존한다.
+    if (Subsystem->GetCurrentCheckpoint() == ECheckpointId::None)
     {
-        return;
+        Subsystem->ActivateCheckpoint(CheckpointId);
     }
+}
+
+void ACheckpoint::TryActivateForPawn(const APawn* Pawn)
+{
+    if (!IsValid(Pawn)) return;
+    if (!Pawn->IsPlayerControlled()) return;
+    if (bWaitForSequence && !bRegisteredAfterSequence) return;
 
     if (UCheckpointSubsystem* Subsystem = GetWorld()->GetSubsystem<UCheckpointSubsystem>())
     {

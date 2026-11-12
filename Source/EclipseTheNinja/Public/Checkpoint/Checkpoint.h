@@ -7,6 +7,7 @@
 #include "Checkpoint/CheckpointId.h"
 #include "Checkpoint.generated.h"
 
+class APawn;
 class UBoxComponent;
 class UArrowComponent;
 class UStaticMeshComponent;
@@ -18,7 +19,7 @@ class USoundBase;
  * 체크포인트 액터.
  *  - ActivationTrigger : 플레이어가 닿으면 CheckpointId로 갱신 요청
  *  - RespawnPoint      : 리스폰 위치/방향
- *  - BeginPlay 시 CheckpointSubsystem에 등록 (리스폰 위치 조회용). 같은 CheckpointId는 레벨에 하나만 배치할 것
+ *  - 기본적으로 BeginPlay 시 CheckpointSubsystem에 등록. 같은 CheckpointId는 레벨에 하나만 배치할 것
  */
 UCLASS()
 class ECLIPSETHENINJA_API ACheckpoint : public AActor
@@ -39,6 +40,7 @@ public:
 
     // 서브시스템의 현재 체크포인트에 맞춰 가로등 표시를 갱신한다.
     void SetCheckpointActive(bool bActive);
+    void RegisterAfterSequence();
 
 protected:
     virtual void OnConstruction(const FTransform& Transform) override;
@@ -91,6 +93,12 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint")
     bool bActivateOnBeginPlay = false;
 
+    // 인트로가 끝나기 전에는 등록과 오버랩 활성화를 보류한다.
+    UPROPERTY(EditInstanceOnly, Category = "Checkpoint")
+    bool bWaitForSequence = false;
+
 private:
+    bool bRegisteredAfterSequence = false;
+    void TryActivateForPawn(const APawn* Pawn);
     void ApplyLampState();
 };

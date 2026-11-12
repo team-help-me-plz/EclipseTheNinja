@@ -3,6 +3,7 @@
 #include "Level/TutorialSequenceTrigger.h"
 
 #include "Character/PlayerCharacter.h"
+#include "Checkpoint/Checkpoint.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Clone/CloneCharacter.h"
 #include "Component/AssassinateTargetComponent.h"
@@ -262,6 +263,15 @@ void ATutorialSequenceTrigger::PlaySequence(APlayerController* PlayerController)
         CheckActivateFrame();
     }
 
+    if (this->AssassinationStabSoundFrame >= 0)
+    {
+        CheckAssassinationStabSoundFrame();
+    }
+    if (this->AssassinationWithdrawalSoundFrame >= 0)
+    {
+        CheckAssassinationWithdrawalSoundFrame();
+    }
+
     if (this->HandoffCloneFrame >= 0 && this->HandoffCloneClass && IsValid(this->HandoffClonePoint))
     {
         CheckHandoffCloneFrame();
@@ -315,11 +325,17 @@ void ATutorialSequenceTrigger::BeginQTE()
         this->QTEPrompt->SetWorldLocation(this->QTEPromptAnchor->GetActorLocation());
     }
 
-    // 키 안내 위젯은 상호작용용(E)이라 다른 키를 기다릴 때는 첫 텍스트 블록의 글자를 바꾼다
     UUserWidget* PromptWidget = this->QTEPrompt->GetUserWidgetObject();
     if (UInputPromptWidget* InputPrompt = Cast<UInputPromptWidget>(PromptWidget))
     {
-        InputPrompt->SetPromptAction(this->QTEAction, this->QTEKeyText);
+        if (this->bShowQTEInputGlyph)
+        {
+            InputPrompt->SetQTEPromptAction(this->QTEAction, this->QTEKeyText);
+        }
+        else
+        {
+            InputPrompt->SetPromptAction(this->QTEAction, this->QTEKeyText);
+        }
     }
     else if (!this->QTEKeyText.IsEmpty() && IsValid(PromptWidget) && PromptWidget->WidgetTree)
     {
@@ -446,6 +462,26 @@ void ATutorialSequenceTrigger::CheckActivateFrame()
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::CheckActivateFrame()] %s : 대상 %d개 토글"), *GetActorNameOrLabel(), this->ActivatedActors.Num());
 }
 
+void ATutorialSequenceTrigger::CheckAssassinationStabSoundFrame()
+{
+    if (!WaitUntilFrame(AssassinationStabSoundFrame, AssassinationStabSoundTimer, &ATutorialSequenceTrigger::CheckAssassinationStabSoundFrame)) return;
+
+    if (const APlayerCharacter* Player = Cast<APlayerCharacter>(BlockedPawn.Get()))
+    {
+        Player->PlayActionSound(EPlayerActionSound::AssassinationStab);
+    }
+}
+
+void ATutorialSequenceTrigger::CheckAssassinationWithdrawalSoundFrame()
+{
+    if (!WaitUntilFrame(AssassinationWithdrawalSoundFrame, AssassinationWithdrawalSoundTimer, &ATutorialSequenceTrigger::CheckAssassinationWithdrawalSoundFrame)) return;
+
+    if (const APlayerCharacter* Player = Cast<APlayerCharacter>(BlockedPawn.Get()))
+    {
+        Player->PlayAssassinationWithdrawalSound();
+    }
+}
+
 void ATutorialSequenceTrigger::CheckHandoffCloneFrame()
 {
     if (!WaitUntilFrame(this->HandoffCloneFrame, this->HandoffCloneTimer, &ATutorialSequenceTrigger::CheckHandoffCloneFrame))
@@ -548,6 +584,8 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
     GetWorldTimerManager().ClearTimer(this->QTETimer);
     GetWorldTimerManager().ClearTimer(this->QTEFreezeTimer);
     GetWorldTimerManager().ClearTimer(this->ActivateTimer);
+    GetWorldTimerManager().ClearTimer(this->AssassinationStabSoundTimer);
+    GetWorldTimerManager().ClearTimer(this->AssassinationWithdrawalSoundTimer);
     GetWorldTimerManager().ClearTimer(this->HandoffCloneTimer);
     GetWorldTimerManager().ClearTimer(this->WidgetHideTimer);
 
@@ -588,6 +626,11 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
     this->HiddenWidgets.Reset();
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::OnSequenceFinished()] %s : 시퀀스 종료, 조작 반환"), *GetActorNameOrLabel());
+
+    if (IsValid(this->CheckpointOnFinish))
+    {
+        this->CheckpointOnFinish->RegisterAfterSequence();
+    }
 
     this->OnSequenceEnded.Broadcast(this);
 }
