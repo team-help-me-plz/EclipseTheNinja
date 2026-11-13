@@ -212,9 +212,24 @@ FVector UGABossSlashWave::GetLaunchDirection(const AActor* Avatar, const FVector
 	const AEnemy* Enemy = Cast<AEnemy>(Avatar);
 	const AActor* Target = Enemy ? Enemy->GetCombatTarget() : nullptr;
 
-	// 대상을 놓친 보스가 난사할 때는 대상 위치를 모르므로 바라보는 방향으로 쏜다.
+	// 대상을 놓친 보스가 난사할 때는 대상 위치를 모르므로 바라보는 쪽으로 위아래 각도를 랜덤하게 쏜다.
+	// 난사 컴포넌트가 이번 패턴을 대상 쪽으로 돌아서 쓰기로 정했으면 아래의 일반 조준을 쓴다.
 	const UBossLostTargetComponent* LostTargetComp = Avatar->FindComponentByClass<UBossLostTargetComponent>();
-	if (!Target || (LostTargetComp && LostTargetComp->IsRampaging()))
+	if (LostTargetComp && LostTargetComp->IsRampaging() && !LostTargetComp->ShouldAimAtTarget())
+	{
+		const float FacingSign = Avatar->GetActorForwardVector().X >= 0.0f ? 1.0f : -1.0f;
+		const float RandomPitchRadians = FMath::DegreesToRadians(
+			FMath::FRandRange(-RampageRandomPitch, RampageRandomPitch)
+		);
+
+		return FVector(
+			FacingSign * FMath::Cos(RandomPitchRadians),
+			0.0f,
+			FMath::Sin(RandomPitchRadians)
+		);
+	}
+
+	if (!Target)
 	{
 		return Avatar->GetActorForwardVector();
 	}
