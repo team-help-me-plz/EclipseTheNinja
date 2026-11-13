@@ -15,7 +15,6 @@
 #include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
-#include "UObject/ConstructorHelpers.h"
 
 // Sets default values
 AInteractSwitch::AInteractSwitch()
@@ -43,14 +42,7 @@ AInteractSwitch::AInteractSwitch()
 	this->InteractKeyWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	this->InteractKeyWidget->SetVisibility(false);
 
-	// 버튼 동작 기본 사운드(에셋 시트). 레버는 자기 생성자에서 덮어쓴다
-	static ConstructorHelpers::FObjectFinder<USoundBase> ButtonSoundFinder(
-		TEXT("/Game/Audio/footstep_on_wooden_floor_31.footstep_on_wooden_floor_31"));
-
-	if (ButtonSoundFinder.Succeeded())
-	{
-		this->InteractSound = ButtonSoundFinder.Object;
-	}
+	// 버튼·레버 동작 사운드(InteractSound)는 BP에서 등록한다
 }
 
 void AInteractSwitch::ResetToInitial_Implementation()

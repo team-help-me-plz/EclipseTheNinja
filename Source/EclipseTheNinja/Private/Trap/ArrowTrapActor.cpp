@@ -12,7 +12,6 @@
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
-#include "UObject/ConstructorHelpers.h"
 
 // Sets default values
 AArrowTrapActor::AArrowTrapActor()
@@ -32,14 +31,7 @@ AArrowTrapActor::AArrowTrapActor()
 	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 	this->ActivateHighlight = CreateDefaultSubobject<UActivateHighlightComponent>(TEXT("ActivateHighlight"));
 
-	// 발사 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
-	static ConstructorHelpers::FObjectFinder<USoundBase> FireSoundFinder(
-		TEXT("/Game/Audio/arrow_release.arrow_release"));
-
-	if (FireSoundFinder.Succeeded())
-	{
-		this->FireSound = FireSoundFinder.Object;
-	}
+	// 발사 사운드(FireSound)는 BP에서 등록한다
 }
 
 void AArrowTrapActor::ResetToInitial_Implementation()
