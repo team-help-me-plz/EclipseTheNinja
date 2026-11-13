@@ -74,12 +74,16 @@ void ABossCinematicDirector::BeginPlay()
         this->Boss->SetActorHiddenInGame(true);
         this->bHidBoss = true;
 
-        // 보스 AI(비헤이비어 트리)가 시작된 뒤에 멈추도록 한 프레임 뒤에 재생한다
+        // 컷신은 지금 바로 재생해 첫 화면부터 컷신 카메라(검은 화면에서 밝아짐)가 보이게 한다.
+        // 한 틱 뒤에 재생하면 그 사이 프레임에 플레이어 카메라가 그대로 그려지고, 첫 실행처럼 셰이더·에셋 로딩으로
+        // 첫 프레임들이 길어지면 엉뚱한 곳을 비추는 화면이 눈에 띄게 남는다
+        this->IntroSequence->PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
+
+        // 보스 AI(비헤이비어 트리)는 BeginPlay 뒤에 시작되므로 멈추는 것만 한 프레임 뒤에 한다
         GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
         {
             PauseBoss();
             this->Boss->StartBattleMusic();
-            this->IntroSequence->PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
         }));
     }
 }
