@@ -105,6 +105,9 @@ protected:
 	UFUNCTION()
 	void	HandleSFXVolumeChanged(float InValue);
 
+	UFUNCTION()
+	void	HandleAmbientVolumeChanged(float InValue);
+
 	// 현재 GameUserSettings 값을 UI에 반영
 	void	LoadCurrentSettings();
 
@@ -146,6 +149,9 @@ protected:
 	TObjectPtr<USlider>		SFXVolumeSlider = nullptr;
 
 	UPROPERTY(Transient, meta=(BindWidgetOptional))
+	TObjectPtr<USlider>		AmbientVolumeSlider = nullptr;
+
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UTextBlock>	MasterVolumeText = nullptr;
 
 	UPROPERTY(Transient, meta=(BindWidgetOptional))
@@ -153,6 +159,9 @@ protected:
 
 	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UTextBlock>	SFXVolumeText = nullptr;
+
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
+	TObjectPtr<UTextBlock>	AmbientVolumeText = nullptr;
 
 	// 그래픽
 	UPROPERTY(Transient, meta=(BindWidgetOptional))
