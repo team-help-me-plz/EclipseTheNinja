@@ -5,6 +5,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Checkpoint/CheckpointBoundComponent.h"
+#include "Level/EclipseWorldSettings.h"
 #include "GAS/StatAttributeSet.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -168,6 +169,18 @@ bool UGameSaveSubsystem::ContinueGame()
 	}
 
 	Progress = Loaded;
+
+	// 죽으면 이전 맵으로 돌아가는 맵(보스 아레나)에서 저장됐으면, 사망과 같게 이전 맵의 마지막 체크포인트에서 시작한다
+	if (Progress->bContinueAtReturnLevel)
+	{
+		if (ApplyReturnLevel())
+		{
+			UE_LOG(LogTemp, Log, TEXT("[GameSave] 이어하기: 이전 맵 %s의 체크포인트 %s에서 시작합니다."),
+				*Progress->Level.ToSoftObjectPath().GetLongPackageName(), *UEnum::GetValueAsString(Progress->Checkpoint));
+		}
+		Progress->bContinueAtReturnLevel = false;
+	}
+
 	CurrentPlayer.Reset();
 	bPendingRestore = true;
 	bStageTravel = false;
@@ -280,6 +293,10 @@ void UGameSaveSubsystem::PlayerReady(APlayerCharacter* Player)
 		Progress->RespawnTransform = ArrivalTransform;
 		Progress->bHasRespawnTransform = true;
 	}
+
+	// 죽으면 이전 맵으로 돌아가는 맵이면 이어하기도 이전 맵의 마지막 체크포인트에서 시작하게 표시한다
+	Progress->bContinueAtReturnLevel = AEclipseWorldSettings::ShouldReturnToPreviousStageOnDeath(Player)
+		&& !Progress->ReturnLevel.IsNull();
 
 	SaveProgress();
 }
@@ -418,19 +435,7 @@ bool UGameSaveSubsystem::ReturnToPreviousStage(const UObject* WorldContext)
 		Minimap->FlushReveal();
 	}
 
-	// 이어하기와 같은 방식으로 이전 맵의 마지막 체크포인트·재시작 위치를 복원한다. 체력은 기본값(가득)으로 시작한다
-	Progress->Level = ReturnLevel;
-	Progress->Checkpoint = Progress->ReturnCheckpoint;
-	Progress->RespawnTransform = Progress->ReturnRespawnTransform;
-	Progress->bHasRespawnTransform = Progress->bHasReturnRespawnTransform;
-	Progress->ArrivalCheckpoint = ECheckpointId::None;
-	Progress->bHasHealth = false;
-
-	// 이전 맵에 도착하면 그 맵이 현재 맵이므로 복귀 기록을 비운다. 다시 출구를 지나면 새로 기록한다
-	Progress->ReturnLevel.Reset();
-	Progress->ReturnCheckpoint = ECheckpointId::None;
-	Progress->bHasReturnRespawnTransform = false;
-
+	ApplyReturnLevel();
 	WriteSave();
 
 	UE_LOG(LogTemp, Log, TEXT("[GameSave] 사망: 이전 맵 %s의 체크포인트 %s에서 부활합니다."),
@@ -442,6 +447,35 @@ bool UGameSaveSubsystem::ReturnToPreviousStage(const UObject* WorldContext)
 	bPendingRestore = true;
 	bFadeInOnArrival = true;
 	UGameplayStatics::OpenLevelBySoftObjectPtr(this, ReturnLevel);
+	return true;
+}
+
+bool UGameSaveSubsystem::ApplyReturnLevel()
+{
+	if (!Progress)
+	{
+		return false;
+	}
+
+	const TSoftObjectPtr<UWorld> ReturnLevel = Progress->ReturnLevel;
+	if (ReturnLevel.IsNull() || !FPackageName::DoesPackageExist(ReturnLevel.ToSoftObjectPath().GetLongPackageName()))
+	{
+		return false;
+	}
+
+	// 이전 맵의 마지막 체크포인트·재시작 위치를 복원한다. 체력은 기본값(가득)으로 시작한다
+	Progress->Level = ReturnLevel;
+	Progress->Checkpoint = Progress->ReturnCheckpoint;
+	Progress->RespawnTransform = Progress->ReturnRespawnTransform;
+	Progress->bHasRespawnTransform = Progress->bHasReturnRespawnTransform;
+	Progress->ArrivalCheckpoint = ECheckpointId::None;
+	Progress->bHasHealth = false;
+
+	// 이전 맵에 도착하면 그 맵이 현재 맵이므로 복귀 기록을 비운다. 다시 출구를 지나면 새로 기록한다
+	Progress->ReturnLevel.Reset();
+	Progress->ReturnCheckpoint = ECheckpointId::None;
+	Progress->bHasReturnRespawnTransform = false;
+	Progress->bContinueAtReturnLevel = false;
 	return true;
 }
 

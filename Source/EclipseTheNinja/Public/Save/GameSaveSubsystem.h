@@ -110,6 +110,10 @@ public:
 	void MarkSequenceSeen(FName SequenceKey);
 
 private:
+	// 진행 데이터를 이전 맵(ReturnLevel)의 마지막 체크포인트로 되돌린다. 사망 복귀와 이어하기가 함께 쓴다
+	// 체력은 가득 찬 상태로 시작하고, 복귀 기록은 비운다. 돌아갈 맵 기록이 없으면 아무것도 바꾸지 않고 false
+	bool ApplyReturnLevel();
+
 	// 체크포인트 리셋 대상인지 확인한다. BoundCheckpoint가 None이 아니거나 bAlwaysResetOnRespawn이 켜져 있으면 true.
 	static bool IsCheckpointBound(const AActor* Actor);
 

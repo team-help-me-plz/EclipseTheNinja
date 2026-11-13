@@ -19,6 +19,7 @@
 #include "Level/EclipseWorldSettings.h"
 #include "Save/GameSaveSubsystem.h"
 #include "Components/InputComponent.h"
+#include "Widgets/HUDWidget.h"
 #include "Widgets/PauseMenuWidget.h"
 #include "Widgets/SettingsWidget.h"
 #include "Misc/App.h"
@@ -185,6 +186,37 @@ void APlayerCharacterController::SetupInputComponent()
 
         }
 
+    }
+}
+
+void APlayerCharacterController::SetCinematicSkipAvailable(bool bAvailable)
+{
+    bCinematicSkipAvailable = bAvailable;
+    if (UHUDWidget* HUD = HUDWidget.Get())
+    {
+        HUD->SetCinematicSkipAvailable(bAvailable);
+    }
+}
+
+void APlayerCharacterController::RequestCinematicSkip()
+{
+    OnCinematicSkipRequested.Broadcast();
+}
+
+void APlayerCharacterController::RegisterHUDWidget(UHUDWidget* InHUDWidget)
+{
+    HUDWidget = InHUDWidget;
+    if (IsValid(InHUDWidget) && bCinematicSkipAvailable)
+    {
+        InHUDWidget->SetCinematicSkipAvailable(true);
+    }
+}
+
+void APlayerCharacterController::UnregisterHUDWidget(UHUDWidget* InHUDWidget)
+{
+    if (HUDWidget.Get() == InHUDWidget)
+    {
+        HUDWidget.Reset();
     }
 }
 

@@ -11,6 +11,7 @@ class UInputAction;
 class UInputMappingContext;
 class UPauseMenuWidget;
 class USettingsWidget;
+class UHUDWidget;
 
 /**
  * 
@@ -104,6 +105,20 @@ public:
 	void PushPauseMenuBlock() { ++PauseMenuBlockCount; }
 	void PopPauseMenuBlock() { PauseMenuBlockCount = FMath::Max(0, PauseMenuBlockCount - 1); }
 
+	// 건너뛸 수 있는 컷신이 시작·끝날 때 부른다. HUD의 건너뛰기 위젯을 켜고 끈다
+	// HUD가 아직 만들어지기 전이면 상태만 기억했다가 HUD가 등록될 때 적용한다
+	void SetCinematicSkipAvailable(bool bAvailable);
+
+	// 건너뛰기 위젯이 키를 끝까지 눌렀을 때 부른다. 재생 중인 컷신 트리거가 OnCinematicSkipRequested를 받아 건너뛴다
+	void RequestCinematicSkip();
+
+	DECLARE_MULTICAST_DELEGATE(FOnCinematicSkipRequested);
+	FOnCinematicSkipRequested OnCinematicSkipRequested;
+
+	// HUD 위젯이 만들어지고 사라질 때 스스로 등록·해제한다
+	void RegisterHUDWidget(UHUDWidget* InHUDWidget);
+	void UnregisterHUDWidget(UHUDWidget* InHUDWidget);
+
 	// 사망 연출이 화면을 어둡게 한 채 리스폰했으면 RespawnFadeInTime 동안 다시 밝힌다. 어둡지 않으면 아무것도 하지 않는다
 	void FadeInAfterRespawn();
 
@@ -147,6 +162,9 @@ private:
 
 	bool bShowCursorBeforePause = false;
 	int32 PauseMenuBlockCount = 0;
+
+	TWeakObjectPtr<UHUDWidget> HUDWidget;
+	bool bCinematicSkipAvailable = false;
 	bool bUsingGamepad = false;
 	double IgnoreCursorWarpUntil = 0.0;
 	FVector2D LastObservedMousePosition = FVector2D::ZeroVector;
