@@ -82,7 +82,7 @@ AEnemy::AEnemy()
 	AssassinationDropComp->SetDropDelay(true, 4.0f);
 
 	// 몬스터 걷기 발소리. 지금은 기본 사운드를 비워 꺼 둔다.
-	// 다시 켜려면 BP의 WalkSoundComp에서 Loop Sound를 지정한다 (예: /Game/Audio/A_army_walk_loop)
+	// 다시 켜려면 BP의 WalkSoundComp에서 Loop Sound를 지정한다 (예: /Game/Audio/SW_Enemy_Walk_Loop)
 	WalkSoundComp = CreateDefaultSubobject<UMovementLoopSoundComponent>(TEXT("WalkSoundComp"));
 
 	NoiseDetectComponent = CreateDefaultSubobject<USphereComponent>(TEXT("NoiseDetectComponent"));
