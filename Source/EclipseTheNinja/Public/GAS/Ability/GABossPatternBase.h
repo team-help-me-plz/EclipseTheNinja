@@ -18,6 +18,7 @@ struct FBossTelegraphArea;
  * 시전을 시작하는 순간 피격 범위를 반투명 사각형(ABossAttackTelegraph)으로 보여 주고, 마지막 타격이 나가면 지운다.
  *
  * 보스는 다음 패턴을 고를 때 사용 거리 밖의 패턴을 후보에서 뺀다. 패턴 쿨타임은 DT_BossPatterns 행의 Cooldown으로 보스가 센다.
+ * 놓친 대상 난사(UBossLostTargetComponent) 중에는 행 쿨타임과 GAS 쿨타임을 모두 무시하고, 새로 걸지도 않는다.
  */
 UCLASS(Abstract)
 class ECLIPSETHENINJA_API UGABossPatternBase : public UGameplayAbility
@@ -52,6 +53,23 @@ public:
 		bool bReplicateEndAbility,
 		bool bWasCancelled
 	) override;
+
+	/** 놓친 대상 난사 중에는 GAS 쿨타임이 남아 있어도 시전할 수 있게 한다. */
+	virtual bool CheckCooldown(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr
+	) const override;
+
+	/** 놓친 대상 난사 중에 쓴 패턴에는 GAS 쿨타임을 걸지 않는다. */
+	virtual void ApplyCooldown(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo
+	) const override;
+
+	/** 이 패턴을 시전하는 보스가 놓친 대상 난사 중인지. */
+	static bool IsAvatarRampaging(const FGameplayAbilityActorInfo* ActorInfo);
 
 	/** 이 패턴을 고를 수 있는 대상과의 최소 거리(cm). */
 	float GetMinUseDistance() const { return MinUseDistance; }

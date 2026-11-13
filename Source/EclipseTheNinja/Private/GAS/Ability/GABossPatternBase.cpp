@@ -13,6 +13,7 @@
 #include "GAS/Tags/EclipseGameplayTags.h"
 #include "GAS/Animation/AnimNotify_BossAttackHit.h"
 #include "Character/BossEnemy.h"
+#include "Component/BossLostTargetComponent.h"
 #include "EngineUtils.h"
 #include "LevelSequenceActor.h"
 #include "LevelSequencePlayer.h"
@@ -48,6 +49,46 @@ UGABossPatternBase::UGABossPatternBase()
 	ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
 
 	TelegraphClass = ABossAttackTelegraph::StaticClass();
+}
+
+bool UGABossPatternBase::IsAvatarRampaging(const FGameplayAbilityActorInfo* ActorInfo)
+{
+	const AActor* Avatar = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
+	const UBossLostTargetComponent* LostTargetComp = Avatar
+		? Avatar->FindComponentByClass<UBossLostTargetComponent>()
+		: nullptr;
+
+	return LostTargetComp && LostTargetComp->IsRampaging();
+}
+
+bool UGABossPatternBase::CheckCooldown(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	FGameplayTagContainer* OptionalRelevantTags
+) const
+{
+	// 난사는 패턴을 쉴 새 없이 쏟아내는 단계라 쿨타임을 보지 않는다.
+	if (IsAvatarRampaging(ActorInfo))
+	{
+		return true;
+	}
+
+	return Super::CheckCooldown(Handle, ActorInfo, OptionalRelevantTags);
+}
+
+void UGABossPatternBase::ApplyCooldown(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo
+) const
+{
+	// 난사에서 쓴 패턴 때문에 일반 전투로 돌아갔을 때 그 패턴이 막히지 않게 한다.
+	if (IsAvatarRampaging(ActorInfo))
+	{
+		return;
+	}
+
+	Super::ApplyCooldown(Handle, ActorInfo, ActivationInfo);
 }
 
 bool UGABossPatternBase::CanActivateAbility(
