@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Widgets/EclipseMenuWidget.h"
 #include "Widgets/MenuInputFeedback.h"
 #include "PauseMenuWidget.generated.h"
 
@@ -9,7 +9,7 @@ class UButton;
 class UVerticalBox;
 
 UCLASS()
-class UPauseMenuWidget : public UUserWidget
+class UPauseMenuWidget : public UEclipseMenuWidget
 {
 	GENERATED_BODY()
 

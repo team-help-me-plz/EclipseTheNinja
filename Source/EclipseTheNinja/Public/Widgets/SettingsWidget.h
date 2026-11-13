@@ -2,7 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Widgets/EclipseMenuWidget.h"
 #include "Widgets/MenuInputFeedback.h"
 #include "SettingsWidget.generated.h"
 
@@ -37,7 +37,7 @@ enum class ESettingsTab : uint8
  * 디스플레이 / 오디오 / 그래픽 / 조작키 탭으로 구성되며, WBP 없이 C++ 레이아웃을 구성한다.
  */
 UCLASS()
-class ECLIPSETHENINJA_API USettingsWidget : public UUserWidget
+class ECLIPSETHENINJA_API USettingsWidget : public UEclipseMenuWidget
 {
 	GENERATED_BODY()
 

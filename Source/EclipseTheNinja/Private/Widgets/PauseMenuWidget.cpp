@@ -133,7 +133,7 @@ UButton* UPauseMenuWidget::AddMenuButton(UVerticalBox& Menu, const FText& Label)
 
 	// 모든 버튼을 같은 모양으로 두고, 강조는 포커스 버튼에만 준다.
 	UButton* MenuButton = WidgetTree->ConstructWidget<UButton>();
-	MenuButton->SetStyle(Button(Ink, Lantern));
+	MenuButton->SetStyle(Button(Ink, Lantern, this));
 	Menu.AddChildToVerticalBox(MenuButton)->SetPadding(FMargin(0.f, 4.f));
 
 	USizeBox* ButtonSize = WidgetTree->ConstructWidget<USizeBox>();

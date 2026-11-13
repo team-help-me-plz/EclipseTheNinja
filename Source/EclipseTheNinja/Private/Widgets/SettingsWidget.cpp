@@ -655,7 +655,7 @@ UComboBoxString* USettingsWidget::MakeSettingsComboBox()
 {
 	UComboBoxString* ComboBox = WidgetTree->ConstructWidget<UComboBoxString>();
 	FComboBoxStyle Style = ComboBox->GetWidgetStyle();
-	Style.ComboButtonStyle.SetButtonStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Ink, AccentColor));
+	Style.ComboButtonStyle.SetButtonStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Ink, AccentColor, this));
 	Style.ComboButtonStyle.SetMenuBorderBrush(EclipseMenuStyle::Box(EclipseMenuStyle::Ink, 3.f, EclipseMenuStyle::Edge, 1.f));
 	Style.ComboButtonStyle.DownArrowImage.TintColor = FSlateColor(AccentColor);
 	ComboBox->SetWidgetStyle(Style);
@@ -681,7 +681,7 @@ UWidget* USettingsWidget::MakeComboOption(FString Option)
 UButton* USettingsWidget::MakeTextButton(const FText& InLabel, const float InWidth)
 {
 	UButton*	Button = this->WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
-	Button->SetStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Tile, this->AccentColor));
+	Button->SetStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Tile, this->AccentColor, this));
 
 	USizeBox*	LabelBox = this->WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	LabelBox->SetHeightOverride(44.f);
@@ -732,7 +732,7 @@ void USettingsWidget::SelectTab(ESettingsTab InTab)
 			TabButtons[i]->SetBackgroundColor(i == TabIndex ? SelectedTabColor : IdleTabColor);
 			continue;
 		}
-		FButtonStyle Style = EclipseMenuStyle::Button(NormalColor, AccentColor);
+		FButtonStyle Style = EclipseMenuStyle::Button(NormalColor, AccentColor, this);
 		if (i == TabIndex)
 		{
 			Style.SetNormal(EclipseMenuStyle::Box(SelectedColor, 3.f, AccentColor, 1.f));
@@ -913,7 +913,7 @@ void USettingsWidget::RefreshKeyBindingList()
 			Selector->SetAllowGamepadKeys(false);
 			Selector->SetAllowModifierKeys(false);
 			Selector->SetKeySelectionText(FText::FromString(TEXT("새 키 입력…")));
-			Selector->SetButtonStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Ink, AccentColor));
+			Selector->SetButtonStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Ink, AccentColor, this));
 
 			FTextBlockStyle TextStyle;
 			TextStyle.SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 15));
