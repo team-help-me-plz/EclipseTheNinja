@@ -133,9 +133,11 @@ void USettingsWidget::BindDesignerControls()
 	MasterVolumeSlider = Cast<USlider>(GetWidgetFromName(TEXT("MasterVolumeSlider")));
 	MusicVolumeSlider = Cast<USlider>(GetWidgetFromName(TEXT("MusicVolumeSlider")));
 	SFXVolumeSlider = Cast<USlider>(GetWidgetFromName(TEXT("SFXVolumeSlider")));
+	AmbientVolumeSlider = Cast<USlider>(GetWidgetFromName(TEXT("AmbientVolumeSlider")));
 	MasterVolumeText = Cast<UTextBlock>(GetWidgetFromName(TEXT("MasterVolumeText")));
 	MusicVolumeText = Cast<UTextBlock>(GetWidgetFromName(TEXT("MusicVolumeText")));
 	SFXVolumeText = Cast<UTextBlock>(GetWidgetFromName(TEXT("SFXVolumeText")));
+	AmbientVolumeText = Cast<UTextBlock>(GetWidgetFromName(TEXT("AmbientVolumeText")));
 	QualityComboBox = Cast<UComboBoxString>(GetWidgetFromName(TEXT("QualityComboBox")));
 	FrameLimitComboBox = Cast<UComboBoxString>(GetWidgetFromName(TEXT("FrameLimitComboBox")));
 	KeyBindingList = Cast<UVerticalBox>(GetWidgetFromName(TEXT("KeyBindingList")));
@@ -148,6 +150,7 @@ void USettingsWidget::BindDesignerControls()
 	if (MasterVolumeSlider) MasterVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleMasterVolumeChanged);
 	if (MusicVolumeSlider) MusicVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleMusicVolumeChanged);
 	if (SFXVolumeSlider) SFXVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleSFXVolumeChanged);
+	if (AmbientVolumeSlider) AmbientVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleAmbientVolumeChanged);
 	if (WindowModeComboBox) WindowModeComboBox->OnSelectionChanged.AddUniqueDynamic(this, &USettingsWidget::HandleWindowModeChanged);
 	if (ResolutionComboBox) ResolutionComboBox->OnSelectionChanged.AddUniqueDynamic(this, &USettingsWidget::HandleResolutionChanged);
 	if (VSyncCheckBox) VSyncCheckBox->OnCheckStateChanged.AddUniqueDynamic(this, &USettingsWidget::HandleVSyncChanged);
@@ -253,7 +256,7 @@ TArray<UWidget*> USettingsWidget::GetContentControls() const
 	switch (CurrentTab)
 	{
 	case ESettingsTab::Display: Controls = {WindowModeComboBox, ResolutionComboBox, VSyncCheckBox}; break;
-	case ESettingsTab::Audio: Controls = {MasterVolumeSlider, MusicVolumeSlider, SFXVolumeSlider}; break;
+	case ESettingsTab::Audio: Controls = {MasterVolumeSlider, MusicVolumeSlider, SFXVolumeSlider, AmbientVolumeSlider}; break;
 	case ESettingsTab::Graphics: Controls = {QualityComboBox, FrameLimitComboBox}; break;
 	default: break;
 	}
@@ -489,10 +492,12 @@ void USettingsWidget::BuildDefaultLayout()
 		this->MasterVolumeSlider = this->AddVolumeRow(Page, FText::FromString(TEXT("전체 음량")), this->MasterVolumeText);
 		this->MusicVolumeSlider = this->AddVolumeRow(Page, FText::FromString(TEXT("배경음")), this->MusicVolumeText);
 		this->SFXVolumeSlider = this->AddVolumeRow(Page, FText::FromString(TEXT("효과음")), this->SFXVolumeText);
+		this->AmbientVolumeSlider = this->AddVolumeRow(Page, FText::FromString(TEXT("환경음")), this->AmbientVolumeText);
 
 		this->MasterVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleMasterVolumeChanged);
 		this->MusicVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleMusicVolumeChanged);
 		this->SFXVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleSFXVolumeChanged);
+		this->AmbientVolumeSlider->OnValueChanged.AddUniqueDynamic(this, &USettingsWidget::HandleAmbientVolumeChanged);
 	}
 
 	// 그래픽
@@ -618,6 +623,14 @@ USlider* USettingsWidget::AddVolumeRow(UVerticalBox* InPage, const FText& InLabe
 	Slider->SetStepSize(0.01f);
 	Slider->SetSliderBarColor(EclipseMenuStyle::Mist.CopyWithNewOpacity(0.6f));
 	Slider->SetSliderHandleColor(this->AccentColor);
+
+	// 기본 두께(2px)는 화면 배율에 따라 줄 위치가 반 픽셀에 걸리면 일부 슬라이더만 얇게 보인다.
+	// 두께를 키우고 픽셀에 맞춰 그려 모든 줄이 같은 굵기로 보이게 한다
+	FSliderStyle SliderStyle = Slider->GetWidgetStyle();
+	SliderStyle.SetBarThickness(4.f);
+	Slider->SetWidgetStyle(SliderStyle);
+	Slider->SetPixelSnapping(EWidgetPixelSnapping::SnapToPixel);
+
 	if (UHorizontalBoxSlot* SliderSlot = ValueRow->AddChildToHorizontalBox(Slider))
 	{
 		SliderSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
@@ -642,7 +655,7 @@ UComboBoxString* USettingsWidget::MakeSettingsComboBox()
 {
 	UComboBoxString* ComboBox = WidgetTree->ConstructWidget<UComboBoxString>();
 	FComboBoxStyle Style = ComboBox->GetWidgetStyle();
-	Style.ComboButtonStyle.SetButtonStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Ink, AccentColor));
+	Style.ComboButtonStyle.SetButtonStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Ink, AccentColor, this));
 	Style.ComboButtonStyle.SetMenuBorderBrush(EclipseMenuStyle::Box(EclipseMenuStyle::Ink, 3.f, EclipseMenuStyle::Edge, 1.f));
 	Style.ComboButtonStyle.DownArrowImage.TintColor = FSlateColor(AccentColor);
 	ComboBox->SetWidgetStyle(Style);
@@ -668,7 +681,7 @@ UWidget* USettingsWidget::MakeComboOption(FString Option)
 UButton* USettingsWidget::MakeTextButton(const FText& InLabel, const float InWidth)
 {
 	UButton*	Button = this->WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
-	Button->SetStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Tile, this->AccentColor));
+	Button->SetStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Tile, this->AccentColor, this));
 
 	USizeBox*	LabelBox = this->WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	LabelBox->SetHeightOverride(44.f);
@@ -719,7 +732,7 @@ void USettingsWidget::SelectTab(ESettingsTab InTab)
 			TabButtons[i]->SetBackgroundColor(i == TabIndex ? SelectedTabColor : IdleTabColor);
 			continue;
 		}
-		FButtonStyle Style = EclipseMenuStyle::Button(NormalColor, AccentColor);
+		FButtonStyle Style = EclipseMenuStyle::Button(NormalColor, AccentColor, this);
 		if (i == TabIndex)
 		{
 			Style.SetNormal(EclipseMenuStyle::Box(SelectedColor, 3.f, AccentColor, 1.f));
@@ -792,6 +805,15 @@ void USettingsWidget::LoadCurrentSettings()
 		{
 			SFXVolumeSlider->SetValue(Audio->GetSFXVolume());
 			UpdateVolumeText(SFXVolumeText, Audio->GetSFXVolume());
+		}
+		if (AmbientVolumeSlider)
+		{
+			AmbientVolumeSlider->SetValue(Audio->GetAmbientVolume());
+			UpdateVolumeText(AmbientVolumeText, Audio->GetAmbientVolume());
+			if (!Audio->HasAmbientSoundClass())
+			{
+				AmbientVolumeSlider->SetToolTipText(FText::FromString(TEXT("환경음이 연결되면 저장된 음량이 적용됩니다.")));
+			}
 		}
 	}
 
@@ -891,7 +913,7 @@ void USettingsWidget::RefreshKeyBindingList()
 			Selector->SetAllowGamepadKeys(false);
 			Selector->SetAllowModifierKeys(false);
 			Selector->SetKeySelectionText(FText::FromString(TEXT("새 키 입력…")));
-			Selector->SetButtonStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Ink, AccentColor));
+			Selector->SetButtonStyle(EclipseMenuStyle::Button(EclipseMenuStyle::Ink, AccentColor, this));
 
 			FTextBlockStyle TextStyle;
 			TextStyle.SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 15));
@@ -1157,6 +1179,17 @@ void USettingsWidget::HandleSFXVolumeChanged(float InValue)
 
 	Audio->SetSFXVolume(InValue);
 	UpdateVolumeText(SFXVolumeText, Audio->GetSFXVolume());
+}
+
+void USettingsWidget::HandleAmbientVolumeChanged(float InValue)
+{
+	if (bRefreshingSettings) return;
+
+	UUserAudioSettingsSubsystem* Audio = GetAudioSettings();
+	if (!Audio) return;
+
+	Audio->SetAmbientVolume(InValue);
+	UpdateVolumeText(AmbientVolumeText, Audio->GetAmbientVolume());
 }
 
 void USettingsWidget::UpdateVolumeText(UTextBlock* InText, const float InValue)

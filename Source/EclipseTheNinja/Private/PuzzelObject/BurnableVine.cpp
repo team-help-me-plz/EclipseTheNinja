@@ -56,14 +56,7 @@ ABurnableVine::ABurnableVine()
 		this->BurnEffect->SetAsset(BurnSystem.Object);
 	}
 
-	// 불타는 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
-	static ConstructorHelpers::FObjectFinder<USoundBase> BurnSoundFinder(
-		TEXT("/Game/Audio/Fire_Burning_1-2_wav.Fire_Burning_1-2_wav"));
-
-	if (BurnSoundFinder.Succeeded())
-	{
-		this->BurnSound = BurnSoundFinder.Object;
-	}
+	// 불타는 사운드(BurnSound)는 BP에서 등록한다
 
 	this->CheckpointBoundComponent = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBoundComponent"));
 }

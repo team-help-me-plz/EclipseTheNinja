@@ -76,13 +76,7 @@ ACheckpoint::ACheckpoint()
     LampLight->SetLightColor(FLinearColor(1.0f, 0.76f, 0.38f));
     LampLight->SetCastShadows(false);
 
-    // 체크포인트 갱신 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
-    static ConstructorHelpers::FObjectFinder<USoundBase> ActivateSoundAsset(
-        TEXT("/Game/Audio/spell_v15.spell_v15"));
-    if (ActivateSoundAsset.Succeeded())
-    {
-        ActivateSound = ActivateSoundAsset.Object;
-    }
+    // 체크포인트 갱신 사운드(ActivateSound)는 BP에서 등록한다
 
     ApplyLampState();
 }

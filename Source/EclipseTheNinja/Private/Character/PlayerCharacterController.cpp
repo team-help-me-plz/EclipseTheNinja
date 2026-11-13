@@ -227,7 +227,8 @@ void APlayerCharacterController::OpenPauseMenu()
     if (IsPaused()) return;
     if (PauseMenuBlockCount > 0) return;
 
-    UPauseMenuWidget* Menu = CreateWidget<UPauseMenuWidget>(this);
+    const TSubclassOf<UPauseMenuWidget> MenuClass = PauseMenuWidgetClass ? PauseMenuWidgetClass : TSubclassOf<UPauseMenuWidget>(UPauseMenuWidget::StaticClass());
+    UPauseMenuWidget* Menu = CreateWidget<UPauseMenuWidget>(this, MenuClass);
     if (!Menu) return;
     if (!SetPause(true)) return;
 
@@ -275,7 +276,8 @@ void APlayerCharacterController::OpenPauseSettings()
     if (!PauseMenuWidget) return;
     if (PauseSettingsWidget) return;
 
-    USettingsWidget* Settings = CreateWidget<USettingsWidget>(this);
+    const TSubclassOf<USettingsWidget> SettingsClass = SettingsWidgetClass ? SettingsWidgetClass : TSubclassOf<USettingsWidget>(USettingsWidget::StaticClass());
+    USettingsWidget* Settings = CreateWidget<USettingsWidget>(this, SettingsClass);
     if (!Settings) return;
     if (!Settings->AddToPlayerScreen(11)) return;
 

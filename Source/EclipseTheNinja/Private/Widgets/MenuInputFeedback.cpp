@@ -177,7 +177,7 @@ void FMenuInputFeedback::Update(UUserWidget* Owner, const TArray<FMenuFocusFeedb
 
 	if (bMovedFocus && !MenuFeedback::bPointer)
 	{
-		EclipseUISound::PlayHoverSound();
+		EclipseUISound::PlayHoverSound(Owner);
 	}
 	LastFocusedControl = FocusedControl;
 	if (UWidget* Hints = Owner->GetWidgetFromName(TEXT("GamepadHints")))

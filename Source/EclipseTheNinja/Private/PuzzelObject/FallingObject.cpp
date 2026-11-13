@@ -74,20 +74,7 @@ AFallingObject::AFallingObject()
 		this->LandEffect->SetAsset(LandSystem.Object);
 	}
 
-	// 발동·충돌 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
-	static ConstructorHelpers::FObjectFinder<USoundBase> DropSoundFinder(
-		TEXT("/Game/Audio/dropping_tool_v1.dropping_tool_v1"));
-	static ConstructorHelpers::FObjectFinder<USoundBase> LandSoundFinder(
-		TEXT("/Game/Audio/UI_PopUp_02.UI_PopUp_02"));
-
-	if (DropSoundFinder.Succeeded())
-	{
-		this->DropSound = DropSoundFinder.Object;
-	}
-	if (LandSoundFinder.Succeeded())
-	{
-		this->LandSound = LandSoundFinder.Object;
-	}
+	// 발동·충돌 사운드(DropSound/LandSound)는 BP에서 등록한다
 
 	// 착지 진동 기본값은 2단계. BP에서 바꿀 수 있다
 	static ConstructorHelpers::FObjectFinder<UForceFeedbackEffect> LandForceFeedbackFinder(

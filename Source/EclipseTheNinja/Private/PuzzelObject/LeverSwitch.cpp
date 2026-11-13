@@ -8,7 +8,6 @@
 
 #include "Components/BoxComponent.h"
 #include "Sound/SoundBase.h"
-#include "UObject/ConstructorHelpers.h"
 
 ALeverSwitch::ALeverSwitch()
 {
@@ -29,14 +28,7 @@ ALeverSwitch::ALeverSwitch()
 	this->InteractCollision->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	this->InteractCollision->SetGenerateOverlapEvents(true);
 
-	// 레버 동작 기본 사운드(에셋 시트). 부모(버튼) 기본값을 덮어쓴다
-	static ConstructorHelpers::FObjectFinder<USoundBase> LeverSoundFinder(
-		TEXT("/Game/Audio/Wood_Move_1-1_wav.Wood_Move_1-1_wav"));
-
-	if (LeverSoundFinder.Succeeded())
-	{
-		this->InteractSound = LeverSoundFinder.Object;
-	}
+	// 레버 동작 사운드(InteractSound)는 BP에서 등록한다
 }
 
 void ALeverSwitch::Interact_Implementation(AActor* InActor)

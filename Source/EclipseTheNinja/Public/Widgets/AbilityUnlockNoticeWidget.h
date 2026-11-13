@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Widgets/EclipseMenuWidget.h"
 #include "AbilityUnlockNoticeWidget.generated.h"
 
 class UButton;
@@ -17,7 +17,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAbilityUnlockNoticeClosed);
  * 레이아웃은 이 클래스를 부모로 한 WBP에서 만든다. CloseButton은 필수, 텍스트와 아이콘은 같은 이름으로 넣으면 자동 연결된다.
  */
 UCLASS(Abstract)
-class ECLIPSETHENINJA_API UAbilityUnlockNoticeWidget : public UUserWidget
+class ECLIPSETHENINJA_API UAbilityUnlockNoticeWidget : public UEclipseMenuWidget
 {
 	GENERATED_BODY()
 

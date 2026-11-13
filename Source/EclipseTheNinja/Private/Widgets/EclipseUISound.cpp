@@ -5,17 +5,13 @@
 #include "Components/Button.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Sound/SoundBase.h"
+#include "Widgets/EclipseMenuWidget.h"
 
 namespace
 {
-	// 에셋 시트(시스템/UI)에서 정한 사운드. /Game/Audio는 패키징 시 항상 쿡된다(DefaultGame.ini)
-	const TCHAR* HoverSoundPath = TEXT("/Game/Audio/UI_Click_04.UI_Click_04");
-	const TCHAR* SelectSoundPath = TEXT("/Game/Audio/UI_Click_23.UI_Click_23");
-
-	FSlateSound MakeSlateSound(const TCHAR* Path)
+	FSlateSound MakeSlateSound(USoundBase* SoundAsset)
 	{
 		FSlateSound Sound;
-		USoundBase* SoundAsset = LoadObject<USoundBase>(nullptr, Path);
 
 		if (SoundAsset)
 		{
@@ -23,12 +19,23 @@ namespace
 		}
 		return Sound;
 	}
+
+	const UEclipseMenuWidget* AsMenuWidget(const UUserWidget* Owner)
+	{
+		return Cast<UEclipseMenuWidget>(Owner);
+	}
 }
 
-void EclipseUISound::ApplyButtonSounds(FButtonStyle& Style)
+void EclipseUISound::ApplyButtonSounds(FButtonStyle& Style, const UUserWidget* Owner)
 {
-	Style.SetHoveredSound(MakeSlateSound(HoverSoundPath));
-	Style.SetPressedSound(MakeSlateSound(SelectSoundPath));
+	const UEclipseMenuWidget* Menu = AsMenuWidget(Owner);
+	if (!Menu)
+	{
+		return;
+	}
+
+	Style.SetHoveredSound(MakeSlateSound(Menu->GetHoverSound()));
+	Style.SetPressedSound(MakeSlateSound(Menu->GetSelectSound()));
 }
 
 void EclipseUISound::ApplyButtonSoundsToTree(UUserWidget* Owner)
@@ -38,7 +45,7 @@ void EclipseUISound::ApplyButtonSoundsToTree(UUserWidget* Owner)
 		return;
 	}
 
-	Owner->WidgetTree->ForEachWidget([](UWidget* Widget)
+	Owner->WidgetTree->ForEachWidget([Owner](UWidget* Widget)
 	{
 		UButton* Button = Cast<UButton>(Widget);
 		if (!Button)
@@ -47,17 +54,18 @@ void EclipseUISound::ApplyButtonSoundsToTree(UUserWidget* Owner)
 		}
 
 		FButtonStyle Style = Button->GetStyle();
-		ApplyButtonSounds(Style);
+		ApplyButtonSounds(Style, Owner);
 		Button->SetStyle(Style);
 	});
 }
 
-void EclipseUISound::PlayHoverSound()
+void EclipseUISound::PlayHoverSound(const UUserWidget* Owner)
 {
-	if (!FSlateApplication::IsInitialized())
+	const UEclipseMenuWidget* Menu = AsMenuWidget(Owner);
+	if (!Menu || !Menu->GetHoverSound() || !FSlateApplication::IsInitialized())
 	{
 		return;
 	}
 
-	FSlateApplication::Get().PlaySound(MakeSlateSound(HoverSoundPath));
+	FSlateApplication::Get().PlaySound(MakeSlateSound(Menu->GetHoverSound()));
 }

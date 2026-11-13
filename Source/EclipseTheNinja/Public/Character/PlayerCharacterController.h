@@ -63,6 +63,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Input|Input Actions")
 	TObjectPtr<UInputAction> PauseAction;
 
+	/** 일시정지 메뉴 WBP. 메뉴 버튼 사운드는 이 WBP 기본값에서 등록한다 (비워두면 C++ 기본 레이아웃, 사운드 없음) */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UPauseMenuWidget> PauseMenuWidgetClass;
+
+	/** 일시정지 메뉴에서 여는 설정 WBP (비워두면 C++ 기본 레이아웃, 사운드 없음) */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<USettingsWidget> SettingsWidgetClass;
+
 	/** Mobile controls widget to spawn */
 	UPROPERTY(EditAnywhere, Category = "Input|Touch Controls")
 	TSubclassOf<UUserWidget> MobileControlsWidgetClass;
