@@ -17,4 +17,7 @@ namespace EclipseUISound
 
 	// 키보드·게임패드로 포커스를 옮겼을 때 Owner의 호버 사운드를 재생한다
 	void	PlayHoverSound(const UUserWidget* Owner);
+
+	// 버튼을 거치지 않는 선택 입력(게임패드 B로 닫기 등)에서 Owner의 선택 사운드를 재생한다
+	void	PlaySelectSound(const UUserWidget* Owner);
 }

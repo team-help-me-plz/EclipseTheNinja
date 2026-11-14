@@ -69,3 +69,14 @@ void EclipseUISound::PlayHoverSound(const UUserWidget* Owner)
 
 	FSlateApplication::Get().PlaySound(MakeSlateSound(Menu->GetHoverSound()));
 }
+
+void EclipseUISound::PlaySelectSound(const UUserWidget* Owner)
+{
+	const UEclipseMenuWidget* Menu = AsMenuWidget(Owner);
+	if (!Menu || !Menu->GetSelectSound() || !FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+
+	FSlateApplication::Get().PlaySound(MakeSlateSound(Menu->GetSelectSound()));
+}

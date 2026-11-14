@@ -34,6 +34,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Subsystem/UserAudioSettingsSubsystem.h"
 #include "EclipseMenuStyle.h"
+#include "EclipseUISound.h"
 #include "Styling/CoreStyle.h"
 #include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateUser.h"
@@ -331,7 +332,12 @@ bool USettingsWidget::HandleGamepadKey(const FKeyEvent& Event)
 			{
 				return Button && Button->HasUserFocus(GetOwningPlayer());
 			});
-			if (bTabFocus || bFooterFocus) CloseSettings();
+			if (bTabFocus || bFooterFocus)
+			{
+				// B로 닫으면 닫기 버튼을 거치지 않으므로 버튼의 선택 사운드를 직접 낸다.
+				EclipseUISound::PlaySelectSound(this);
+				CloseSettings();
+			}
 			else
 			{
 				if (HasOpenCombo()) FSlateApplication::Get().DismissAllMenus();
@@ -378,6 +384,8 @@ FReply USettingsWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, cons
 			}
 		}
 
+		// ESC로 닫을 때도 닫기 버튼과 같은 선택 사운드를 낸다.
+		EclipseUISound::PlaySelectSound(this);
 		CloseSettings();
 		return FReply::Handled();
 	}
