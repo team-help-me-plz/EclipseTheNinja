@@ -34,22 +34,26 @@ public:
 
 	// 바인딩 없이 버튼 목록에 포커스 모양을 입힌다. 게임패드 포커스는 전용 색, 마우스는 호버 모양.
 	// FocusBrush를 주면 기본 붉은 포커스 대신 그 브러시를 쓴다.
+	// bHoverUsesFocusColor면 마우스 호버도 게임패드 포커스와 같은 브러시로 칠한다.
 	void UpdateButtons(
 		const UUserWidget* Owner,
 		TConstArrayView<UButton*> Buttons,
 		bool bActive = true,
-		const FSlateBrush* FocusBrush = nullptr
+		const FSlateBrush* FocusBrush = nullptr,
+		bool bHoverUsesFocusColor = false
 	);
 
 	/** 키보드·게임패드로 Owner 안의 포커스가 다른 위젯으로 옮겨 가면 Owner의 호버 사운드를 재생한다. 매 Tick 호출한다. */
 	void UpdateFocusSound(const UUserWidget* Owner, bool bActive = true);
 private:
 	// 포커스 여부에 맞춰 버튼 스타일을 원래 스타일 기준으로 다시 입힌다. bUseFocusColor면 게임패드 포커스에 전용 색.
+	// bHoverUsesFocusColor면 마우스 호버 모양도 그 전용 색으로 바꾼다.
 	void ApplyButtonStyle(
 		UButton& Button,
 		bool bFocused,
 		bool bUseFocusColor,
-		const FSlateBrush* FocusBrush = nullptr
+		const FSlateBrush* FocusBrush = nullptr,
+		bool bHoverUsesFocusColor = false
 	);
 
 	TSharedPtr<IInputProcessor> InputProcessor;

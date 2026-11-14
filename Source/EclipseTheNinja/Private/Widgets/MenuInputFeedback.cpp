@@ -96,7 +96,8 @@ void FMenuInputFeedback::UpdateButtons(
 	const UUserWidget* Owner,
 	TConstArrayView<UButton*> Buttons,
 	bool bActive,
-	const FSlateBrush* FocusBrush
+	const FSlateBrush* FocusBrush,
+	bool bHoverUsesFocusColor
 )
 {
 	APlayerController* Player = Owner ? Owner->GetOwningPlayer() : nullptr;
@@ -114,7 +115,13 @@ void FMenuInputFeedback::UpdateButtons(
 			&& (MenuFeedback::bPointer
 				? Button->IsHovered()
 				: Button->HasUserFocus(Player));
-		ApplyButtonStyle(*Button, bFocused, true, FocusBrush);
+		ApplyButtonStyle(
+			*Button,
+			bFocused,
+			true,
+			FocusBrush,
+			bHoverUsesFocusColor
+		);
 	}
 }
 
@@ -155,24 +162,32 @@ void FMenuInputFeedback::ApplyButtonStyle(
 	UButton& Button,
 	bool bFocused,
 	bool bUseFocusColor,
-	const FSlateBrush* FocusBrush
+	const FSlateBrush* FocusBrush,
+	bool bHoverUsesFocusColor
 )
 {
 	const FButtonStyle BaseStyle = ButtonStyles.FindOrAdd(&Button, Button.GetStyle());
 	FButtonStyle Style = BaseStyle;
 
+	const FSlateBrush AppliedBrush = FocusBrush
+		? *FocusBrush
+		: MenuFeedback::MakeFocusBrush(BaseStyle.Hovered);
+
+	// 마우스 호버도 게임패드 포커스와 같은 색으로 보이게 한다.
+	if (bUseFocusColor && bHoverUsesFocusColor)
+	{
+		Style.SetHovered(AppliedBrush);
+	}
+
 	// 게임패드 포커스는 호버와 다른 색으로 칠해 어느 버튼에 있는지 바로 보이게 한다.
 	if (bFocused && bUseFocusColor && MenuFeedback::bGamepad)
 	{
-		const FSlateBrush AppliedBrush = FocusBrush
-			? *FocusBrush
-			: MenuFeedback::MakeFocusBrush(BaseStyle.Hovered);
 		Style.SetNormal(AppliedBrush);
 		Style.SetHovered(AppliedBrush);
 	}
 	else if (bFocused)
 	{
-		Style.SetNormal(BaseStyle.Hovered);
+		Style.SetNormal(Style.Hovered);
 	}
 
 	Button.SetStyle(Style);

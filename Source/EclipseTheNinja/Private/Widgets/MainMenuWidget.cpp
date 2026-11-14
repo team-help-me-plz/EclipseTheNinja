@@ -155,12 +155,23 @@ void UMainMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 		StartButton.Get(),
 		ContinueButton.Get(),
 		SettingsButton.Get(),
-		QuitButton.Get(),
-		OverwriteConfirmButton.Get(),
-		OverwriteCancelButton.Get()
+		QuitButton.Get()
 	};
 	const bool bMenuActive = !(SettingsWidget && SettingsWidget->IsInViewport());
 	InputFeedback.UpdateButtons(this, MenuButtons, bMenuActive);
+
+	// 새 게임 덮어쓰기 확인 버튼은 마우스 호버도 게임패드 포커스와 같은 색으로 칠한다.
+	const TArray<UButton*> OverwriteButtons = {
+		OverwriteConfirmButton.Get(),
+		OverwriteCancelButton.Get()
+	};
+	InputFeedback.UpdateButtons(
+		this,
+		OverwriteButtons,
+		bMenuActive,
+		nullptr,
+		true
+	);
 
 	// 게임패드·키보드로 버튼 사이를 옮기면 호버 사운드를 낸다. 설정 창이 열려 있는 동안은 설정 창이 맡는다.
 	InputFeedback.UpdateFocusSound(this, bMenuActive);
