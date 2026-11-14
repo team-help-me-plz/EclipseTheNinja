@@ -186,10 +186,19 @@ void UInputPromptWidget::RefreshLabel()
 	}
 
 	const FText Label = Key.IsValid() ? FormatKey(Key) : (bGamepad ? FText::GetEmpty() : KeyboardFallbackText);
-	UTexture2D* Glyph = LoadedGlyphSet && Key.IsValid() ? LoadedGlyphSet->FindTexture(Key, Device) : nullptr;
 	const FName IconName = GetIconNameForLabel(Label);
 	const FRichImageRow* IconRow = bGamepad && GamepadIconTable && !IconName.IsNone()
 		? GamepadIconTable->FindRow<FRichImageRow>(IconName, TEXT("InputPrompt"), false) : nullptr;
+
+	// QTE 게임패드 버튼은 HUD와 같은 그림(GamepadIconTable → /Game/Textures/InputGlyphs)을 먼저 쓰고, 테이블에 없을 때만 키 이미지 세트를 쓴다.
+	UTexture2D* TableGlyph = IconRow ? Cast<UTexture2D>(IconRow->Brush.GetResourceObject()) : nullptr;
+	UTexture2D* Glyph = nullptr;
+	if (LoadedGlyphSet && Key.IsValid())
+	{
+		Glyph = bGamepad && TableGlyph
+			? TableGlyph
+			: LoadedGlyphSet->FindTexture(Key, Device);
+	}
 	const bool bShowIcon = GamepadIcon && (Glyph || IconRow);
 	const bool bShowQTEGlyph = GamepadIcon && Glyph;
 	if (GamepadIcon)
