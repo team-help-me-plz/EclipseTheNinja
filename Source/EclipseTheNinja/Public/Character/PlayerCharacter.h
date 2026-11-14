@@ -105,6 +105,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Gamepad", meta = (ClampMin = "0.1", ClampMax = "1"))
 	float LedgeHangDownInputThreshold = 0.65f;
 
+	/** 좌우 이동 입력이 이 값 이하이면 입력이 없는 것으로 본다. 스틱을 살짝 건드려도 움직이지 않게 한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Gamepad", meta = (ClampMin = "0", ClampMax = "0.9"))
+	float MoveInputDeadZone = 0.2f;
+
+	/**
+	 * 데드존을 넘은 이동 입력의 최소 배율. 이동 속도는 (배율 x 최대 속도)이므로 서 있을 때와 앉았을 때 모두 같은 비율이 적용된다.
+	 * 걷기 애니메이션이 제대로 재생되어 발소리 노티파이가 나는 속도 이상이 되도록 맞춘다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Gamepad", meta = (ClampMin = "0", ClampMax = "1"))
+	float MinMoveInputScale = 0.5f;
+
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* JumpAction;
@@ -472,6 +483,9 @@ protected:
 	// ReceiveAssassination 안에서만 유효하다. Die가 사망 몽타주 대신 재생한다.
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> PendingAssassinationMontage;
+
+	/** 좌우 이동 입력에 데드존과 최소 배율을 적용한다. 데드존 안이면 0을 반환한다. */
+	float ApplyMoveInputDeadZone(float RawInput) const;
 
 public:
 

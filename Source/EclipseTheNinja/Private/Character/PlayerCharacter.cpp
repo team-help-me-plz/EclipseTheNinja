@@ -729,10 +729,27 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 			&& DownInput > FMath::Abs(MoveVector.Y) * 1.25f)
 			TryActivateAbilityByInputID(EAbilityInputID::LedgeHang);
 
-		DoMove(MoveVector.Y);
+		DoMove(ApplyMoveInputDeadZone(MoveVector.Y));
 	}
 
 
+}
+
+float APlayerCharacter::ApplyMoveInputDeadZone(float RawInput) const
+{
+	const float DeadZone = FMath::Clamp(MoveInputDeadZone, 0.0f, 0.9f);
+	const float Magnitude = FMath::Min(FMath::Abs(RawInput), 1.0f);
+	if (Magnitude <= DeadZone)
+	{
+		return 0.0f;
+	}
+
+	// 데드존 밖 구간을 [최소 배율, 1]로 다시 펼친다. 살살 밀어도 걷기 애니메이션과 발소리가 나는 속도를 보장한다.
+	const float Alpha = (Magnitude - DeadZone) / (1.0f - DeadZone);
+	const float MinScale = FMath::Clamp(MinMoveInputScale, 0.0f, 1.0f);
+	const float Scale = FMath::Lerp(MinScale, 1.0f, Alpha);
+
+	return FMath::Sign(RawInput) * Scale;
 }
 
 void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
