@@ -271,7 +271,9 @@ void APlayerCharacter::UpdateMovementSound(float DeltaSeconds)
 		PreviousMovementSounds = &Sounds;
 	}
 
-	const float StepDistance = bOnWall ? 75.0f : (bIsCrouched ? 80.0f : 130.0f);
+	const float StepDistance = bOnWall
+		? WallClimbStepDistance
+		: (bIsCrouched ? CrouchWalkStepDistance : WalkStepDistance);
 	DistanceSinceMovementSound += Speed * DeltaSeconds;
 	if (DistanceSinceMovementSound >= StepDistance)
 	{

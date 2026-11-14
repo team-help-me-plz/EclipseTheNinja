@@ -71,6 +71,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Audio")
 	TArray<TObjectPtr<USoundBase>> WallClimbSounds;
 
+	/** 걸을 때 발소리 한 번을 내는 이동 거리(cm) */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio", meta = (ClampMin = "1.0", Units = "cm"))
+	float WalkStepDistance = 130.0f;
+
+	/** 웅크리고 걸을 때 발소리 한 번을 내는 이동 거리(cm) */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio", meta = (ClampMin = "1.0", Units = "cm"))
+	float CrouchWalkStepDistance = 80.0f;
+
+	/** 벽을 탈 때 소리 한 번을 내는 세로 이동 거리(cm) */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio", meta = (ClampMin = "1.0", Units = "cm"))
+	float WallClimbStepDistance = 75.0f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
 	TObjectPtr<UInteractBoxComponent> InteractComponent;
 
