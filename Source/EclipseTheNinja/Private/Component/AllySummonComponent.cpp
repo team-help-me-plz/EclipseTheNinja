@@ -178,6 +178,10 @@ AEnemy* UAllySummonComponent::SpawnAlly(const FEnemyClimbEntrance& InEntrance, A
 		return nullptr;
 	}
 
+	// 풀에서 재사용한 적은 이전 소환자의 스탯이 남아 있을 수 있으므로 매번 다시 정한다.
+	// SummonStatsEffect가 비어 있으면 소환 클래스의 기본 스탯으로 되돌린다.
+	Ally->ApplyStatsEffect(SummonStatsEffect);
+
 	// 체크포인트 리스폰 때 풀에 돌려보낸다.
 	if (UCheckpointSubsystem* CheckpointSubsystem = World->GetSubsystem<UCheckpointSubsystem>())
 	{

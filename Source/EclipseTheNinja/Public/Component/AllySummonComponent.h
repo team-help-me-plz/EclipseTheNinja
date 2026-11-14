@@ -6,6 +6,7 @@
 
 class AEnemy;
 class UAnimMontage;
+class UGameplayEffect;
 class UObjectPoolDataAsset;
 struct FEnemyClimbEntrance;
 
@@ -80,6 +81,13 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Summon")
 	TObjectPtr<UObjectPoolDataAsset> SummonPoolData;
+
+	/**
+	 * 소환한 적에게 적용할 스탯 GE. 비우면 소환 클래스의 기본 스탯 GE를 쓴다.
+	 * 구간마다 소환하는 적에게 이 값을 바꿔 두면 소환된 동료도 그 구간 스탯으로 나온다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Summon")
+	TSubclassOf<UGameplayEffect> SummonStatsEffect;
 
 	/** 한 번에 부를 수 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Summon", meta = (ClampMin = "0"))

@@ -38,25 +38,43 @@ void ABaseCharacter::InitializeAbilitySystem()
 
 void ABaseCharacter::ApplyDefaultStats()
 {
-    if (bDefaultStatsApplied || !HasAuthority() || !ASC || !DefaultStatsEffect)
+    if (bDefaultStatsApplied)
     {
         return;
+    }
+
+    bDefaultStatsApplied = ApplyStatsEffect(DefaultStatsEffect);
+}
+
+bool ABaseCharacter::ApplyStatsEffect(TSubclassOf<UGameplayEffect> StatsEffect)
+{
+    // 지정하지 않으면 이 캐릭터의 기본 스탯 GE로 되돌린다.
+    if (!StatsEffect)
+    {
+        StatsEffect = DefaultStatsEffect;
+    }
+
+    if (!HasAuthority() || !ASC || !StatsEffect)
+    {
+        return false;
     }
 
     FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
     Context.AddSourceObject(this);
 
     const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(
-        DefaultStatsEffect,
+        StatsEffect,
         1.0f,
         Context
     );
 
-    if (Spec.IsValid())
+    if (!Spec.IsValid())
     {
-        ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
-        bDefaultStatsApplied = true;
+        return false;
     }
+
+    ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+    return true;
 }
 
 void ABaseCharacter::BeginPlay()
