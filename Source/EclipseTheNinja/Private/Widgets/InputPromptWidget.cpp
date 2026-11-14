@@ -207,15 +207,8 @@ void UInputPromptWidget::RefreshLabel()
 	KeyText->SetVisibility(bShowIcon ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	if (KeyboardBackground)
 	{
-		if (bShowQTEGlyph && KeyboardBackground->GetBrush().GetResourceObject())
-		{
-			// 어두운 장면에서도 마우스 몸체와 밝은 버튼을 구분할 수 있는 배경을 깐다.
-			KeyboardBackground->SetBrush(FSlateColorBrush(FLinearColor(0.18f, 0.21f, 0.26f, 0.97f)));
-			KeyboardBackground->SetDesiredSizeOverride(FVector2D(88.0f, 88.0f));
-			KeyboardBackground->SetColorAndOpacity(FLinearColor::White);
-		}
-		const bool bHideBackground = bShowIcon && !bShowQTEGlyph;
-		KeyboardBackground->SetVisibility(bHideBackground ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		// 키 이미지(QTE 글리프 포함)를 보여 줄 때는 바탕을 깔지 않아 이미지의 투명 영역이 그대로 비치게 한다.
+		KeyboardBackground->SetVisibility(bShowIcon ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}
 	if (Box && OriginalWidth > 0.0f)
 	{
