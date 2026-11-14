@@ -207,9 +207,14 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
 void UGAWallSlide::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+    // 착지 순간 소리가 툭 끊기지 않게 짧게 페이드아웃한다. 끝나면 컴포넌트는 자동으로 정리된다.
     if (IsValid(SlideAudioComponent))
     {
-        SlideAudioComponent->Stop();
+        SlideAudioComponent->FadeOut(
+            0.12f,
+            0.0f,
+            EAudioFaderCurve::Linear
+        );
     }
     SlideAudioComponent = nullptr;
 
