@@ -182,6 +182,7 @@ void USettingsWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	InputFeedback.Update(this, FocusFeedbackBindings);
+	InputFeedback.UpdateFocusSound(this);
 	for (FName Name : {FName(TEXT("ApplyButtonAcceptIcon")), FName(TEXT("CloseButtonAcceptIcon"))})
 		if (UWidget* Icon = GetWidgetFromName(Name))
 			Icon->SetVisibility(FMenuInputFeedback::IsUsingGamepad() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);

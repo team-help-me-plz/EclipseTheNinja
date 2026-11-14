@@ -4,6 +4,8 @@
 #include "Components/ComboBoxString.h"
 #include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Framework/Application/SlateUser.h"
+#include "Engine/LocalPlayer.h"
 #include "EclipseUISound.h"
 #include "EclipseMenuStyle.h"
 #include "GameFramework/PlayerController.h"
@@ -116,6 +118,39 @@ void FMenuInputFeedback::UpdateButtons(
 	}
 }
 
+void FMenuInputFeedback::UpdateFocusSound(const UUserWidget* Owner, bool bActive)
+{
+	// 이 메뉴 안에서 Slate 포커스를 가진 위젯을 찾는다. 메뉴가 비활성이거나 포커스가 밖(콤보 팝업 등)에 있으면 없음으로 둔다.
+	TSharedPtr<SWidget> FocusedWidget;
+	APlayerController* Player = Owner ? Owner->GetOwningPlayer() : nullptr;
+	const ULocalPlayer* LocalPlayer = Owner ? Owner->GetOwningLocalPlayer() : nullptr;
+
+	if (bActive
+		&& Player
+		&& LocalPlayer
+		&& (Owner->HasUserFocus(Player) || Owner->HasUserFocusedDescendants(Player)))
+	{
+		if (const TSharedPtr<const FSlateUser> SlateUser = LocalPlayer->GetSlateUser())
+		{
+			FocusedWidget = SlateUser->GetFocusedWidget();
+		}
+	}
+
+	// 마우스 호버는 버튼 스타일 사운드가 맡는다. 키보드·게임패드로 다른 위젯에 포커스를 옮긴 경우만 여기서 재생한다.
+	// 메뉴가 처음 열리거나 다시 활성화되며 기본 포커스를 받을 때는 이전 포커스가 없으므로 소리를 내지 않는다.
+	const TSharedPtr<SWidget> LastWidget = LastFocusedWidget.Pin();
+	const bool bMovedFocus = FocusedWidget.IsValid()
+		&& LastWidget.IsValid()
+		&& LastWidget != FocusedWidget;
+
+	if (bMovedFocus && !MenuFeedback::bPointer)
+	{
+		EclipseUISound::PlayHoverSound(Owner);
+	}
+
+	LastFocusedWidget = FocusedWidget;
+}
+
 void FMenuInputFeedback::ApplyButtonStyle(
 	UButton& Button,
 	bool bFocused,
@@ -145,8 +180,6 @@ void FMenuInputFeedback::ApplyButtonStyle(
 
 void FMenuInputFeedback::Update(UUserWidget* Owner, const TArray<FMenuFocusFeedbackBinding>& Bindings, bool bActive)
 {
-	UWidget* FocusedControl = nullptr;
-
 	for (const FMenuFocusFeedbackBinding& Binding : Bindings)
 	{
 		UWidget* Control = Owner->GetWidgetFromName(Binding.ControlName);
@@ -154,10 +187,6 @@ void FMenuInputFeedback::Update(UUserWidget* Owner, const TArray<FMenuFocusFeedb
 		const bool bFocused = bActive && Control && Control->GetIsEnabled() && Control->IsVisible()
 			&& ((Combo && Combo->IsOpen()) || (MenuFeedback::bPointer ? Control->IsHovered()
 				: (Control->HasUserFocus(Owner->GetOwningPlayer()) || Control->HasUserFocusedDescendants(Owner->GetOwningPlayer()))));
-		if (bFocused && !FocusedControl)
-		{
-			FocusedControl = Control;
-		}
 		if (UButton* Button = Cast<UButton>(Control))
 		{
 			// 바인딩 메뉴(설정)는 WBP 하이라이트가 포커스를 보여 주므로 전용 색은 쓰지 않는다.
@@ -169,17 +198,6 @@ void FMenuInputFeedback::Update(UUserWidget* Owner, const TArray<FMenuFocusFeedb
 			Icon->SetVisibility(bFocused && MenuFeedback::bGamepad ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 
-	// 마우스 호버는 버튼 스타일 사운드가 맡는다. 키보드·게임패드로 포커스를 옮긴 경우만 여기서 재생한다
-	// (메뉴가 처음 열리며 기본 포커스를 받을 때는 이전 포커스가 없으므로 소리를 내지 않는다)
-	const bool bMovedFocus = FocusedControl
-		&& LastFocusedControl.IsValid()
-		&& LastFocusedControl.Get() != FocusedControl;
-
-	if (bMovedFocus && !MenuFeedback::bPointer)
-	{
-		EclipseUISound::PlayHoverSound(Owner);
-	}
-	LastFocusedControl = FocusedControl;
 	if (UWidget* Hints = Owner->GetWidgetFromName(TEXT("GamepadHints")))
 		Hints->SetVisibility(bActive && MenuFeedback::bGamepad ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	if (UWidget* Hints = Owner->GetWidgetFromName(TEXT("KeyboardHints")))

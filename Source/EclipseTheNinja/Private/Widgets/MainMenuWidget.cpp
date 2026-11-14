@@ -161,6 +161,9 @@ void UMainMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	};
 	const bool bMenuActive = !(SettingsWidget && SettingsWidget->IsInViewport());
 	InputFeedback.UpdateButtons(this, MenuButtons, bMenuActive);
+
+	// 게임패드·키보드로 버튼 사이를 옮기면 호버 사운드를 낸다. 설정 창이 열려 있는 동안은 설정 창이 맡는다.
+	InputFeedback.UpdateFocusSound(this, bMenuActive);
 }
 
 void UMainMenuWidget::FocusMenuButton(UButton* Button)

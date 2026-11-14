@@ -8,6 +8,7 @@ class UUserWidget;
 class UButton;
 class UWidget;
 class IInputProcessor;
+class SWidget;
 
 /** Designer-owned visuals associated with one focusable menu control. */
 USTRUCT(BlueprintType)
@@ -39,6 +40,9 @@ public:
 		bool bActive = true,
 		const FSlateBrush* FocusBrush = nullptr
 	);
+
+	/** 키보드·게임패드로 Owner 안의 포커스가 다른 위젯으로 옮겨 가면 Owner의 호버 사운드를 재생한다. 매 Tick 호출한다. */
+	void UpdateFocusSound(const UUserWidget* Owner, bool bActive = true);
 private:
 	// 포커스 여부에 맞춰 버튼 스타일을 원래 스타일 기준으로 다시 입힌다. bUseFocusColor면 게임패드 포커스에 전용 색.
 	void ApplyButtonStyle(
@@ -51,6 +55,6 @@ private:
 	TSharedPtr<IInputProcessor> InputProcessor;
 	TMap<TWeakObjectPtr<UButton>, FButtonStyle> ButtonStyles;
 
-	// 직전 Update에서 포커스된 컨트롤. 키보드·게임패드로 다른 컨트롤로 옮겨 가면 호버 사운드를 낸다
-	TWeakObjectPtr<UWidget> LastFocusedControl;
+	/** 직전 UpdateFocusSound에서 포커스를 가진 Slate 위젯. 바인딩에 없는 버튼·슬라이더·목록 항목도 추적한다. */
+	TWeakPtr<SWidget> LastFocusedWidget;
 };
