@@ -98,7 +98,47 @@ protected:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Crouch")
 	bool bIsCrouching = false;
 
+	/** 앉은 채 착지할 때 재생할 클립. Crouch Land 상태의 Sequence Evaluator가 쓴다 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crouch Fall")
+	TObjectPtr<UAnimSequence> CrouchLandAnimation;
+
+	/** 앉은 착지 재생 시작 프레임. 끝 프레임보다 크면 역재생한다 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crouch Fall", meta = (ClampMin = "0"))
+	int32 CrouchLandStartFrame = 24;
+
+	/** 앉은 착지 재생 끝 프레임 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crouch Fall", meta = (ClampMin = "0"))
+	int32 CrouchLandEndFrame = 14;
+
+	/** 앉은 착지 재생 속도 배율 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crouch Fall", meta = (ClampMin = "0.1"))
+	float CrouchLandPlayRate = 1.0f;
+
+	/** 앉은 채 모서리에서 떨어지는 중인지. Fall Loop 상태에서 앉은 낙하 클립을 고르는 데 쓴다 */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Crouch Fall")
+	bool bIsCrouchFalling = false;
+
+	/** 앉은 착지 클립을 재생 중인지. Crouch Land 상태로 들어가고 나오는 전환 조건이다 */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Crouch Fall")
+	bool bIsCrouchLanding = false;
+
+	/** Crouch Land 상태의 Sequence Evaluator에 넣는 재생 위치(초) */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Crouch Fall")
+	float CrouchLandExplicitTime = 0.0f;
+
 private:
+	/** 앉은 낙하 여부와 앉은 착지 재생 위치를 갱신한다 */
+	void UpdateCrouchLanding(const APlayerCharacter& Character, float DeltaSeconds);
+
+	/** 앉은 착지 클립의 프레임 번호를 초로 바꾼다 */
+	float GetCrouchLandFrameTime(int32 Frame) const;
+
+	/** 앉은 착지를 시작한 뒤 지난 시간(초) */
+	float CrouchLandElapsed = 0.0f;
+
+	/** 마지막으로 처리한 캐릭터의 앉은 착지 횟수 */
+	int32 LastCrouchLandCount = 0;
+
 	// 캐릭터 머리 상하 각도 계산
 	float CalculateHeadPitch(const APlayerCharacter& Character) const;
 

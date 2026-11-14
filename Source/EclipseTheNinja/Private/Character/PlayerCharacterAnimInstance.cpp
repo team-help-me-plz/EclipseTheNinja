@@ -18,6 +18,15 @@ void UPlayerCharacterAnimInstance::NativeInitializeAnimation()
 
 	HeadLookPitch = 0.0f;
 	HeadLookRotation = FRotator::ZeroRotator;
+
+	// 애님 인스턴스가 다시 만들어져도 지난 앉은 착지를 새 착지로 착각하지 않게 캐릭터의 횟수에 맞춘다.
+	bIsCrouchFalling = false;
+	bIsCrouchLanding = false;
+	LastCrouchLandCount = 0;
+	if (const APlayerCharacter* Character = Cast<APlayerCharacter>(TryGetPawnOwner()))
+	{
+		LastCrouchLandCount = Character->GetCrouchLandCount();
+	}
 }
 
 void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
@@ -37,10 +46,13 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		HeadLookPitch = 0.0f;
 		HeadLookRotation = FRotator::ZeroRotator;
+		bIsCrouchFalling = false;
+		bIsCrouchLanding = false;
 		return;
 	}
 
 	bIsCrouching = Character->bIsCrouched;
+	UpdateCrouchLanding(*Character, DeltaSeconds);
 
 	const UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
 	if (IsValid(ASC))
@@ -70,6 +82,71 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	// 머리 위치 업데이트
 	UpdateHeadRotation(*Character);
 
+}
+
+void UPlayerCharacterAnimInstance::UpdateCrouchLanding(const APlayerCharacter& Character, float DeltaSeconds)
+{
+	const UCharacterMovementComponent* Movement = Character.GetCharacterMovement();
+	const bool bIsFalling = Movement && Movement->IsFalling();
+
+	// 앉은 채 모서리에서 떨어지는 동안 낙하 반복을 앉은 낙하 클립으로 바꾼다.
+	// 공중에서는 캡슐이 일어서 있으므로 bIsCrouching이 아니라 캐릭터의 앉은 낙하 상태를 본다.
+	bIsCrouchFalling = bIsFalling && Character.IsCrouchFalling();
+
+	// 캐릭터가 앉은 착지를 알린 프레임에만 시작한다.
+	// 공중에서 앉기 키를 떼거나 함정으로 안전 지점에 옮겨지면 알리지 않으므로 기존 착지를 쓴다.
+	const int32 CharacterCrouchLandCount = Character.GetCrouchLandCount();
+	if (CharacterCrouchLandCount != LastCrouchLandCount)
+	{
+		LastCrouchLandCount = CharacterCrouchLandCount;
+		if (CrouchLandAnimation)
+		{
+			bIsCrouchLanding = true;
+			CrouchLandElapsed = 0.0f;
+		}
+	}
+
+	if (!bIsCrouchLanding)
+	{
+		return;
+	}
+
+	// 다시 떨어지거나 앉기 키를 떼 일어서면 앉은 착지를 끝낸다.
+	// 착지 직후에는 캡슐이 다음 이동 갱신 때 앉으므로 bIsCrouching으로 끊지 않는다.
+	if (bIsFalling || !Character.IsCrouchInputHeld() || !CrouchLandAnimation)
+	{
+		bIsCrouchLanding = false;
+		return;
+	}
+
+	// 시작 프레임에서 끝 프레임까지 재생 위치를 직접 옮긴다. 끝이 시작보다 앞이면 역재생이 된다.
+	const float StartTime = GetCrouchLandFrameTime(CrouchLandStartFrame);
+	const float EndTime = GetCrouchLandFrameTime(CrouchLandEndFrame);
+	const float Duration = FMath::Abs(EndTime - StartTime) / FMath::Max(0.1f, CrouchLandPlayRate);
+
+	CrouchLandElapsed += DeltaSeconds;
+	const float Alpha = Duration > KINDA_SMALL_NUMBER
+		? FMath::Clamp(CrouchLandElapsed / Duration, 0.0f, 1.0f)
+		: 1.0f;
+	CrouchLandExplicitTime = FMath::Lerp(StartTime, EndTime, Alpha);
+
+	if (Alpha >= 1.0f)
+	{
+		bIsCrouchLanding = false;
+	}
+}
+
+float UPlayerCharacterAnimInstance::GetCrouchLandFrameTime(int32 Frame) const
+{
+	if (!CrouchLandAnimation)
+	{
+		return 0.0f;
+	}
+
+	const FFrameRate FrameRate = CrouchLandAnimation->GetSamplingFrameRate();
+	const float Time = static_cast<float>(FrameRate.AsSeconds(FFrameTime(Frame)));
+
+	return FMath::Clamp(Time, 0.0f, CrouchLandAnimation->GetPlayLength());
 }
 
 void UPlayerCharacterAnimInstance::NativeUninitializeAnimation()
