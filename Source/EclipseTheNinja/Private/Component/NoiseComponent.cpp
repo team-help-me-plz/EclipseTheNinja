@@ -5,6 +5,7 @@
 #include "Noise/NoiseTypes.h"
 #include "Subsystem/NoiseSubsystem.h"
 
+#include "Character/PlayerCharacter.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -62,6 +63,14 @@ void UNoiseComponent::HandleLanded(const FHitResult& Hit)
 	{
 		return;
 	}
+
+	// 앉은 상태로 착지하거나, 앉은 채 떨어지다(공중에서는 일어선 캡슐) 착지한 경우에는 소음을 내지 않는다.
+	const APlayerCharacter* Player = Cast<APlayerCharacter>(Character);
+	if (Character->bIsCrouched || (Player && Player->IsCrouchFalling()))
+	{
+		return;
+	}
+
 	EmitNoise(ENoiseType::Land);
 }
 

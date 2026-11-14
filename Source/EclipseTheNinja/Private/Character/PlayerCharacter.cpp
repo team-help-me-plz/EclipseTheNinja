@@ -108,6 +108,9 @@ APlayerCharacter::APlayerCharacter()
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->MaxWalkSpeedCrouched = 250.0f;
 
+	// 앉은 상태에서도 모서리 밖으로 걸어 나가 떨어지도록 허용한다. 기본값은 막혀 있어 제자리에서 걷기만 한다.
+	GetCharacterMovement()->bCanWalkOffLedgesWhenCrouching = true;
+
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 750.0f, 0.0f);
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 
@@ -653,8 +656,22 @@ void APlayerCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Othe
 
 void APlayerCharacter::Landed(const FHitResult& Hit)
 {
+	// NoiseComponent가 Super::Landed 안에서 착지 소음을 판단하므로 앉은 낙하 표시는 그 뒤에 끈다.
 	Super::Landed(Hit);
-	PlayActionSound(EPlayerActionSound::Land, 0.75f);
+
+	// 앉은 채 떨어져 착지하면 착지음을 내지 않는다.
+	const bool bCrouchLanding = bCrouchFalling && bCrouchInputHeld && !IsWallAttached();
+	if (!bIsCrouched && !bCrouchLanding)
+	{
+		PlayActionSound(EPlayerActionSound::Land, 0.75f);
+	}
+
+	if (bCrouchLanding)
+	{
+		++CrouchLandCount;
+	}
+
+	EndCrouchFall();
 	bCanCoyoteJump = false;
 
 	// 공중에서 앉기 키를 누르고 있었다면 착지하면서 앉는다.
@@ -674,7 +691,46 @@ void APlayerCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uin
 		// save the game time when we started falling, so we can check it later for coyote time jumps
 		LastFallTime = GetWorld()->GetTimeSeconds();
 		bCanCoyoteJump = PrevMovementMode == MOVE_Walking && JumpCurrentCount == 0 && !bPressedJump;
+
+		if (PrevMovementMode == MOVE_Walking && bIsCrouched && bCrouchInputHeld && !bSuppressCrouchFall)
+		{
+			BeginCrouchFall();
+		}
 	}
+	else if (GetCharacterMovement()->MovementMode != EMovementMode::MOVE_Walking)
+	{
+		// 벽 붙기 등 다른 이동으로 넘어가면 앉은 낙하를 끝낸다. 걷기 전환은 Landed가 먼저 처리한다.
+		EndCrouchFall();
+	}
+}
+
+void APlayerCharacter::BeginCrouchFall()
+{
+	bCrouchFalling = true;
+
+	// 공중에서도 앉아서 걷는 속도로 움직인다. 낙하 중 최대 속도는 MaxWalkSpeed를 따르므로 잠시 바꿨다가 끝날 때 되돌린다.
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	CrouchFallSavedMaxWalkSpeed = Movement->MaxWalkSpeed;
+	Movement->MaxWalkSpeed = Movement->MaxWalkSpeedCrouched;
+
+	// 발 위치를 유지한 채 일어선 캡슐로 떨어진다.
+	// 앉은 캡슐로 떨어지면 카메라 기준이 낮아져 선 키 높이의 낙하 포즈가 화면 위쪽으로 치우친다.
+	// 착지하면 Landed에서 다시 앉는다. 위가 막혀 있으면 앉은 채로 떨어지다가 공간이 생기면 일어선다.
+	Movement->bCrouchMaintainsBaseLocation = true;
+	UnCrouch();
+	Movement->UnCrouch(false);
+	Movement->bCrouchMaintainsBaseLocation = false;
+}
+
+void APlayerCharacter::EndCrouchFall()
+{
+	if (!bCrouchFalling)
+	{
+		return;
+	}
+
+	bCrouchFalling = false;
+	GetCharacterMovement()->MaxWalkSpeed = CrouchFallSavedMaxWalkSpeed;
 }
 
 void APlayerCharacter::PossessedBy(AController* NewController)
@@ -1229,6 +1285,7 @@ void APlayerCharacter::DoCrouch()
 void APlayerCharacter::DoUnCrouch()
 {
 	bCrouchInputHeld = false;
+	EndCrouchFall();
 	UnCrouch();
 }
 
@@ -1372,6 +1429,9 @@ void APlayerCharacter::MultiJump()
 	if (GetWorld()->GetTimeSeconds() - LastFallTime >= MaxCoyoteTime) return;
 
 	bCanCoyoteJump = false;
+
+	// 앉은 채 떨어지다 점프하면 일반 점프로 본다. 앉은 낙하 포즈와 앉은 착지를 쓰지 않는다.
+	EndCrouchFall();
 
 	LaunchCharacter(FVector(0.0f, 0.0f, GetCharacterMovement()->JumpZVelocity), false, true);
 }
@@ -1554,6 +1614,23 @@ void APlayerCharacter::ReturnToSafePoint_Implementation()
 		ETeleportType::TeleportPhysics
 	);
 	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
+
+	// 함정 등으로 옮겨지면 앉은 상태와 앉은 낙하를 끝내고 선 채로 떨어진다.
+	EndCrouchFall();
+	if (bIsCrouched)
+	{
+		UnCrouch();
+		GetCharacterMovement()->UnCrouch(false);
+	}
+
+	// 앉기 키를 계속 누르고 있으면 착지한 뒤 Landed에서 다시 앉는다.
+	// 안전 지점이 바닥에 닿아 있어도 선 채 착지를 거치도록 낙하로 시작한다.
+	// 위가 막혀 앉은 채로 남았더라도 이 낙하를 앉은 낙하로 치지 않는다.
+	if (bCrouchInputHeld)
+	{
+		TGuardValue<bool> SuppressCrouchFallGuard(bSuppressCrouchFall, true);
+		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	}
 }
 
 void APlayerCharacter::PlayInteractMontage_Implementation(AActor* InInteractable, UAnimMontage* InMontage)
