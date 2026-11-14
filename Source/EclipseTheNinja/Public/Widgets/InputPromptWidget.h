@@ -30,6 +30,10 @@ public:
 	static FText ResolveActionLabel(const UObject* WorldContext, APlayerController* Controller,
 		const UInputAction* Action, const UInputMappingContext* MappingContext,
 		const FText& KeyboardFallback, bool bGamepad);
+	static FKey ResolveActionKey(const UObject* WorldContext, APlayerController* Controller,
+		const UInputAction* Action, const UInputMappingContext* MappingContext,
+		const FText& KeyboardFallback, bool bGamepad);
+	static FText FormatKey(const FKey& Key);
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input Prompt")
@@ -53,10 +57,6 @@ protected:
 
 private:
 	void RefreshLabel();
-	static FKey ResolveActionKey(const UObject* WorldContext, APlayerController* Controller,
-		const UInputAction* Action, const UInputMappingContext* MappingContext,
-		const FText& KeyboardFallback, bool bGamepad);
-	static FText FormatKey(const FKey& Key);
 
 	UPROPERTY()
 	TSoftObjectPtr<UInputGlyphSet> GlyphSet{FSoftObjectPath(TEXT("/Game/UI/InputGlyphs/DA_InputGlyphs.DA_InputGlyphs"))};
