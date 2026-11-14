@@ -139,6 +139,13 @@ void UGAThrowKunai::ActivateAbility(
         InitialPlayerCursorLocation = Player->GetCursorWorldLocation();
     }
 
+    // 앉은 상태에서 시작한 투척은 앉은 투척 몽타주를 재생한다.
+    // 몽타주가 지정되지 않았으면 기존 투척 몽타주를 그대로 쓴다.
+    const ACharacter* AvatarCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+    UAnimMontage* MontageToPlay = AvatarCharacter && AvatarCharacter->bIsCrouched && CrouchThrowMontage
+        ? CrouchThrowMontage.Get()
+        : ThrowMontage.Get();
+
     // 몽타주 첫 프레임의 Notify도 놓치지 않기 위해
     // 몽타주 재생 전에 Notify 이벤트 수신 테스크 준비
     UAbilityTask_WaitGameplayEvent* ReleaseTask =
@@ -147,15 +154,15 @@ void UGAThrowKunai::ActivateAbility(
     ReleaseTask->ReadyForActivation();
 
     // 타임아웃을 통해 잘못 연결된 루프 몽타주를 사용해도 State.Attacking 태그가 영원히 남는 버그 방지
-    const float EffectiveRate = FMath::Max(0.01f, PlayRate * ThrowMontage->RateScale);
+    const float EffectiveRate = FMath::Max(0.01f, PlayRate * MontageToPlay->RateScale);
     UAbilityTask_WaitDelay* Timeout = UAbilityTask_WaitDelay::WaitDelay(
-        this, ThrowMontage->GetPlayLength() / EffectiveRate + 1.0f); // 재생 속도도 고려된 전체 재생 시간에서 1초 이후에 발생하도록 함
+        this, MontageToPlay->GetPlayLength() / EffectiveRate + 1.0f); // 재생 속도도 고려된 전체 재생 시간에서 1초 이후에 발생하도록 함
     Timeout->OnFinish.AddDynamic(this, &UGAThrowKunai::OnMontageInterrupted);
     Timeout->ReadyForActivation();
     
     // 몽타주 재생 태스크 준비
     UAbilityTask_PlayMontageAndWait* MontageTask = 
-        UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, ThrowMontage, FMath::Max(0.01f, PlayRate));
+        UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, MontageToPlay, FMath::Max(0.01f, PlayRate));
     MontageTask->OnCompleted.AddDynamic(this, &UGAThrowKunai::OnMontageCompleted);
     MontageTask->OnInterrupted.AddDynamic(this, &UGAThrowKunai::OnMontageInterrupted);
     MontageTask->OnCancelled.AddDynamic(this, &UGAThrowKunai::OnMontageInterrupted);

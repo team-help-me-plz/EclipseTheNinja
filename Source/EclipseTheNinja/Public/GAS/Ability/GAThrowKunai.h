@@ -70,6 +70,13 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Animation")
     TObjectPtr<UAnimMontage> ThrowMontage;
 
+    /**
+    * 앉은 상태에서 투척할 때 재생할 몽타주. Kunai Release Notify가 배치되어 있어야 한다.
+    * 비어 있으면 앉은 상태에서도 ThrowMontage를 재생한다.
+    */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Animation")
+    TObjectPtr<UAnimMontage> CrouchThrowMontage;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|Projectile")
     TSubclassOf<AKunaiProjectile> ProjectileClass;
 
