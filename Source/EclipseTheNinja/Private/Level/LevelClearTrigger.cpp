@@ -30,7 +30,6 @@ ALevelClearTrigger::ALevelClearTrigger()
     this->ClearTrigger->SetBoxExtent(FVector(100.0f, 100.0f, 100.0f));
     this->ClearTrigger->SetRelativeLocation(FVector(0.0f, 0.0f, 100.0f));
     this->ClearTrigger->SetCollisionProfileName(TEXT("Trigger"));
-    this->ClearTrigger->SetHiddenInGame(false);
     this->ClearTrigger->ShapeColor = FColor::Yellow;
 }
 
