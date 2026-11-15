@@ -5,7 +5,9 @@
 #include "Subsystem/UIMessageSubsystem.h"
 
 #include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/PlayerController.h"
 
 AStealthZone::AStealthZone()
@@ -31,6 +33,12 @@ AStealthZone::AStealthZone()
 	this->HidePoint->SetupAttachment(GetRootComponent());
 	this->HidePoint->SetRelativeLocation(FVector(0.f, -150.f, 0.f));
 
+	// 소품은 가림용이라 이동을 막지 않는다
+	this->PropMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PropMesh"));
+	this->PropMesh->SetupAttachment(GetRootComponent());
+	this->PropMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	this->PropMesh->SetCanEverAffectNavigation(false);
+
 	this->InteractHighlight = CreateDefaultSubobject<UInteractHighlightComponent>(TEXT("InteractHighlight"));
 
 	this->InteractKeyWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractKeyWidget"));
@@ -39,6 +47,31 @@ AStealthZone::AStealthZone()
 	this->InteractKeyWidget->SetDrawAtDesiredSize(true);
 	this->InteractKeyWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	this->InteractKeyWidget->SetVisibility(false);
+}
+
+void AStealthZone::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	this->ApplyPropMesh();
+}
+
+void AStealthZone::ApplyPropMesh()
+{
+	if (!IsValid(this->PropMesh))
+	{
+		return;
+	}
+
+	UStaticMesh* Mesh = this->bIndoor
+		? this->IndoorMesh
+		: this->OutdoorMesh;
+	const FVector Offset = this->bIndoor
+		? this->IndoorMeshOffset
+		: this->OutdoorMeshOffset;
+
+	this->PropMesh->SetStaticMesh(Mesh);
+	this->PropMesh->SetRelativeLocation(Offset);
 }
 
 void AStealthZone::BeginPlay()

@@ -9,6 +9,8 @@
 class UBoxComponent;
 class UInteractHighlightComponent;
 class UWidgetComponent;
+class UStaticMeshComponent;
+class UStaticMesh;
 
 /**
  * 플레이어가 상호작용하면 안쪽(-Y)의 은신 지점으로 숨는 구역. 숨는 연출은 플레이어의 HidingComponent가 맡는다.
@@ -38,10 +40,38 @@ public:
 	const FText&	GetCannotExitText() const { return (this->CannotExitText); }
 
 protected:
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
+
+	/** bIndoor에 맞는 은신 소품 메시와 위치를 PropMesh에 적용한다 */
+	void	ApplyPropMesh();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USceneComponent>		RootScene = nullptr;
+
+	/** 은신 구역을 가리는 소품 메시. 메시와 위치는 bIndoor에 따라 정해진다 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UStaticMeshComponent>	PropMesh = nullptr;
+
+	/** 켜면 실내용 소품 메시(IndoorMesh)를, 끄면 실외용 소품 메시(OutdoorMesh)를 쓴다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "StealthZone|Mesh")
+	bool	bIndoor = false;
+
+	/** 실외 은신 구역에 쓰는 소품 메시 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StealthZone|Mesh")
+	TObjectPtr<UStaticMesh>	OutdoorMesh = nullptr;
+
+	/** 실내 은신 구역에 쓰는 소품 메시 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StealthZone|Mesh")
+	TObjectPtr<UStaticMesh>	IndoorMesh = nullptr;
+
+	/** 실외 소품 메시의 상대 위치 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StealthZone|Mesh")
+	FVector	OutdoorMeshOffset = FVector(0.f, -80.f, 0.f);
+
+	/** 실내 소품 메시의 상대 위치 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "StealthZone|Mesh")
+	FVector	IndoorMeshOffset = FVector(0.f, -90.f, 0.f);
 
 	// 플레이어의 상호작용 박스가 겹치는 범위. 바깥 이동 평면부터 은신 지점까지 덮도록 맞춘다
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
