@@ -40,7 +40,7 @@ protected:
 	TObjectPtr<UAbilityCooldownContainerWidget> AbilityCooldownContainerWidget;
 
 	// 컷신 건너뛰기 위젯(WBP_CinematicSkip)
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
 	TObjectPtr<UCinematicSkipWidget> CinematicSkipWidget;
 
 private:
