@@ -11,6 +11,7 @@
 #include "GAS/Ability/GAWallAttach.h"
 #include "GAS/StatAttributeSet.h"
 #include "GameFramework/Character.h"
+#include "Character/BossEnemy.h"
 #include "NativeGameplayTags.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -110,7 +111,8 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
 
     // 스윕에 걸리는게 없으면 (땅이 없으면) 종료
-    FCollisionResponseParams ResponseParams;
+    // 캡슐의 실제 충돌 응답을 써서, 플레이어가 통과하는 몬스터 위에서 멈추지 않게 한다.
+    FCollisionResponseParams ResponseParams(Capsule->GetCollisionResponseToChannels());
     if (!GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, PawnChannel, Shape, Params, ResponseParams))
     {
         OnSlideInterrupted();
@@ -126,16 +128,30 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
     FVector LandLocation = Hit.Location;
 
-    // 밑에 Pawn(적, 분신이 있는 경우) 종료
+    // 밑에 보스가 있으면 종료한다. 플레이어는 보스와만 충돌하므로 분신·일반 몬스터는 막지 않는다.
     FCollisionObjectQueryParams CharacterObjects;
     CharacterObjects.AddObjectTypesToQuery(ECC_Pawn);
     SweepRadius = FMath::Max(1.f, Capsule->GetScaledCapsuleRadius() + 2.f);
     Shape = FCollisionShape::MakeCapsule(SweepRadius, Capsule->GetScaledCapsuleHalfHeight());
 
-    if (GetWorld()->SweepSingleByObjectType(Hit, Start, End, FQuat::Identity, CharacterObjects, Shape, Params))
+    TArray<FHitResult> PawnHits;
+    GetWorld()->SweepMultiByObjectType(
+        PawnHits,
+        Start,
+        End,
+        FQuat::Identity,
+        CharacterObjects,
+        Shape,
+        Params
+    );
+
+    for (const FHitResult& PawnHit : PawnHits)
     {
-        OnSlideInterrupted();
-        return;
+        if (Cast<ABossEnemy>(PawnHit.GetActor()))
+        {
+            OnSlideInterrupted();
+            return;
+        }
     }
 
 
