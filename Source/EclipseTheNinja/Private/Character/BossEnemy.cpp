@@ -344,6 +344,25 @@ float ABossEnemy::GetEnergyLinkTimeRemaining() const
     return FMath::Max(0.0f, GetWorldTimerManager().GetTimerRemaining(EnergyLinkTimer));
 }
 
+void ABossEnemy::SetEnergyLinkTimerPaused(bool bPaused)
+{
+    // 멈춘 타이머도 남은 시간을 그대로 들고 있어 체력바의 남은 시간 표시도 함께 멈춘다
+    FTimerManager& TimerManager = GetWorldTimerManager();
+    if (!TimerManager.TimerExists(EnergyLinkTimer))
+    {
+        return;
+    }
+
+    if (bPaused)
+    {
+        TimerManager.PauseTimer(EnergyLinkTimer);
+    }
+    else
+    {
+        TimerManager.UnPauseTimer(EnergyLinkTimer);
+    }
+}
+
 void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)
 {
     if (HitSound && !bApplyingAssassinationDamage && !bIsDead && !bEnergyLinkActive && !bIsDotDamage && Data.NewValue < Data.OldValue

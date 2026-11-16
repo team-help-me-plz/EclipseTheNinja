@@ -75,6 +75,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Boss|Energy Link")
 	float GetEnergyLinkTimeLimit() const { return EnergyLinkTimeLimit; }
 
+	/** 링크 제한시간을 멈추거나 이어 간다(예: 기믹 방 루트 미리보기 컷신 동안). 링크 타이머가 없으면 아무것도 하지 않는다. */
+	UFUNCTION(BlueprintCallable, Category = "Boss|Energy Link")
+	void SetEnergyLinkTimerPaused(bool bPaused);
+
 	/** 현재 체력 비율(0~1). */
 	UFUNCTION(BlueprintPure, Category = "Boss")
 	float GetHealthRatio() const;
