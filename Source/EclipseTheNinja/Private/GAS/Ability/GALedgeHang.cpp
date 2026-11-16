@@ -25,6 +25,7 @@
 #include "GAS/StatAttributeSet.h"
 #include "NativeGameplayTags.h"
 #include "TimerManager.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHang, "Ability.Movement.LedgeHang");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeHanging, "State.Movement.Wall.LedgeHanging");
@@ -219,7 +220,7 @@ void UGALedgeHang::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	BaseMeshRelativeLocation = (DefaultCharacter && DefaultCharacter->GetMesh()) ? DefaultCharacter->GetMesh()->GetRelativeLocation() : FVector::ZeroVector;
 	DrawDropDebug(Player);
 
-	LoadedDropMontage = DropMontage.LoadSynchronous();
+	LoadedDropMontage = UEclipseAssetManager::GetAsset(DropMontage);
 	if (IsValid(LoadedDropMontage))
 	{
 		UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
@@ -517,7 +518,7 @@ void UGALedgeHang::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 
 bool UGALedgeHang::PlayHoldPose(ACharacter* Player) const
 {
-	UAnimMontage* Montage = HoldMontage.LoadSynchronous();
+	UAnimMontage* Montage = UEclipseAssetManager::GetAsset(HoldMontage);
 	UAnimInstance* AnimInstance = Player->GetMesh() ? Player->GetMesh()->GetAnimInstance() : nullptr;
 	if (!IsValid(Montage) || !AnimInstance) return false;
 
@@ -552,7 +553,7 @@ float UGALedgeHang::ResolveHangDepth(float CapsuleHalfHeight) const
 	if (bHangDepthFromMontage)
 	{
 		// 아래로 내려가는 구간은 마지막 구간이다 (두 구간이면 앞 구간은 모서리까지 물러나기)
-		const float Drop = FMath::Abs(GetMontageRootMotion(DropMontage.LoadSynchronous(), INDEX_NONE).Z);
+		const float Drop = FMath::Abs(GetMontageRootMotion(UEclipseAssetManager::GetAsset(DropMontage), INDEX_NONE).Z);
 		if (Drop > 1.0f)
 		{
 			// 매달리기 판정의 머리 높이 트레이스가 벽에 닿을 만큼은 내려가야 한다
@@ -689,7 +690,7 @@ bool UGALedgeHang::FindLedgeInDirection(const ACharacter* Player, float OutDir, 
 
 bool UGALedgeHang::GetDropEndHandOffset(const ACharacter* Player, float OutDir, FVector& OutOffset) const
 {
-	const UAnimMontage* Montage = DropMontage.LoadSynchronous();
+	const UAnimMontage* Montage = UEclipseAssetManager::GetAsset(DropMontage);
 	if (!IsValid(Montage) || Montage->SlotAnimTracks.Num() == 0 || HandBoneNames.Num() == 0) return false;
 	const TArray<FAnimSegment>& Segments = Montage->SlotAnimTracks[0].AnimTrack.AnimSegments;
 	if (Segments.Num() == 0) return false;

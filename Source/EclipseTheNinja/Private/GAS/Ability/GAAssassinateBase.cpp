@@ -31,6 +31,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Assassinating, "State.Assassinating");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_AssassinateImpact, "Event.Assassinate.Impact");
@@ -156,14 +157,14 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	if (!IsValid(Enemy)) { OnInterrupted(); return; }
 
 	// 암살 모션과, 암살 피격 모션 동적으로 로딩
-	ExecutionMontage = ResolveAttackMontage(Enemy).LoadSynchronous();
-	VictimExecutionMontage = VictimMontage.LoadSynchronous();
+	ExecutionMontage = UEclipseAssetManager::GetAsset(ResolveAttackMontage(Enemy));
+	VictimExecutionMontage = UEclipseAssetManager::GetAsset(VictimMontage);
 
 	// 임팩트 프레임에서 에셋을 읽느라 연출이 멈추지 않도록 미리 준비한다.
 	LoadedImpactVFX = nullptr;
 	if (bUseImpactVFX)
 	{
-		LoadedImpactVFX = ImpactVFX.LoadSynchronous();
+		LoadedImpactVFX = UEclipseAssetManager::GetAsset(ImpactVFX);
 	}
 	
 	if (!IsValid(ExecutionMontage) || !IsValid(VictimExecutionMontage))

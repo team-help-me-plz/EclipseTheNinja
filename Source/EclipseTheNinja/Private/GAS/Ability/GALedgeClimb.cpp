@@ -21,6 +21,7 @@
 #include "GAS/Ability/GAWallAttach.h"
 #include "GAS/StatAttributeSet.h"
 #include "NativeGameplayTags.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeClimb, "Ability.Movement.LedgeClimb");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_LedgeClimbing, "State.Movement.Wall.Climbing");
@@ -108,7 +109,7 @@ void UGALedgeClimb::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 	Player->SetAssassinationFacing(Facing > 0.f ? 0.f : 180.f);
 
 	// 몽타주 재생
-	LoadedClimbMontage = ClimbMontage.LoadSynchronous();
+	LoadedClimbMontage = UEclipseAssetManager::GetAsset(ClimbMontage);
 	if (IsValid(LoadedClimbMontage))
 	{
 		UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
