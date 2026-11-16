@@ -243,6 +243,12 @@ void APlayerCharacter::PlayActionSound(EPlayerActionSound Action, float Volume) 
 	}
 }
 
+USoundBase* APlayerCharacter::GetActionSound(EPlayerActionSound Action) const
+{
+	const TObjectPtr<USoundBase>* Sound = ActionSounds.Find(Action);
+	return Sound ? Sound->Get() : nullptr;
+}
+
 void APlayerCharacter::PlaySwordAttackSound(int32 ComboIndex, bool bFire) const
 {
 	const auto& Sounds = bFire ? FireAttackSounds : SwordAttackSounds;

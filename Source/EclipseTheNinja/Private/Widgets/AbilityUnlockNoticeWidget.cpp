@@ -99,6 +99,8 @@ FReply UAbilityUnlockNoticeWidget::NativeOnKeyDown(const FGeometry& InGeometry, 
 {
 	if (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::Gamepad_FaceButton_Right)
 	{
+		// 버튼을 거치지 않고 닫으므로 선택 사운드를 직접 재생한다
+		EclipseUISound::PlaySelectSound(this);
 		CloseNotice();
 		return FReply::Handled();
 	}

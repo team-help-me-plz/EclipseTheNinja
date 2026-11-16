@@ -77,6 +77,9 @@ public:
 
 	inline TSubclassOf<UGameplayEffect>	GetFireBurnEffectClass() const { return (this->FireBurnEffectClass); }
 
+	// 불을 붙일 때 재생하는 사운드 (능력 픽업 획득 사운드로도 쓴다)
+	inline USoundBase*	GetFireImbueSound() const { return (this->FireImbueSound); }
+
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif

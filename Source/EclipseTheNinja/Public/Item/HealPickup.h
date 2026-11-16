@@ -12,6 +12,7 @@ class UNiagaraComponent;
 class UNiagaraSystem;
 class UGameplayEffect;
 class APlayerCharacter;
+class USoundBase;
 
 /** 회복 아이템의 연출 단계 */
 UENUM(BlueprintType)
@@ -196,6 +197,10 @@ protected:
 	/** 회복 완료 이펙트 위치. 플레이어 캡슐 중심 기준 오프셋 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HealPickup|Effects")
 	FVector HealCompleteEffectOffset = FVector::ZeroVector;
+
+	/** 흡수 완료 후 체력이 회복될 때 플레이어 위치에서 재생할 사운드 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HealPickup|Effects")
+	TObjectPtr<USoundBase> HealCompleteSound;
 
 private:
 	UPROPERTY(VisibleInstanceOnly, Transient, Category = "HealPickup")

@@ -447,6 +447,12 @@ void UGACloneTech::OnRecallClone()
 	// 분신이 존재하면 Release 시키기
 	if (this->SpawnedClone.IsValid())
 	{
+		// 실제로 회수할 분신이 있을 때만 회수 사운드를 낸다
+		if (const APlayerCharacter* Player = Cast<APlayerCharacter>(GetAvatarActorFromActorInfo()))
+		{
+			Player->PlayActionSound(EPlayerActionSound::CloneRecall);
+		}
+
 		UObjectPoolSubsystem::Release(this->SpawnedClone.Get());
 	}
 }

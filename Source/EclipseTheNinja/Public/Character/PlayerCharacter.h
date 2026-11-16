@@ -32,7 +32,9 @@ struct FInputActionValue;
 UENUM()
 enum class EPlayerActionSound : uint8
 {
-	Kunai, SwiftStrike, Parry, Clone, BelowAssassination, Jump, Land, Hit, AssassinationStab, ParrySuccess, LedgeClimb
+	Kunai, SwiftStrike, Parry, Clone, BelowAssassination, Jump, Land, Hit, AssassinationStab, ParrySuccess, LedgeClimb,
+	// 분신 회수
+	CloneRecall
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlayerConditionChanged, EPlayerCondition);
@@ -231,6 +233,8 @@ protected:
 
 public:
 	void PlayActionSound(EPlayerActionSound Action, float Volume = 1.0f) const;
+	// ActionSounds에 지정한 사운드를 돌려준다. 없으면 nullptr
+	USoundBase* GetActionSound(EPlayerActionSound Action) const;
 	void PlaySwordAttackSound(int32 ComboIndex, bool bFire) const;
 	void PlayAssassinationWithdrawalSound() const;
 
