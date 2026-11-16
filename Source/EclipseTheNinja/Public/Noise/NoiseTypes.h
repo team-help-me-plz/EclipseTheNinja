@@ -18,6 +18,8 @@ enum class ENoiseType : uint8
 	Kunai,
 	Wallstep,
 	WallJump,
+	/** 떨어지는 물체(AFallingObject)가 바닥에 완전히 떨어졌을 때 */
+	FallingObjectLand,
 };
 
 /** 소음 데이터 테이블(DT_Noise)의 행. 행 이름은 ENoiseType의 이름(Footstep, Land...)과 같아야 한다. */

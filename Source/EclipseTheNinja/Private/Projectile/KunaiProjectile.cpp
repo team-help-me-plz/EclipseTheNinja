@@ -449,7 +449,7 @@ void AKunaiProjectile::OnProjectileHit(
         if (IsValid(Rope))
         {
             UNoiseSubsystem::MakeSomeNoise(this, ENoiseType::Kunai, Hit.ImpactPoint, GetInstigator());
-            Rope->CutRope();
+            Rope->CutRope(GetInstigator());
             GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
             {
                 // 이번 Hit 처리가 끝난 다음 비행을 복구한다. 피해 정보와 남은 수명은 유지한다.

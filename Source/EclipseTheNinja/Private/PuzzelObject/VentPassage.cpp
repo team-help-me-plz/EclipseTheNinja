@@ -5,6 +5,9 @@
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/AnimSingleNodeInstance.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -26,6 +29,13 @@ AVentPassage::AVentPassage()
 
 	this->MeshAssembly = CreateDefaultSubobject<UChildActorComponent>(TEXT("MeshAssembly"));
 	this->MeshAssembly->SetupAttachment(GetRootComponent());
+
+	// 덮개는 보이기만 한다. 충돌은 MeshAssembly의 CollisionProxy가 맡는다
+	this->GrateMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("GrateMesh"));
+	this->GrateMesh->SetupAttachment(GetRootComponent());
+	this->GrateMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	this->GrateMesh->SetGenerateOverlapEvents(false);
+	this->GrateMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 
 	this->EntryPoint = CreateDefaultSubobject<USceneComponent>(TEXT("EntryPoint"));
 	this->EntryPoint->SetupAttachment(GetRootComponent());
@@ -50,6 +60,28 @@ void AVentPassage::BeginPlay()
 		this->InteractHighlight->SetKeyWidget(this->InteractKeyWidget);
 	}
 	this->RefreshInteractState();
+}
+
+void AVentPassage::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	if (!IsValid(this->GrateMesh) || !this->GrateMesh->GetSkeletalMeshAsset() || !IsValid(this->MeshAssembly))
+	{
+		return ;
+	}
+	AActor*	Assembly = this->MeshAssembly->GetChildActor();
+	if (!Assembly)
+	{
+		return ;
+	}
+	// 같은 모양이 두 번 그려지지 않도록 MeshAssembly의 스태틱 메시만 숨긴다. 충돌 설정은 건드리지 않는다
+	TArray<UStaticMeshComponent*>	StaticMeshes;
+	Assembly->GetComponents<UStaticMeshComponent>(StaticMeshes);
+	for (UStaticMeshComponent* StaticMesh : StaticMeshes)
+	{
+		StaticMesh->SetVisibility(false);
+	}
 }
 
 // Called every frame
@@ -95,6 +127,7 @@ void AVentPassage::Interact_Implementation(AActor* InActor)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, this->EnterSound, GetActorLocation());
 	}
+	this->OpenGrate();
 
 	UAnimInstance* AnimInstance = TargetCharacter->GetMesh() ? TargetCharacter->GetMesh()->GetAnimInstance() : nullptr;
 	if (AnimInstance && this->EnterMontage && AnimInstance->Montage_Play(this->EnterMontage) > 0.f)
@@ -202,6 +235,7 @@ void AVentPassage::OutVent(ACharacter* InCharacter)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, this->ExitSound, GetActorLocation());
 	}
+	this->OpenGrate();
 
 	UAnimInstance* AnimInstance = InCharacter->GetMesh() ? InCharacter->GetMesh()->GetAnimInstance() : nullptr;
 	if (AnimInstance && this->EnterMontage
@@ -262,6 +296,63 @@ void AVentPassage::OnExitMontageEnded(UAnimMontage* InMontage, bool bInterrupted
 	{
 		UnlockTraveler(Character);
 	}
+}
+
+void AVentPassage::OpenGrate()
+{
+	if (!IsValid(this->GrateMesh) || !this->GrateOpenAnim || !this->GrateMesh->GetSkeletalMeshAsset())
+	{
+		return ;
+	}
+	GetWorldTimerManager().ClearTimer(this->GrateCloseTimer);
+
+	const float	Length = this->GrateOpenAnim->GetPlayLength();
+	// 닫히는 중이면 처음으로 튀지 않게 지금 각도에서 다시 연다
+	const float	StartPosition = this->GetGrateAnimPosition();
+	if (StartPosition <= 0.f)
+	{
+		this->GrateMesh->PlayAnimation(this->GrateOpenAnim, false);
+	}
+	UAnimSingleNodeInstance*	Instance = this->GrateMesh->GetSingleNodeInstance();
+	if (!Instance)
+	{
+		return ;
+	}
+	Instance->SetPlayRate(this->GrateOpenPlayRate);
+	Instance->SetPosition(StartPosition, false);
+	Instance->SetPlaying(true);
+
+	const float	OpenRemain = (Length - StartPosition) / FMath::Max(this->GrateOpenPlayRate, KINDA_SMALL_NUMBER);
+	const float	Delay = OpenRemain + this->GrateHoldTime;
+	if (Delay <= 0.f)
+	{
+		this->CloseGrate();
+		return ;
+	}
+	GetWorldTimerManager().SetTimer(this->GrateCloseTimer, this, &AVentPassage::CloseGrate, Delay, false);
+}
+
+void AVentPassage::CloseGrate()
+{
+	UAnimSingleNodeInstance*	Instance = IsValid(this->GrateMesh) ? this->GrateMesh->GetSingleNodeInstance() : nullptr;
+	if (!Instance || !this->GrateOpenAnim || Instance->GetAnimationAsset() != this->GrateOpenAnim)
+	{
+		return ;
+	}
+	// 끝 프레임에서 음수 속도로 재생하면 0초에서 멈춘다(반복 재생 아님)
+	Instance->SetPosition(FMath::Min(Instance->GetCurrentTime(), this->GrateOpenAnim->GetPlayLength()), false);
+	Instance->SetPlayRate(-this->GrateClosePlayRate);
+	Instance->SetPlaying(true);
+}
+
+float AVentPassage::GetGrateAnimPosition() const
+{
+	const UAnimSingleNodeInstance*	Instance = IsValid(this->GrateMesh) ? this->GrateMesh->GetSingleNodeInstance() : nullptr;
+	if (!Instance || !this->GrateOpenAnim || Instance->GetAnimationAsset() != this->GrateOpenAnim)
+	{
+		return (0.f);
+	}
+	return (Instance->GetCurrentTime());
 }
 
 void AVentPassage::LockTraveler(ACharacter* InCharacter)
