@@ -13,6 +13,7 @@ class UArrowComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
 class UMaterialInterface;
+class UMaterialInstanceDynamic;
 class USoundBase;
 
 /**
@@ -46,6 +47,7 @@ protected:
     virtual void OnConstruction(const FTransform& Transform) override;
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void Tick(float DeltaSeconds) override;
 
     UFUNCTION()
     void OnTriggerBeginOverlap(
@@ -72,15 +74,33 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UPointLightComponent> LampLight = nullptr;
 
+    // 에디터에서 보이는 가로등 머티리얼
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Checkpoint|Lamp")
     TObjectPtr<UMaterialInterface> LampOffMaterial = nullptr;
 
+    // 게임 중 가로등 머티리얼. 이 머티리얼로 동적 인스턴스를 만들어 발광 세기를 연출에 맞춰 바꾼다 (평소 0)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Checkpoint|Lamp")
     TObjectPtr<UMaterialInterface> LampOnMaterial = nullptr;
 
-    // 플레이어가 닿아 이 체크포인트로 갱신될 때 재생할 사운드. 레벨 시작 자동 활성화와 이어하기 복원 때는 재생하지 않는다
+    // 가로등 머티리얼의 발광 세기 스칼라 파라미터 이름
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Checkpoint|Lamp")
+    FName EmissiveParameterName = TEXT("Emissive Strength");
+
+    // 플레이어가 닿을 때마다 재생할 사운드(현재 체크포인트에 다시 닿을 때 포함). 밝기 연출 한 사이클 동안의 중복 접촉, 레벨 시작 자동 활성화, 이어하기 복원 때는 재생하지 않는다
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Checkpoint|Sound")
     TObjectPtr<USoundBase> ActivateSound = nullptr;
+
+    // 플레이어가 닿아 갱신될 때 가로등 빛이 0에서 밝아졌다 다시 0으로 어두워지는 데 걸리는 시간(초). 0이면 연출하지 않는다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint|Lamp", meta = (ClampMin = "0.0", Units = "s"))
+    float FlashDuration = 0.8f;
+
+    // 연출 중 가로등 빛의 최대 밝기(루멘). 평소 밝기는 0이다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint|Lamp", meta = (ClampMin = "0.0", Units = "lm"))
+    float FlashPeakIntensity = 4000.0f;
+
+    // 연출 중 가로등 메시의 최대 발광 세기(EmissiveParameterName 값). 평소 발광 세기는 0이다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Checkpoint|Lamp", meta = (ClampMin = "0.0"))
+    float FlashPeakEmissive = 20.0f;
 
     UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category = "Checkpoint")
     bool bCheckpointActive = false;
@@ -101,4 +121,18 @@ private:
     bool bRegisteredAfterSequence = false;
     void TryActivateForPawn(const APawn* Pawn);
     void ApplyLampState();
+
+    // 가로등 밝기 연출을 시작/중단한다. 중단하면 평소 밝기로 되돌린다
+    void StartLampFlash();
+    void StopLampFlash();
+
+    // 빛 밝기와 메시 발광 세기를 함께 맞춘다. Weight는 0(평소) ~ 1(최대)
+    void SetLampFlashWeight(float Weight);
+
+    // 게임 중 가로등 메시의 동적 머티리얼 인스턴스
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> LampMID = nullptr;
+
+    float FlashElapsed = 0.0f;
+    bool bFlashing = false;
 };

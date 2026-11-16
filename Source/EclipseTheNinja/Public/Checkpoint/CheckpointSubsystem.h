@@ -46,6 +46,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Checkpoint")
     void ActivateCheckpoint(ECheckpointId NewCheckpointId);
 
+    // 현재 체크포인트에 다시 닿았을 때 체력·진행 상황을 다시 저장한다. 갱신 방송과 가로등 갱신은 하지 않는다
+    void ResaveCurrentCheckpoint();
+
     // 현재 체크포인트 구간의 오브젝트들을 리셋한 뒤, 플레이어를 체크포인트로 이동시키는 함수
     UFUNCTION(BlueprintCallable, Category = "Checkpoint")
     void RespawnAtCheckpoint(APawn* PlayerPawn);
