@@ -22,6 +22,7 @@ class UAssassinateTargetComponent;
 class UAssassinationDropComponent;
 class USphereComponent;
 class UMovementLoopSoundComponent;
+class UFootstepSoundComponent;
 class UEnemyFloorActivationComponent;
 struct FOnAttributeChangeData;
 struct FGameplayEffectContextHandle;
@@ -438,6 +439,10 @@ protected:
 	// 땅 위를 걷는 동안 발소리 루프를 재생한다. 보스처럼 애니메이션 노티파이로 발소리를 내는 적은 사운드를 비운다
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UMovementLoopSoundComponent> WalkSoundComp;
+
+	// 땅 위를 일정 거리 걸을 때마다 발소리 한 번을 낸다. 보스처럼 노티파이로 발소리를 내는 적은 사운드를 비운다
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UFootstepSoundComponent> FootstepSoundComp;
 
 	// 플레이어와 먼 층에 있으면 틱·애니메이션·AI·감지를 멈춘다. 레벨에 층 볼륨이 없으면 아무 일도 하지 않는다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

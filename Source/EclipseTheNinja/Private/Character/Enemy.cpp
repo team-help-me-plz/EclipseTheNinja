@@ -39,6 +39,7 @@
 #include "Util/NiagaraWarmup.h"
 #include "Component/EnemySpacingComponent.h"
 #include "Component/MovementLoopSoundComponent.h"
+#include "Component/FootstepSoundComponent.h"
 #include "Component/EnemyFloorActivationComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
@@ -81,9 +82,13 @@ AEnemy::AEnemy()
 	// 시체가 사라질 때까지 기다리지 않고 암살 시작 4초 뒤에 떨어뜨린다.
 	AssassinationDropComp->SetDropDelay(true, 4.0f);
 
-	// 몬스터 걷기 발소리. 지금은 기본 사운드를 비워 꺼 둔다.
+	// 몬스터 걷기 발소리 루프. 지금은 FootstepSoundComp의 걸음 발소리를 쓰므로 기본 사운드를 비워 꺼 둔다.
 	// 다시 켜려면 BP의 WalkSoundComp에서 Loop Sound를 지정한다 (예: /Game/Audio/SW_Enemy_Walk_Loop)
 	WalkSoundComp = CreateDefaultSubobject<UMovementLoopSoundComponent>(TEXT("WalkSoundComp"));
+
+	// 몬스터 걸음 발소리. 이동 거리마다 한 번 낸다.
+	// 사운드와 감쇠 설정은 BP의 FootstepSoundComp에서 지정한다 (비우면 소리를 내지 않는다)
+	FootstepSoundComp = CreateDefaultSubobject<UFootstepSoundComponent>(TEXT("FootstepSoundComp"));
 
 	NoiseDetectComponent = CreateDefaultSubobject<USphereComponent>(TEXT("NoiseDetectComponent"));
 	NoiseDetectComponent->SetupAttachment(RootComponent);

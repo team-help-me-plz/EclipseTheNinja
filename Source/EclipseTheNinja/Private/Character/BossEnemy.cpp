@@ -12,6 +12,7 @@
 #include "Component/EnemyDetectionComponent.h"
 #include "Component/EnemySpacingComponent.h"
 #include "Component/MovementLoopSoundComponent.h"
+#include "Component/FootstepSoundComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -53,6 +54,7 @@ ABossEnemy::ABossEnemy()
 
     // 보스 발소리는 걷기 애니메이션 노티파이가 내므로 일반 몬스터 발소리 루프는 끈다.
     WalkSoundComp->SetLoopSound(nullptr);
+    FootstepSoundComp->SetFootstepSounds({});
 
     // 대상을 놓치면 일반 적의 수색 대신 포효와 난사를 한다.
     LostTargetComp = CreateDefaultSubobject<UBossLostTargetComponent>(TEXT("LostTargetComp"));
