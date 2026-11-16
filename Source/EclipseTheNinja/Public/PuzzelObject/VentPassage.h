@@ -7,7 +7,9 @@
 #include "VentPassage.generated.h"
 
 class UAnimMontage;
+class UAnimSequence;
 class UBoxComponent;
+class USkeletalMeshComponent;
 class UInteractHighlightComponent;
 class UWidgetComponent;
 class ACharacter;
@@ -25,6 +27,8 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	// 덮개 스켈레탈 메시가 있으면 MeshAssembly의 스태틱 메시는 숨긴다 (조명과 충돌은 MeshAssembly 것을 그대로 쓴다)
+	virtual void OnConstruction(const FTransform& Transform) override;
 
 public:
 	// Called every frame
@@ -64,6 +68,13 @@ protected:
 	// 나오는 몽타주가 끝나면 잠금을 푼다
 	void	OnExitMontageEnded(UAnimMontage* InMontage, bool bInterrupted, TWeakObjectPtr<ACharacter> InCharacter);
 
+	// 덮개를 연다. 닫히는 중이면 그 자리에서 다시 연다. 다 열린 뒤 GrateHoldTime 만큼 쉬고 CloseGrate를 부른다
+	void	OpenGrate();
+	// 여는 애니메이션을 현재 위치에서 역재생해 닫는다
+	void	CloseGrate();
+	// 여는 애니메이션 현재 재생 위치. 재생 중이 아니면 0
+	float	GetGrateAnimPosition() const;
+
 	// 이동하는 동안 InCharacter의 이동과 입력을 막는다
 	static void	LockTraveler(ACharacter* InCharacter);
 	static void	UnlockTraveler(ACharacter* InCharacter);
@@ -77,6 +88,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UChildActorComponent>	MeshAssembly = nullptr;
+
+	// 여닫히는 환풍구 덮개. 메시(SK_Vent)는 블루프린트에서 지정
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<USkeletalMeshComponent>	GrateMesh = nullptr;
 
 	//// 상호작용 감지(InteractBox 오버랩, 분신 조준 Visibility 트레이스)용 판정
 	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
@@ -108,7 +123,24 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact|Cooldown", meta = (ClampMin = "0.05"))
 	float	InteractInterval = 1.5f;
 
+	// 덮개를 여는 애니메이션(SK_Vent_Anim). 닫을 때는 같은 애니메이션을 역재생한다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interact|Grate")
+	TObjectPtr<UAnimSequence>	GrateOpenAnim = nullptr;
+
+	// 다 열린 뒤 닫기 시작할 때까지 열어 두는 시간(초)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact|Grate", meta = (ClampMin = "0.0", Units = "s"))
+	float	GrateHoldTime = 1.0f;
+
+	// 여는 재생 속도 배율
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact|Grate", meta = (ClampMin = "0.05"))
+	float	GrateOpenPlayRate = 1.0f;
+
+	// 닫는(역재생) 속도 배율
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact|Grate", meta = (ClampMin = "0.05"))
+	float	GrateClosePlayRate = 1.0f;
+
 	FTimerHandle	InteractionCooldownTimer;
+	FTimerHandle	GrateCloseTimer;
 	bool			bIsInteractCooldown = false;
 
 private:
