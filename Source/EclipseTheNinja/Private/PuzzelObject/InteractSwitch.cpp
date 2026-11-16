@@ -13,6 +13,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/GameInstance.h"
+#include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 
@@ -146,6 +147,11 @@ void AInteractSwitch::ToggleTargets()
 	{
 		if (IsValid(Target) && Target->Implements<UActivatable>())
 		{
+			// ToggleActivate는 인자가 없으므로, 대상이 누가 작동시켰는지 알 수 있게 Instigator로 넘긴다
+			if (APawn* Activator = this->LastActivator.Get())
+			{
+				Target->SetInstigator(Activator);
+			}
 			IActivatable::Execute_ToggleActivate(Target);
 		}
 	}
@@ -193,6 +199,7 @@ void AInteractSwitch::Interact_Implementation(AActor* InActor)
 		return;
 	}
 	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
+	this->LastActivator = Cast<APawn>(InActor);
 	this->ActivateSwitch();
 }
 

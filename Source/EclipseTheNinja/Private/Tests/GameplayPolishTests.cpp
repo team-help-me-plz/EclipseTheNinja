@@ -177,7 +177,7 @@ bool FKunaiRopePolishTest::RunTest(const FString& Parameters)
     RopeActor->SetRootComponent(Rope);
     Rope->RegisterComponent();
     int32 CutCount = 0;
-    const FDelegateHandle CutHandle = Rope->OnRopeCut.AddLambda([&CutCount]() { ++CutCount; });
+    const FDelegateHandle CutHandle = Rope->OnRopeCut.AddLambda([&CutCount](APawn*) { ++CutCount; });
 
     AKunaiProjectile* Kunai = Fixture->World->SpawnActor<AKunaiProjectile>();
     if (!TestNotNull(TEXT("표창 생성"), Kunai)) return false;
