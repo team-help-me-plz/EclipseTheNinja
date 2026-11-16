@@ -37,6 +37,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/AssetManager.h"
 #include "Util/EclipseCollisionChannels.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStrike, "Ability.Attack.SwiftStrike");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_SwiftStriking, "State.SwiftStriking");
@@ -231,7 +232,7 @@ void UGASwiftStrike::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		}
 	}
 
-	LoadedSwiftStrikeMontage = SelectedMontage.LoadSynchronous();
+	LoadedSwiftStrikeMontage = UEclipseAssetManager::GetAsset(SelectedMontage);
 	if (IsValid(LoadedSwiftStrikeMontage))
 	{
 		const FName DashSection(TEXT("Dash"));
@@ -318,7 +319,7 @@ void UGASwiftStrike::StartDashEffects(ACharacter* Player, float DashDuration)
 	// 실제 이동 방향이 정해진 뒤 생성해 회전 중간 각도가 이펙트에 남지 않게 한다.
 	const FRotator FacingRotation = DashDirection.Rotation();
 	const FQuat WindRotation = FacingRotation.Quaternion() * DashWindRotation.Quaternion();
-	UNiagaraSystem* WindSystem = DashSlashEffect.LoadSynchronous();
+	UNiagaraSystem* WindSystem = UEclipseAssetManager::GetAsset(DashSlashEffect);
 	if (IsValid(WindSystem))
 	{
 		// 캐릭터에 붙이지 않고 시작점과 현재 위치 사이의 중앙에 배치한다.
@@ -350,7 +351,7 @@ void UGASwiftStrike::StartDashEffects(ACharacter* Player, float DashDuration)
 
 	if (!IsValid(LoadedImpactEffect))
 	{
-		LoadedImpactEffect = ImpactEffect.LoadSynchronous();
+		LoadedImpactEffect = UEclipseAssetManager::GetAsset(ImpactEffect);
 	}
 	StartAfterimages(Player);
 }
@@ -448,10 +449,10 @@ void UGASwiftStrike::StartAfterimages(ACharacter* Player)
 	// 미리 불러 두지 못했으면 여기서 불러온다.
 	if (!IsValid(LoadedAfterimageEffect))
 	{
-		LoadedAfterimageEffect = AfterimageEffect.LoadSynchronous();
+		LoadedAfterimageEffect = UEclipseAssetManager::GetAsset(AfterimageEffect);
 	}
 	if (!IsValid(LoadedAfterimageEffect)) return;
-	UMaterialInterface* Material = AfterimageMaterial.LoadSynchronous();
+	UMaterialInterface* Material = UEclipseAssetManager::GetAsset(AfterimageMaterial);
 	if (!IsValid(Material)) return;
 
 	EnsureAfterimagePool(Material);

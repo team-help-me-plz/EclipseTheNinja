@@ -18,6 +18,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 UGAElementalFire::UGAElementalFire()
 {
@@ -35,13 +36,7 @@ UGAElementalFire::UGAElementalFire()
 
 	FireElementEffectClass = UGEElementalFire::StaticClass();
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> FireSwordAsset(
-		TEXT("/Game/VFX/SwordEffects/Particles/NS_SwordEffect7.NS_SwordEffect7"));
-
-	if (FireSwordAsset.Succeeded())
-	{
-		FireSwordSystem = FireSwordAsset.Object;
-	}
+	// 불칼 이펙트(FireSwordSystem)는 BP(GA_ElementalFire)에서 등록한다
 }
 
 bool UGAElementalFire::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -93,10 +88,11 @@ void UGAElementalFire::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	WaitRemovedTask->ReadyForActivation();
 
 	// 불이 붙어 있는 동안 칼 소켓에 불꽃 이펙트를 붙인다. 불이 꺼지면 EndAbility에서 멈춘다.
-	USceneComponent* AttachComponent = FireSwordSystem ? FindFireSwordAttachComponent() : nullptr;
+	UNiagaraSystem* FireSwordAsset = UEclipseAssetManager::GetAsset(FireSwordSystem);
+	USceneComponent* AttachComponent = FireSwordAsset ? FindFireSwordAttachComponent() : nullptr;
 	if (AttachComponent)
 	{
-		FireSwordEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(FireSwordSystem, AttachComponent,
+		FireSwordEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(FireSwordAsset, AttachComponent,
 			FireSwordSocketName, FVector::ZeroVector, FRotator::ZeroRotator,
 			EAttachLocation::SnapToTarget, true);
 	}

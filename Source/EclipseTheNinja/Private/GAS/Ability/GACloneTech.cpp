@@ -21,7 +21,6 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "TimerManager.h"
-#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
@@ -54,13 +53,7 @@ UGACloneTech::UGACloneTech()
 {
 	this->InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> CloneEffectAsset(
-		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/LitSandPuff/Looped/NS_SandPuff_Small_Looped.NS_SandPuff_Small_Looped"));
-
-	if (CloneEffectAsset.Succeeded())
-	{
-		this->CloneEffectSystem = CloneEffectAsset.Object;
-	}
+	// 분신 소환·회수 이펙트(CloneEffectSystem)는 BP(GA_CloneTech)에서 등록한다
 }
 
 void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

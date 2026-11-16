@@ -16,6 +16,7 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallSlide, "Ability.Movement.WallSlide");
 
@@ -189,7 +190,7 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
     GetWorld()->GetTimerManager().SetTimer(WallCheckTimer, this, &UGAWallSlide::CheckSlideWall, 0.016f, true);
 
     // 몽타주 재생
-    LodaedSlideMontage = SlideMontage.LoadSynchronous();
+    LodaedSlideMontage = UEclipseAssetManager::GetAsset(SlideMontage);
     if (IsValid(LodaedSlideMontage))
     {
         UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
