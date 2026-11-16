@@ -80,8 +80,8 @@ protected:
 
 	// TargetActors 중 IActivatable을 구현한 대상이 하나라도 있는가
 	bool	HasActivatableTarget() const;
-	// 모든 대상의 Activate 상태를 토글한다
-	void	ToggleTargets();
+	// 모든 대상의 Activate 상태를 토글한다. InActivator가 폰이면 대상의 Instigator로 넣어 준다
+	void	ToggleTargets(AActor* InActivator);
 	// 모든 대상의 Activate 테두리를 켜거나 끈다
 	void	SetTargetIndicator(bool bShow);
 

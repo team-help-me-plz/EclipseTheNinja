@@ -101,6 +101,21 @@ void UCheckpointSubsystem::ActivateCheckpoint(ECheckpointId NewCheckpointId)
     if (Save && GetCheckpointTransform(Transform)) Save->SaveCheckpoint(NewCheckpointId, Transform);
 }
 
+void UCheckpointSubsystem::ResaveCurrentCheckpoint()
+{
+    if (this->CurrentCheckpoint == ECheckpointId::None) return;
+
+    UGameInstance* GameInstance = GetWorld()->GetGameInstance();
+    UGameSaveSubsystem* Save = GameInstance ? GameInstance->GetSubsystem<UGameSaveSubsystem>() : nullptr;
+    if (!Save || Save->IsRestoring()) return;
+
+    FTransform Transform;
+    if (GetCheckpointTransform(Transform))
+    {
+        Save->SaveCheckpoint(this->CurrentCheckpoint, Transform);
+    }
+}
+
 bool UCheckpointSubsystem::GetCheckpointTransform(FTransform& OutTransform) const
 {
     return GetCheckpointTransformById(this->CurrentCheckpoint, OutTransform);

@@ -56,7 +56,8 @@ protected:
 	void	FindFallingLocation();
 	void	ApplyFallingDamage(AActor* InActor, const FHitResult& InHit);
 
-	void	ObjectDrop();
+	// InCutter: 줄을 끊은 폰. 착지 소음의 가해자로 쓴다
+	void	ObjectDrop(APawn* InCutter);
 	void	ObjectLand();
 
 	// 착지 후 Pawn을 Block으로 전환한다. 아래에 Pawn이 남아 있으면 모두 빠져나갈 때까지 미룬다
@@ -158,6 +159,9 @@ private:
 
 	float	FallSpeed = 0.f;
 	FVector InitialBodyRelativeLocation = FVector::ZeroVector;
+
+	// 이번 낙하를 일으킨 폰(줄을 끊은 폰). 착지 소음의 가해자로 쓴다
+	TWeakObjectPtr<APawn>	DropInstigator;
 
 	// 이번 낙하에서 이미 데미지를 받은 대상
 	TSet<TWeakObjectPtr<AActor>>	HitActors;

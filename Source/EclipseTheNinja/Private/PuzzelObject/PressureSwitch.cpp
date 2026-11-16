@@ -131,12 +131,18 @@ bool APressureSwitch::HasActivatableTarget() const
 	return (false);
 }
 
-void APressureSwitch::ToggleTargets()
+void APressureSwitch::ToggleTargets(AActor* InActivator)
 {
+	APawn*	Activator = Cast<APawn>(InActivator);
 	for (AActor* Target : this->TargetActors)
 	{
 		if (IsValid(Target) && Target->Implements<UActivatable>())
 		{
+			// ToggleActivate는 인자가 없으므로, 대상이 누가 작동시켰는지 알 수 있게 Instigator로 넘긴다
+			if (Activator)
+			{
+				Target->SetInstigator(Activator);
+			}
 			IActivatable::Execute_ToggleActivate(Target);
 		}
 	}
@@ -207,7 +213,7 @@ void APressureSwitch::OnPressureEndOverlap(UPrimitiveComponent* OverlappedCompon
 		return;
 	}
 	// 처음 누른 쪽이 먼저 내려가고 다른 캐릭터가 마지막으로 내려가도, 모두 내려간 순간 대상을 되돌린다
-	this->ToggleTargets();
+	this->ToggleTargets(OtherActor);
 	this->RefreshInteractState();
 }
 
@@ -235,7 +241,7 @@ void APressureSwitch::Interact_Implementation(AActor* InActor)
 	{
 		return;
 	}
-	this->ToggleTargets();
+	this->ToggleTargets(InActor);
 	this->bIsInteracted = true;
 	this->RefreshInteractState();
 	if (this->PressSound)
