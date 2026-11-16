@@ -52,6 +52,7 @@
 #include "Util/EclipseCollisionChannels.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
+#include "AssetManagement/EclipseStageManagerSubsystem.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -178,6 +179,15 @@ void APlayerCharacter::BeginPlay()
         GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->PlayerReady(this);
     }));
 
+	UEclipseStageManagerSubsystem* Stage = GetWorld()->GetSubsystem<UEclipseStageManagerSubsystem>();
+	APlayerController* StagePC = Cast<APlayerController>(GetController());
+	if (Stage && StagePC && !Stage->IsStageLoaded())
+	{
+		// 로드가 끝날 때까지 이동·공격·어빌리티 입력을 모두 막는다. 화면은 스테이지 매니저의 로딩 화면이 가린다.
+		// 다시 켜는 것은 스테이지 매니저가 로드 완료를 알리기 직전에 한다 (시작 컷신이 그 뒤에 입력을 다시 막을 수 있게)
+		// 카메라 페이드는 쓰지 않는다: 시작 컷신의 페이드 트랙이 그 검은 화면을 원래 상태로 저장했다가 끝날 때 되살릴 수 있다
+		DisableInput(StagePC);
+	}
 }
 
 void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
