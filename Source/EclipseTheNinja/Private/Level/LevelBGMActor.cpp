@@ -1,5 +1,7 @@
 #include "Level/LevelBGMActor.h"
 
+#include "AssetManagement/EclipseStageManagerSubsystem.h"
+#include "Engine/World.h"
 #include "Components/AudioComponent.h"
 #include "Components/BillboardComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -47,8 +49,25 @@ void ALevelBGMActor::BeginPlay()
 	}
 
 	this->MusicComponent->OnAudioFinished.AddDynamic(this, &ALevelBGMActor::HandleMusicFinished);
-	// Volume은 컴포넌트 볼륨 배율에 이미 들어 있으므로 페이드 목표는 1이다
-	this->MusicComponent->FadeIn(this->FadeInTime, 1.0f);
+
+	// 스테이지 로딩 화면이 사라질 때(로드 완료) 페이드 인을 시작한다. 이미 끝났으면 바로 시작한다
+	auto StartMusic = [this]()
+	{
+		if (this->MusicComponent)
+		{
+			// Volume은 컴포넌트 볼륨 배율에 이미 들어 있으므로 페이드 목표는 1이다
+			this->MusicComponent->FadeIn(this->FadeInTime, 1.0f);
+		}
+	};
+	if (UEclipseStageManagerSubsystem* Stage = GetWorld()->GetSubsystem<UEclipseStageManagerSubsystem>())
+	{
+		Stage->CallOrRegister_OnStageLoaded(FOnEclipseStageLoaded::FDelegate::CreateWeakLambda(this,
+			[StartMusic](const UEclipseStageDefinition*) { StartMusic(); }));
+	}
+	else
+	{
+		StartMusic();
+	}
 }
 
 void ALevelBGMActor::EndPlay(const EEndPlayReason::Type EndPlayReason)

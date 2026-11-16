@@ -2,6 +2,7 @@
 
 #include "Subsystem/MapNameSubsystem.h"
 
+#include "AssetManagement/EclipseStageManagerSubsystem.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -26,6 +27,17 @@ void UMapNameSubsystem::OnWorldBeginPlay(UWorld& InWorld)
             UE_LOG(LogTemp, Log, TEXT("[UMapNameSubsystem::OnWorldBeginPlay()] %s 시퀀스 종료까지 맵 이름 표시 대기"), *It->GetActorNameOrLabel());
             return;
         }
+    }
+
+    // 스테이지 로딩 화면이 떠 있는 동안 띄우면 가려지므로, 로드가 끝난 뒤 띄운다 (이미 끝났으면 바로)
+    if (UEclipseStageManagerSubsystem* Stage = InWorld.GetSubsystem<UEclipseStageManagerSubsystem>())
+    {
+        Stage->CallOrRegister_OnStageLoaded(FOnEclipseStageLoaded::FDelegate::CreateWeakLambda(this,
+            [this](const UEclipseStageDefinition*)
+            {
+                RequestShowMapName();
+            }));
+        return;
     }
 
     RequestShowMapName();

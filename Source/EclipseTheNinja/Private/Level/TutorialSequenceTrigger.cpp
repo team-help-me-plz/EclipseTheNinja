@@ -2,6 +2,7 @@
 
 #include "Level/TutorialSequenceTrigger.h"
 
+#include "AssetManagement/EclipseStageManagerSubsystem.h"
 #include "Character/PlayerCharacter.h"
 #include "Character/PlayerCharacterController.h"
 #include "Checkpoint/Checkpoint.h"
@@ -25,6 +26,7 @@
 #include "Components/TextBlock.h"
 #include "Components/SizeBox.h"
 #include "Components/BoxComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputComponent.h"
@@ -115,7 +117,20 @@ void ATutorialSequenceTrigger::BeginPlay()
     {
         // 시작 컷신은 오버랩이 필요 없으므로 트리거를 끈다
         this->SequenceTrigger->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-        PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
+
+        // 스테이지 로딩 화면이 떠 있는 동안 재생하면 앞부분이 가려지므로, 로드가 끝난 뒤 재생한다 (이미 끝났으면 바로 재생)
+        if (UEclipseStageManagerSubsystem* Stage = GetWorld()->GetSubsystem<UEclipseStageManagerSubsystem>())
+        {
+            Stage->CallOrRegister_OnStageLoaded(FOnEclipseStageLoaded::FDelegate::CreateWeakLambda(this,
+                [this](const UEclipseStageDefinition*)
+                {
+                    PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
+                }));
+        }
+        else
+        {
+            PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
+        }
         return;
     }
 
