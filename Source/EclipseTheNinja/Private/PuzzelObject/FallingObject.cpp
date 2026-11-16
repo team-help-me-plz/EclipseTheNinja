@@ -66,15 +66,7 @@ AFallingObject::AFallingObject()
 	this->LandEffect->SetupAttachment(GetRootComponent());
 	this->LandEffect->bAutoActivate = false;
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> LandSystem(
-		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/LitSandPuff/Looped/NS_SandPuff_Medium_Looped.NS_SandPuff_Medium_Looped"));
-
-	if (LandSystem.Succeeded())
-	{
-		this->LandEffect->SetAsset(LandSystem.Object);
-	}
-
-	// 발동·충돌 사운드(DropSound/LandSound)는 BP에서 등록한다
+	// 착지 이펙트(LandEffect의 Niagara System)와 발동·충돌 사운드(DropSound/LandSound)는 BP에서 등록한다
 
 	// 착지 진동 기본값은 2단계. BP에서 바꿀 수 있다
 	static ConstructorHelpers::FObjectFinder<UForceFeedbackEffect> LandForceFeedbackFinder(

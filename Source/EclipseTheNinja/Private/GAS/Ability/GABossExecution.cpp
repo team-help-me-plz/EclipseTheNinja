@@ -22,6 +22,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "TimerManager.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 namespace
 {
@@ -42,11 +43,7 @@ UGABossExecution::UGABossExecution()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalOnly;
 
-	// 보스가 이 C++ 클래스를 그대로 쓰므로 기본 피 이펙트를 여기서 지정한다.
-	VictimBloodSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
-		TEXT("/Game/VFX/Vefects/Blood_VFX/VFX/Performance_Versions/Bursts/Looped/Looped_NS_Blood_Burst_Large.Looped_NS_Blood_Burst_Large")));
-	VictimBloodSlashSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
-		TEXT("/Game/VFX/Vefects/Blood_VFX/VFX/Performance_Versions/Slashes/Looped/Looped_NS_Slash_Large.Looped_NS_Slash_Large")));
+	// 피 이펙트(VictimBloodSystem, VictimBloodSlashSystem)는 BP(GA_Boss_Execution)에서 등록한다
 }
 
 void UGABossExecution::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
@@ -125,8 +122,8 @@ void UGABossExecution::ActivateAbility(
 	MoveBehindVictim(Boss, Player);
 	SetIgnoreVictimCollision(true);
 
-	ExecutionAttackMontage = Boss->GetExecutionAttackMontage().LoadSynchronous();
-	UAnimMontage* VictimMontage = Boss->GetExecutionVictimMontage().LoadSynchronous();
+	ExecutionAttackMontage = UEclipseAssetManager::GetAsset(Boss->GetExecutionAttackMontage());
+	UAnimMontage* VictimMontage = UEclipseAssetManager::GetAsset(Boss->GetExecutionVictimMontage());
 
 	// 보스 암살자 몽타주. 스켈레톤이 맞지 않으면 재생되지 않으므로 경고만 남기고 플레이어 연출은 그대로 진행한다.
 	float AttackDuration = 0.0f;
@@ -322,7 +319,7 @@ void UGABossExecution::SpawnVictimBlood()
 	}
 	bVictimBloodSpawned = true;
 
-	UNiagaraSystem* System = VictimBloodSystem.LoadSynchronous();
+	UNiagaraSystem* System = UEclipseAssetManager::GetAsset(VictimBloodSystem);
 	if (!System)
 	{
 		return;
@@ -371,7 +368,7 @@ void UGABossExecution::SpawnVictimBlood()
 	StopAfter(UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		Player, System, Location, Direction.Rotation(), FVector(VictimBloodScale), true, true, ENCPoolMethod::None, true),
 		VictimBloodActiveTime);
-	if (UNiagaraSystem* Slash = VictimBloodSlashSystem.LoadSynchronous())
+	if (UNiagaraSystem* Slash = UEclipseAssetManager::GetAsset(VictimBloodSlashSystem))
 	{
 		StopAfter(UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 			Player, Slash, Location, Direction.Rotation(), FVector(VictimBloodScale), true, true, ENCPoolMethod::None, true),

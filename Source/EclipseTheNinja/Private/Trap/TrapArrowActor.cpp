@@ -14,7 +14,6 @@
 #include "AbilitySystemComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
 
 // Sets default values
 ATrapArrowActor::ATrapArrowActor()
@@ -53,13 +52,7 @@ ATrapArrowActor::ATrapArrowActor()
 	this->FlyEffect->SetupAttachment(GetRootComponent());
 	this->FlyEffect->bAutoActivate = false;
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> FlySystem(
-		TEXT("/Game/VFX/KYstabFX01/Particles/Niagara/NS_ky_stab13.NS_ky_stab13"));
-
-	if (FlySystem.Succeeded())
-	{
-		this->FlyEffect->SetAsset(FlySystem.Object);
-	}
+	// 비행 이펙트(FlyEffect의 Niagara System)는 BP에서 등록한다
 }
 
 // Called when the game starts or when spawned

@@ -17,7 +17,6 @@
 #include "EngineUtils.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Component/CuttableComponent.h"
 
@@ -57,12 +56,7 @@ AKunaiProjectile::AKunaiProjectile()
     FlightTrail->SetupAttachment(Mesh);
     FlightTrail->bAutoActivate = false;
 
-    static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TrailSystem(
-        TEXT("/Game/VFX/Projectiles/NS_ProjectileTrail.NS_ProjectileTrail"));
-    if (TrailSystem.Succeeded())
-    {
-        FlightTrail->SetAsset(TrailSystem.Object);
-    }
+    // 비행 트레일(FlightTrail의 Niagara System)은 BP(BP_KunaiProjectile)에서 등록한다
 }
 
 void AKunaiProjectile::InitializeKunai(
