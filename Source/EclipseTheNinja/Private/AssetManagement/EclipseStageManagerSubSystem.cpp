@@ -29,7 +29,7 @@ namespace
 	// 이펙트를 최소 이만큼은 그린다 (첫 렌더링·셰이더 준비)
 	constexpr double WarmupMinSeconds = 0.25;
 	// 텍스처가 다 올라오지 않아도 이 시간이 지나면 끝낸다
-	constexpr double WarmupMaxSeconds = 3.0;
+	constexpr double WarmupMaxSeconds = 10.0;
 	// 플레이어 카메라가 이 시간 안에 생기지 않으면 원점에서 프리웜한다
 	constexpr double PlayerWaitSeconds = 5.0;
 	constexpr float WarmupTickInterval = 0.05f;
