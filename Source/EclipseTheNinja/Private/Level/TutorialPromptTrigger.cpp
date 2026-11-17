@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "PuzzelObject/BaseDoor.h"
 #include "Subsystem/UIMessageSubsystem.h"
 #include "TimerManager.h"
 
@@ -54,6 +55,12 @@ void ATutorialPromptTrigger::OnTriggerBeginOverlap(
 void ATutorialPromptTrigger::ShowPrompt(APlayerController* PlayerController)
 {
     if (!PlayerController || (this->bShowOnce && this->bHasShown))
+    {
+        return;
+    }
+
+    // 조건 문이 이미 열려 있으면 띄우지 않는다. 미뤄 둔 표시도 그사이 문이 열렸으면 취소된다
+    if (IsValid(this->ShowOnlyWhileDoorClosed) && this->ShowOnlyWhileDoorClosed->IsOpen())
     {
         return;
     }

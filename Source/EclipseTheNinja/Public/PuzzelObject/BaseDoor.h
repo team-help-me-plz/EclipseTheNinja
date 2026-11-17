@@ -24,6 +24,10 @@ class ECLIPSETHENINJA_API ABaseDoor : public AActor, public IActivatable, public
 	GENERATED_BODY()
 
 public:
+	// 문이 열려 있거나 열리는 중인지. 닫혀 있거나 닫히는 중이면 false
+	UFUNCTION(BlueprintPure, Category = "Door")
+	bool	IsOpen() const { return this->bIsOpen; }
+
 	ABaseDoor();
 
 	virtual void	Tick(float DeltaTime) override;
