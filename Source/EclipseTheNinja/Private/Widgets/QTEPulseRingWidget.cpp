@@ -1,6 +1,5 @@
 #include "Widgets/QTEPulseRingWidget.h"
 #include "Rendering/DrawElements.h"
-#include "Styling/SlateBrush.h"
 
 void UQTEPulseRingWidget::SetSource(UUserWidget* InSourceWidget, const FVector2D& InSourcePivot)
 {
@@ -59,23 +58,33 @@ int32 UQTEPulseRingWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
         const float Fade = FMath::Pow(1.0f - Alpha, 1.6f);
         const float Thickness = FMath::Lerp(this->StartThickness, this->EndThickness, Alpha);
 
-        const FVector2f RingSize = KeySize + FVector2f(2.0f * (this->Spread * Grow + Thickness * 0.5f));
-        const FVector2f RingTopLeft = KeyCenter - RingSize * 0.5f;
-        const float Radius = FMath::Min(RingSize.X, RingSize.Y) * 0.5f;
+        // 키 가장자리 바로 바깥에서 시작해 퍼진다
+        const FVector2f HalfSize = KeySize * 0.5f + FVector2f(this->Spread * Grow + Thickness * 0.5f + 2.0f);
+        // 키가 길쭉하면 알약 모양, 정사각형이면 원으로 감싼다
+        const float Radius = FMath::Min(HalfSize.X, HalfSize.Y);
+        const FVector2f Straight = HalfSize - FVector2f(Radius);
+
+        // 둥근 사각형 둘레를 선으로만 그린다. 속을 채우지 않아야 키가 가려지지 않는다
+        constexpr int32 SegmentsPerCorner = 12;
+        TArray<FVector2f> Points;
+        Points.Reserve(SegmentsPerCorner * 4 + 5);
+        const FVector2f CornerCenters[4] = {
+            KeyCenter + FVector2f(Straight.X, Straight.Y), KeyCenter + FVector2f(-Straight.X, Straight.Y),
+            KeyCenter + FVector2f(-Straight.X, -Straight.Y), KeyCenter + FVector2f(Straight.X, -Straight.Y)};
+        for (int32 Corner = 0; Corner < 4; ++Corner)
+        {
+            for (int32 Segment = 0; Segment <= SegmentsPerCorner; ++Segment)
+            {
+                const float Angle = HALF_PI * (Corner + static_cast<float>(Segment) / SegmentsPerCorner);
+                Points.Add(CornerCenters[Corner] + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius);
+            }
+        }
+        Points.Add(Points[0]);
 
         FLinearColor Color = this->RingColor;
         Color.A *= Fade * Opacity;
-
-        // 속이 빈 둥근 테두리. 키가 길쭉하면 알약 모양으로 감싼다
-        FSlateBrush Brush;
-        Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
-        Brush.TintColor = FLinearColor::Transparent;
-        Brush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(Radius, Radius, Radius, Radius), FSlateColor(Color), Thickness);
-        Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-
-        FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-            AllottedGeometry.ToPaintGeometry(RingSize, FSlateLayoutTransform(RingTopLeft)),
-            &Brush, ESlateDrawEffect::None, FLinearColor::White);
+        FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(),
+            Points, ESlateDrawEffect::None, Color, true, Thickness);
     }
     return LayerId;
 }
