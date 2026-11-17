@@ -101,7 +101,7 @@ protected:
 
     // 엔딩에서 플레이어가 걸어오기 시작하는 곳의 시체 끝으로부터 거리(cm). 시퀀스의 걷기 시작 위치와 같아야 한다
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending", meta = (ClampMin = "0.0", Units = "cm"))
-    float EndingApproachDistance = 400.0f;
+    float EndingApproachDistance = 396.0f;
 
     // 쓰러진 보스 시체가 보스 캡슐 중심에서 보스가 바라보던 방향의 뒤쪽으로 퍼지는 범위(cm). 사망 애니메이션 마지막 자세에서 잰 값이다
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending", meta = (ClampMin = "0.0", Units = "cm"))
@@ -117,7 +117,7 @@ protected:
     // 시퀀스에서 걷기 시작부터 멈출 때까지 걸리는 시간(초). 트인 거리가 EndingApproachDistance보다 짧으면
     // 그만큼 걷기 앞부분을 건너뛰고 재생해, 걷기 시작점이 벽이나 발판 안에 놓이지 않게 한다
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending", meta = (ClampMin = "0.0", Units = "s"))
-    float EndingWalkDuration = 58.0f / 30.0f;
+    float EndingWalkDuration = 37.0f / 30.0f;
 
     // 오른쪽을 볼 때 재생할 원래 시퀀스. 처음 클리어할 때 EndingSequence 액터에 지정된 시퀀스를 기억해 둔다
     UPROPERTY(Transient)
