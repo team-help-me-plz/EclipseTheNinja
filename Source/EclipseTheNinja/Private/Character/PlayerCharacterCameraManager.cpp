@@ -430,9 +430,8 @@ void APlayerCharacterCameraManager::ApplyCloseUpBlur(const FMinimalViewInfo& POV
 
 	if (!IsValid(CloseUpBlurMID))
 	{
-		UMaterialInterface* Material = CloseUpBlurMaterial.LoadSynchronous();
-		if (!IsValid(Material)) return;
-		CloseUpBlurMID = UMaterialInstanceDynamic::Create(Material, this);
+		if (!IsValid(CloseUpBlurMaterial)) return;
+		CloseUpBlurMID = UMaterialInstanceDynamic::Create(CloseUpBlurMaterial, this);
 	}
 
 	// 선명한 원의 중심은 플레이어와 대상 사이 초점이다. 카메라가 아직 다가가는 중이어도 초점을 따라간다.

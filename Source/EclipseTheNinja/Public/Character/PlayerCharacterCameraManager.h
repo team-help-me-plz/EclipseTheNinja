@@ -184,10 +184,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (EditCondition = "CloseUpBlurMode == ECloseUpBlurMode::DepthOfField", ClampMin = 0, Units = "cm"))
 	float CloseUpBlurFocalRegion = 150.0f;
 
-	// [Post Process Mask] 원형 마스크 블러 머티리얼. Center·Radius·Falloff·BlurStep·Strength 파라미터를 쓴다
+	// [Post Process Mask] 원형 마스크 블러 머티리얼(M_PP_CloseUpRadialBlur). Center·Radius·Falloff·BlurStep·Strength 파라미터를 쓴다.
+	// 카메라 매니저 BP에서 지정한다. 비어 있으면 흐리지 않는다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (EditCondition = "CloseUpBlurMode == ECloseUpBlurMode::PostProcessMask"))
-	TSoftObjectPtr<UMaterialInterface> CloseUpBlurMaterial =
-		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Materials/PostProcess/M_PP_CloseUpRadialBlur.M_PP_CloseUpRadialBlur")));
+	TObjectPtr<UMaterialInterface> CloseUpBlurMaterial;
 
 	// [Post Process Mask] 선명한 원의 반지름. 화면 높이를 1로 본 비율이다
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (EditCondition = "CloseUpBlurMode == ECloseUpBlurMode::PostProcessMask", ClampMin = 0, ClampMax = 1))
