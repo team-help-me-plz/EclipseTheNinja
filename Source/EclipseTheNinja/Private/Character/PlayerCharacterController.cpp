@@ -25,6 +25,7 @@
 #include "Misc/App.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "InputKeyEventArgs.h"
+#include "Framework/Application/SlateApplication.h"
 
 bool APlayerCharacterController::InputKey(const FInputKeyEventArgs& Params)
 {
@@ -148,6 +149,13 @@ void APlayerCharacterController::BeginPlay()
     SetShowMouseCursor(true);
     bEnableClickEvents = true;
     bEnableMouseOverEvents = true;
+
+    // 메인 메뉴의 GameAndUI 전환은 포커스 위젯을 주지 않아 키보드 포커스가 메뉴 버튼에 남는다.
+    // 레벨이 바뀌어 그 버튼이 사라지면 키 입력이 게임에 오지 않으므로(레벨 BP 치트키 등) 게임 화면으로 돌린다.
+    if (IsLocalPlayerController() && FSlateApplication::IsInitialized())
+    {
+        FSlateApplication::Get().SetAllUserFocusToGameViewport();
+    }
 }
 
 void APlayerCharacterController::SetupInputComponent()
