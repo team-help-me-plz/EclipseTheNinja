@@ -76,12 +76,24 @@ int32 UQTEPulseRingWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
             for (int32 Segment = 0; Segment <= SegmentsPerCorner; ++Segment)
             {
                 const float Angle = HALF_PI * (Corner + static_cast<float>(Segment) / SegmentsPerCorner);
-                Points.Add(CornerCenters[Corner] + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius);
+                const FVector2f Point = CornerCenters[Corner] + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius;
+                // 원 모양이면 호의 끝점과 다음 호의 시작점이 겹친다. 길이 0인 선분은 선 이음을 끊어 동서남북에 틈이 생기므로 뺀다
+                if (Points.IsEmpty() || !Points.Last().Equals(Point, 0.01f))
+                {
+                    Points.Add(Point);
+                }
             }
         }
-        // 배열 원소를 참조한 채 같은 배열에 Add하면 TArray 검사에 걸리므로 값으로 복사해 닫는다
+        if (Points.Num() > 2 && Points.Last().Equals(Points[0], 0.01f))
+        {
+            Points.Pop();
+        }
+        // 시작점에서도 이음매가 끊기지 않게 처음 두 점까지 다시 이어 겹쳐 닫는다
+        // 배열 원소를 참조한 채 같은 배열에 Add하면 TArray 검사에 걸리므로 값으로 복사한다
         const FVector2f FirstPoint = Points[0];
+        const FVector2f SecondPoint = Points[1];
         Points.Add(FirstPoint);
+        Points.Add(SecondPoint);
 
         FLinearColor Color = this->RingColor;
         Color.A *= Fade * Opacity;
