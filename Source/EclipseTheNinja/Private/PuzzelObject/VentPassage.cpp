@@ -62,28 +62,6 @@ void AVentPassage::BeginPlay()
 	this->RefreshInteractState();
 }
 
-void AVentPassage::OnConstruction(const FTransform& Transform)
-{
-	Super::OnConstruction(Transform);
-
-	if (!IsValid(this->GrateMesh) || !this->GrateMesh->GetSkeletalMeshAsset() || !IsValid(this->MeshAssembly))
-	{
-		return ;
-	}
-	AActor*	Assembly = this->MeshAssembly->GetChildActor();
-	if (!Assembly)
-	{
-		return ;
-	}
-	// 같은 모양이 두 번 그려지지 않도록 MeshAssembly의 스태틱 메시만 숨긴다. 충돌 설정은 건드리지 않는다
-	TArray<UStaticMeshComponent*>	StaticMeshes;
-	Assembly->GetComponents<UStaticMeshComponent>(StaticMeshes);
-	for (UStaticMeshComponent* StaticMesh : StaticMeshes)
-	{
-		StaticMesh->SetVisibility(false);
-	}
-}
-
 // Called every frame
 void AVentPassage::Tick(float DeltaTime)
 {

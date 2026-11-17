@@ -49,6 +49,7 @@
 #include "Character/Enemy.h"
 #include "Component/HidingComponent.h"
 #include "Minimap/MinimapComponent.h"
+#include "Components/SpotLightComponent.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
@@ -72,6 +73,18 @@ APlayerCharacter::APlayerCharacter()
 	HidingComponent = CreateDefaultSubobject<UHidingComponent>(TEXT("HidingComponent"));
 
 	MinimapComponent = CreateDefaultSubobject<UMinimapComponent>(TEXT("MinimapComponent"));
+
+	// 가슴 높이에서 주변을 은은하게 밝힌다. 밤 성 분위기를 해치지 않도록 약한 달빛 색으로 둔다.
+	AuraLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("AuraLight"));
+	AuraLight->SetupAttachment(RootComponent);
+	AuraLight->SetRelativeLocation(FVector(0.0f, 0.0f, 40.0f));
+	AuraLight->SetIntensityUnits(ELightUnits::Candelas);
+	AuraLight->SetIntensity(5.0f);
+	AuraLight->SetAttenuationRadius(600.0f);
+	AuraLight->SetLightColor(FLinearColor(0.75f, 0.85f, 1.0f));
+	AuraLight->SetSourceRadius(30.0f);
+	// 캐릭터가 움직일 때 벽에 큰 그림자가 흔들리지 않게 하고 비용도 줄인다.
+	//AuraLight->SetCastShadows(false);
 
 	// 암살도 배열의 기본 항목으로 둔다. 기본 공격 항목은 부모 생성자에서 추가한다.
 	FAbilityInfo& AssassinateInfo = AbilityClassArray.AddDefaulted_GetRef();
@@ -141,6 +154,13 @@ void APlayerCharacter::BeginPlay()
   Super::BeginPlay();
   InteractComponent->SetBoxExtent(InteractBoxSize);
   InteractComponent->SetAbsolute(false, true, true);
+  if (IsValid(AuraLight))
+  {
+      AuraLightBaseIntensity = AuraLight->Intensity;
+      AuraLightAlpha = IsHiding() ? 0.0f : 1.0f;
+      AuraLight->SetIntensity(AuraLightBaseIntensity * AuraLightAlpha);
+      AuraLight->SetVisibility(AuraLightAlpha > 0.0f);
+  }
   WarnIfAbilityMissing(EAbilityInputID::Assassinate);
   WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
   WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
@@ -208,6 +228,7 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateMovementSound(DeltaSeconds);
+	UpdateAuraLight(DeltaSeconds);
 	// 아래의 조기 반환(공격 중 등)과 관계없이 조준 위젯은 매 프레임 갱신한다.
 	UpdateAimWidget();
 	// 상호작용 키는 암살이 우선이므로, 암살이 가능한 동안에는 상호작용 표시를 숨겨 헷갈리지 않게 한다.
@@ -225,6 +246,29 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 
 	UpdateCursorTarget();
 	UpdateCursorFacing(DeltaSeconds);
+}
+
+void APlayerCharacter::UpdateAuraLight(float DeltaSeconds)
+{
+	if (!IsValid(AuraLight))
+	{
+		return;
+	}
+
+	// 은신구역에 들어가는 중·숨어 있는 중·나오는 중에는 빛을 끈다.
+	const float TargetAlpha = IsHiding() ? 0.0f : 1.0f;
+	if (FMath::IsNearlyEqual(AuraLightAlpha, TargetAlpha))
+	{
+		return;
+	}
+
+	AuraLightAlpha = AuraLightFadeTime > KINDA_SMALL_NUMBER
+		? FMath::FInterpConstantTo(AuraLightAlpha, TargetAlpha, DeltaSeconds, 1.0f / AuraLightFadeTime)
+		: TargetAlpha;
+
+	AuraLight->SetIntensity(AuraLightBaseIntensity * AuraLightAlpha);
+	// 완전히 꺼지면 렌더링에서도 빼서 숨은 자리 주변이 조금도 밝아지지 않게 한다.
+	AuraLight->SetVisibility(AuraLightAlpha > 0.0f);
 }
 
 void APlayerCharacter::PlayCharacterSound(USoundBase* Sound, float Volume) const

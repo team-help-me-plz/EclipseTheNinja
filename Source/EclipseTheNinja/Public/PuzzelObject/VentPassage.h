@@ -27,8 +27,6 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-	// 덮개 스켈레탈 메시가 있으면 MeshAssembly의 스태틱 메시는 숨긴다 (조명과 충돌은 MeshAssembly 것을 그대로 쓴다)
-	virtual void OnConstruction(const FTransform& Transform) override;
 
 public:
 	// Called every frame
