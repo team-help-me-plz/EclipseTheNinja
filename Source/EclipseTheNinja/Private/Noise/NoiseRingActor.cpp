@@ -11,6 +11,8 @@
 #include "Engine/LocalPlayer.h"
 #include "Components/SphereComponent.h"
 #include "Engine/OverlapResult.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 
 // Sets default values
 ANoiseRingActor::ANoiseRingActor()
@@ -83,6 +85,17 @@ void ANoiseRingActor::Play(const FVector& InLocation, const float InRadius, cons
 	// 표시에 실패해도 판정은 해야 하므로 위젯 확인보다 먼저 알린다.
 	this->NotifyEnemies(InLocation, InRadius, InStrength);
 
+	// 파동 이펙트는 위젯과 별개로 자체 수명으로 끝나므로 위젯 확인 전에 띄운다.
+	this->SpawnNoiseWave(InLocation, InRadius);
+
+	// 위젯을 쓰지 않으면 기다릴 애니메이션이 없으므로 다음 틱에 바로 반환한다.
+	if (!this->bShowRingWidget)
+	{
+		this->NoiseWidgetComponent->SetVisibility(false);
+		GetWorldTimerManager().SetTimerForNextTick(this, &ANoiseRingActor::ReleaseToPool);
+		return ;
+	}
+
 	// 풀이 등록되지 않아 일반 스폰된 경우 OnSpawnFromPool이 호출되지 않으므로 여기서도 확인한다.
 	if (!this->EnsureWidget())
 	{
@@ -131,6 +144,36 @@ void ANoiseRingActor::NotifyEnemies(const FVector& InLocation, const float InRad
 		Notified.Add(Enemy);
 		Enemy->NotifyNoise(InLocation, InRadius, InStrength);
 	}
+}
+
+void ANoiseRingActor::SpawnNoiseWave(const FVector& InLocation, const float InRadius)
+{
+	if (!this->NoiseWaveSystem)
+	{
+		return ;
+	}
+
+	// 링 액터는 풀로 재사용되므로 이펙트는 붙이지 않고 위치에 따로 띄워 끝나면 자동 반환시킨다.
+	// 반경을 넣은 뒤 재생해야 첫 프레임부터 크기가 맞으므로 자동 활성화는 끈다.
+	UNiagaraComponent* WaveComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		this,
+		this->NoiseWaveSystem,
+		InLocation,
+		FRotator::ZeroRotator,
+		FVector(1.f),
+		true,	// bAutoDestroy
+		false,	// bAutoActivate
+		ENCPoolMethod::AutoRelease,
+		true	// bPreCullCheck
+	);
+
+	if (!WaveComponent)
+	{
+		return ;
+	}
+
+	WaveComponent->SetVariableFloat(this->NoiseRadiusParamName, InRadius);
+	WaveComponent->Activate(true);
 }
 
 bool ANoiseRingActor::CalcScreenDiameter(APlayerController* InPC, const FVector& InLocation, const float InRadius, float& OutDiameter)
