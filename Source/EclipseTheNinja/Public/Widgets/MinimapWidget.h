@@ -5,6 +5,8 @@
 #include "Styling/SlateBrush.h"
 #include "Brushes/SlateColorBrush.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
+#include "Fonts/SlateFontInfo.h"
+#include "Minimap/MinimapMarkerTypes.h"
 #include "MinimapWidget.generated.h"
 
 /**
@@ -18,6 +20,8 @@ class ECLIPSETHENINJA_API UMinimapWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UMinimapWidget(const FObjectInitializer& ObjectInitializer);
+
 	void SetViewer(APawn* InViewer) { Viewer = InViewer; }
 
 protected:
@@ -56,9 +60,61 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Objects")
 	float PathThickness = 2.f;
 
+	/** 패널 위쪽에 비워 두는 영역 높이(px). 왼쪽 위에 맵 이름을 그린다. 0이면 그리지 않는다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer", meta = (ClampMin = "0.0"))
+	float HeaderHeight = 64.f;
+
+	/** 패널 아래쪽에 비워 두는 영역 높이(px). 오른쪽에 범례를 그린다. 0이면 그리지 않는다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer", meta = (ClampMin = "0.0"))
+	float FooterHeight = 66.f;
+
+	/** 맵 이름 글꼴. 비어 있으면 /Game/Fonts/NotoSerifKR_Font */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer")
+	FSlateFontInfo MapNameFont;
+
+	/** 범례 글꼴 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer")
+	FSlateFontInfo LegendFont;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer")
+	FLinearColor MapNameColor = FLinearColor(0.93f, 0.88f, 0.76f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer")
+	FLinearColor LegendTextColor = FLinearColor(0.85f, 0.85f, 0.85f, 1.f);
+
+	/** 범례 기호(플레이어·체크포인트) 크기 배율. 지도 위 마커 크기 기준 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer", meta = (ClampMin = "0.1"))
+	float LegendSymbolScale = 1.5f;
+
+	/** 지도와 하단 영역 사이 구분선 색 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer")
+	FLinearColor FooterLineColor = FLinearColor(1.f, 1.f, 1.f, 0.18f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer")
+	FText PlayerLegendText = NSLOCTEXT("Minimap", "LegendPlayer", "플레이어");
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap|Footer")
+	FText CheckpointLegendText = NSLOCTEXT("Minimap", "LegendCheckpoint", "체크포인트");
+
 private:
 	void DrawObjectMarkers(FSlateWindowElementList& OutDrawElements, int32& LayerId, const FGeometry& Geometry,
 		const FVector2D& MapPos, const FVector2D& MapDrawSize, const FVector2D& ViewStart, double Scale, const FLinearColor& WidgetTint) const;
+
+	// 점 하나짜리 마커(도형 또는 아이콘)를 Center에 그린다. 지도 마커와 범례가 같이 쓴다
+	void DrawPointMarker(FSlateWindowElementList& OutDrawElements, int32 OutlineLayer, int32 FillLayer, const FGeometry& Geometry,
+		const FVector2D& Center, const FMinimapMarkerStyle& Style, UTexture2D* Icon, const FLinearColor& Color, const FLinearColor& WidgetTint) const;
+
+	// 플레이어 표시(검은 테두리의 흰 네모)를 Center에 그린다
+	void DrawPlayerMarker(FSlateWindowElementList& OutDrawElements, int32 OutlineLayer, int32 FillLayer, const FGeometry& Geometry,
+		const FVector2D& Center, const FLinearColor& WidgetTint, float SizeScale = 1.f) const;
+
+	// 상단 영역: 왼쪽 위 맵 이름과 구분선
+	void DrawHeader(FSlateWindowElementList& OutDrawElements, int32& LayerId, const FGeometry& Geometry,
+		const FVector2D& HeaderPos, const FVector2D& HeaderSize, const FLinearColor& WidgetTint) const;
+
+	// 하단 영역: 오른쪽 범례(플레이어·체크포인트)
+	void DrawFooter(FSlateWindowElementList& OutDrawElements, int32& LayerId, const FGeometry& Geometry,
+		const FVector2D& FooterPos, const FVector2D& FooterSize, const FLinearColor& WidgetTint) const;
 
 	TWeakObjectPtr<APawn> Viewer;
 
