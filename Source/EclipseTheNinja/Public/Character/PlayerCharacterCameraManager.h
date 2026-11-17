@@ -11,6 +11,16 @@ class UCanvas;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 
+// 클로즈업 중 배경을 흐리는 방식
+UENUM(BlueprintType)
+enum class ECloseUpBlurMode : uint8
+{
+	// 초점을 중심으로 한 원 안만 선명하고 바깥을 흐린다 (포스트 프로세스 머티리얼)
+	PostProcessMask UMETA(DisplayName = "Post Process Mask"),
+	// 캐릭터 이동 평면만 선명하고 그 앞뒤(배경·전경)를 흐린다 (피사계 심도)
+	DepthOfField UMETA(DisplayName = "Depth Of Field"),
+};
+
 /**
  * 
  */
@@ -162,21 +172,33 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Side Scrolling Camera|Close Up")
 	void SetCloseUpBlur(bool bEnable);
 
-	// 원형 마스크 블러 포스트 프로세스 머티리얼. Center·Radius·Falloff·BlurStep·Strength 파라미터를 쓴다
+	// 흐리는 방식. 기본은 원형 마스크(포스트 프로세스)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up")
+	ECloseUpBlurMode CloseUpBlurMode = ECloseUpBlurMode::PostProcessMask;
+
+	// [Depth Of Field] 작을수록 배경이 더 흐려진다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (EditCondition = "CloseUpBlurMode == ECloseUpBlurMode::DepthOfField", ClampMin = 0.1, ClampMax = 32))
+	float CloseUpBlurFstop = 0.8f;
+
+	// [Depth Of Field] 이동 평면을 가운데 두고 선명하게 남길 앞뒤 깊이. 캐릭터 두께보다 넉넉해야 플레이어와 대상이 흐려지지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (EditCondition = "CloseUpBlurMode == ECloseUpBlurMode::DepthOfField", ClampMin = 0, Units = "cm"))
+	float CloseUpBlurFocalRegion = 150.0f;
+
+	// [Post Process Mask] 원형 마스크 블러 머티리얼. Center·Radius·Falloff·BlurStep·Strength 파라미터를 쓴다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (EditCondition = "CloseUpBlurMode == ECloseUpBlurMode::PostProcessMask"))
 	TSoftObjectPtr<UMaterialInterface> CloseUpBlurMaterial =
 		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Materials/PostProcess/M_PP_CloseUpRadialBlur.M_PP_CloseUpRadialBlur")));
 
-	// 선명한 원의 반지름. 화면 높이를 1로 본 비율이다
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, ClampMax = 1))
+	// [Post Process Mask] 선명한 원의 반지름. 화면 높이를 1로 본 비율이다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (EditCondition = "CloseUpBlurMode == ECloseUpBlurMode::PostProcessMask", ClampMin = 0, ClampMax = 1))
 	float CloseUpBlurRadius = 0.22f;
 
-	// 원 가장자리에서 완전히 흐려지기까지의 폭 (화면 높이 비율)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, ClampMax = 1))
+	// [Post Process Mask] 원 가장자리에서 완전히 흐려지기까지의 폭 (화면 높이 비율)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (EditCondition = "CloseUpBlurMode == ECloseUpBlurMode::PostProcessMask", ClampMin = 0, ClampMax = 1))
 	float CloseUpBlurFalloff = 0.18f;
 
-	// 흐림 세기. 블러 샘플 간격(화면 높이 비율)이라 클수록 더 번진다
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, ClampMax = 0.05))
+	// [Post Process Mask] 흐림 세기. 블러 샘플 간격(화면 높이 비율)이라 클수록 더 번진다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (EditCondition = "CloseUpBlurMode == ECloseUpBlurMode::PostProcessMask", ClampMin = 0, ClampMax = 0.05))
 	float CloseUpBlurStep = 0.004f;
 
 	// 흐림이 켜지고 꺼지는 데 걸리는 실제 시간

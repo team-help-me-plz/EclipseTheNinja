@@ -405,6 +405,29 @@ void APlayerCharacterCameraManager::ApplyCloseUpBlur(const FMinimalViewInfo& POV
 
 	if (CloseUpBlurAlpha <= 0.0f) return;
 
+	if (CloseUpBlurMode == ECloseUpBlurMode::DepthOfField)
+	{
+		// 피사계 심도는 원근 투영에서만 동작한다.
+		if (POV.ProjectionMode != ECameraProjectionMode::Perspective) return;
+
+		// 캐릭터들이 선 이동 평면을 가운데 두고 앞뒤 CloseUpBlurFocalRegion만큼만 선명하게 남긴다.
+		// 사이드뷰라 배경·전경은 이 구간 밖에 있어 흐려지고, 같은 평면의 플레이어와 대상은 선명하다.
+		const float PlaneDistance = FMath::Abs(POV.Location.Y - PawnLocation.Y);
+		const float HalfRegion = CloseUpBlurFocalRegion * 0.5f;
+
+		FPostProcessSettings Settings;
+		Settings.bOverride_DepthOfFieldFocalDistance = true;
+		Settings.DepthOfFieldFocalDistance = FMath::Max(1.0f, PlaneDistance - HalfRegion);
+		Settings.bOverride_DepthOfFieldFocalRegion = true;
+		Settings.DepthOfFieldFocalRegion = CloseUpBlurFocalRegion;
+		Settings.bOverride_DepthOfFieldMinFstop = true;
+		Settings.DepthOfFieldMinFstop = 0.0f;
+		Settings.bOverride_DepthOfFieldFstop = true;
+		Settings.DepthOfFieldFstop = CloseUpBlurFstop;
+		AddCachedPPBlend(Settings, FMath::InterpEaseInOut(0.0f, 1.0f, CloseUpBlurAlpha, 2.0f));
+		return;
+	}
+
 	if (!IsValid(CloseUpBlurMID))
 	{
 		UMaterialInterface* Material = CloseUpBlurMaterial.LoadSynchronous();
