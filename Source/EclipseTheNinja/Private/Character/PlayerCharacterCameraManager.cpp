@@ -12,6 +12,8 @@
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
 #include "Components/StaticMeshComponent.h"
+#include "Misc/App.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 void APlayerCharacterCameraManager::BeginPlay()
 {
@@ -233,8 +235,14 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 		}
 		bWasCameraExploreMode = bIsCameraExploreMode;
 
+		// 암살 클로즈업 같은 연출은 일반 추적 위치 위에 섞는다. 카메라 셰이크는 그 뒤에 적용해 클로즈업 중에도 흔들린다.
+		UpdateCloseUp(OutVT.POV, CurrentActorLocation);
+
 		// Super를 부르지 않으므로 카메라 모디파이어(카메라 셰이크, 임팩트 프레임 흔들림 등)를 직접 적용한다.
 		ApplyCameraModifiers(DeltaTime, OutVT.POV);
+
+		// ApplyCameraModifiers가 포스트 프로세스 블렌드 목록을 비우므로 그 뒤에 넣는다.
+		ApplyCloseUpBlur(OutVT.POV, CurrentActorLocation);
 
 		UpdateOccluders(OutVT.POV.Location, TargetPawn);
 	}
@@ -329,4 +337,148 @@ void APlayerCharacterCameraManager::SetCameraExploreMode(bool IsAiming)
 void APlayerCharacterCameraManager::SmoothTeleport(const FVector& Delta)
 {
 	TeleportOffset -= Delta;
+}
+
+void APlayerCharacterCameraManager::StartCloseUp(AActor* FocusActor)
+{
+	if (!IsValid(FocusActor)) return;
+
+	CloseUpFocus = FocusActor;
+	CloseUpFocusLocation = FocusActor->GetActorLocation();
+	bCloseUpActive = true;
+}
+
+void APlayerCharacterCameraManager::StopCloseUp()
+{
+	bCloseUpActive = false;
+	bCloseUpBlurActive = false;
+}
+
+void APlayerCharacterCameraManager::UpdateCloseUp(FMinimalViewInfo& POV, const FVector& PawnLocation)
+{
+	// 암살 히트스톱·슬로모션 중에도 같은 빠르기로 움직이도록 게임 속도 배율이 빠진 실제 프레임 시간을 쓴다.
+	const float RealDeltaTime = static_cast<float>(FApp::GetDeltaTime());
+	if (bCloseUpActive)
+	{
+		CloseUpAlpha = CloseUpBlendInTime > 0.0f ? FMath::Min(1.0f, CloseUpAlpha + RealDeltaTime / CloseUpBlendInTime) : 1.0f;
+	}
+	else
+	{
+		CloseUpAlpha = CloseUpBlendOutTime > 0.0f ? FMath::Max(0.0f, CloseUpAlpha - RealDeltaTime / CloseUpBlendOutTime) : 0.0f;
+	}
+
+	if (CloseUpAlpha <= 0.0f)
+	{
+		CloseUpFocus.Reset();
+		return;
+	}
+
+	if (const AActor* Focus = CloseUpFocus.Get())
+	{
+		CloseUpFocusLocation = Focus->GetActorLocation();
+	}
+
+	// 플레이어와 대상 사이를 초점으로, 같은 이동 평면에서 CloseUpZoom만큼 떨어진 곳에 카메라를 둔다.
+	const FVector FocusPoint = FMath::Lerp(PawnLocation, CloseUpFocusLocation, CloseUpFocusWeight);
+	const FVector CloseUpLocation(FocusPoint.X, PawnLocation.Y + CloseUpZoom, FocusPoint.Z + CloseUpZOffset);
+
+	const float Blend = FMath::InterpEaseInOut(0.0f, 1.0f, CloseUpAlpha, 2.0f);
+	POV.Location = FMath::Lerp(POV.Location, CloseUpLocation, Blend);
+	if (POV.ProjectionMode == ECameraProjectionMode::Orthographic)
+	{
+		POV.OrthoWidth = FMath::Lerp(POV.OrthoWidth, POV.OrthoWidth * CloseUpOrthoWidthScale, Blend);
+	}
+}
+
+void APlayerCharacterCameraManager::SetCloseUpBlur(bool bEnable)
+{
+	bCloseUpBlurActive = bEnable;
+}
+
+void APlayerCharacterCameraManager::ApplyCloseUpBlur(const FMinimalViewInfo& POV, const FVector& PawnLocation)
+{
+	const float RealDeltaTime = static_cast<float>(FApp::GetDeltaTime());
+	const float Target = bCloseUpBlurActive ? 1.0f : 0.0f;
+	CloseUpBlurAlpha = CloseUpBlurBlendTime > 0.0f
+		? FMath::FInterpConstantTo(CloseUpBlurAlpha, Target, RealDeltaTime, 1.0f / CloseUpBlurBlendTime)
+		: Target;
+
+	if (CloseUpBlurAlpha <= 0.0f) return;
+
+	if (CloseUpBlurMode == ECloseUpBlurMode::DepthOfField)
+	{
+		// 피사계 심도는 원근 투영에서만 동작한다.
+		if (POV.ProjectionMode != ECameraProjectionMode::Perspective) return;
+
+		// 캐릭터들이 선 이동 평면을 가운데 두고 앞뒤 CloseUpBlurFocalRegion만큼만 선명하게 남긴다.
+		// 사이드뷰라 배경·전경은 이 구간 밖에 있어 흐려지고, 같은 평면의 플레이어와 대상은 선명하다.
+		const float PlaneDistance = FMath::Abs(POV.Location.Y - PawnLocation.Y);
+		const float HalfRegion = CloseUpBlurFocalRegion * 0.5f;
+
+		FPostProcessSettings Settings;
+		Settings.bOverride_DepthOfFieldFocalDistance = true;
+		Settings.DepthOfFieldFocalDistance = FMath::Max(1.0f, PlaneDistance - HalfRegion);
+		Settings.bOverride_DepthOfFieldFocalRegion = true;
+		Settings.DepthOfFieldFocalRegion = CloseUpBlurFocalRegion;
+		Settings.bOverride_DepthOfFieldMinFstop = true;
+		Settings.DepthOfFieldMinFstop = 0.0f;
+		Settings.bOverride_DepthOfFieldFstop = true;
+		Settings.DepthOfFieldFstop = CloseUpBlurFstop;
+		AddCachedPPBlend(Settings, FMath::InterpEaseInOut(0.0f, 1.0f, CloseUpBlurAlpha, 2.0f));
+		return;
+	}
+
+	if (!IsValid(CloseUpBlurMID))
+	{
+		if (!IsValid(CloseUpBlurMaterial)) return;
+		CloseUpBlurMID = UMaterialInstanceDynamic::Create(CloseUpBlurMaterial, this);
+	}
+
+	// 선명한 원의 중심은 플레이어와 대상 사이 초점이다. 카메라가 아직 다가가는 중이어도 초점을 따라간다.
+	const FVector FocusPoint = FMath::Lerp(PawnLocation, CloseUpFocusLocation, CloseUpFocusWeight);
+	FVector2D CenterUV(0.5, 0.5);
+	ProjectToViewportUV(POV, FocusPoint, CenterUV);
+
+	CloseUpBlurMID->SetVectorParameterValue(TEXT("Center"), FLinearColor(CenterUV.X, CenterUV.Y, 0.0f, 0.0f));
+	CloseUpBlurMID->SetScalarParameterValue(TEXT("Radius"), CloseUpBlurRadius);
+	CloseUpBlurMID->SetScalarParameterValue(TEXT("Falloff"), CloseUpBlurFalloff);
+	CloseUpBlurMID->SetScalarParameterValue(TEXT("BlurStep"), CloseUpBlurStep);
+	// 머티리얼 블렌더블은 가중치로 섞이지 않으므로 켜고 끄는 정도는 Strength로 준다.
+	CloseUpBlurMID->SetScalarParameterValue(TEXT("Strength"), FMath::InterpEaseInOut(0.0f, 1.0f, CloseUpBlurAlpha, 2.0f));
+
+	FPostProcessSettings Settings;
+	Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.0f, CloseUpBlurMID));
+	AddCachedPPBlend(Settings, 1.0f);
+}
+
+bool APlayerCharacterCameraManager::ProjectToViewportUV(const FMinimalViewInfo& POV, const FVector& WorldLocation, FVector2D& OutUV) const
+{
+	// 카메라 공간: X 앞, Y 오른쪽, Z 위
+	const FVector Local = POV.Rotation.UnrotateVector(WorldLocation - POV.Location);
+
+	int32 Width = 0;
+	int32 Height = 0;
+	if (PCOwner)
+	{
+		PCOwner->GetViewportSize(Width, Height);
+	}
+	const float Aspect = (Width > 0 && Height > 0) ? static_cast<float>(Width) / Height : 16.0f / 9.0f;
+
+	// 가로 화면 반폭에 해당하는 거리 (원근은 깊이에 비례, 직교는 OrthoWidth 고정)
+	float HalfWidth = 0.0f;
+	if (POV.ProjectionMode == ECameraProjectionMode::Orthographic)
+	{
+		HalfWidth = POV.OrthoWidth * 0.5f;
+	}
+	else
+	{
+		if (Local.X <= 1.0f) return false;
+		HalfWidth = Local.X * FMath::Tan(FMath::DegreesToRadians(POV.FOV * 0.5f));
+	}
+	if (HalfWidth <= KINDA_SMALL_NUMBER) return false;
+
+	const float HalfHeight = HalfWidth / Aspect;
+	OutUV.X = 0.5f + 0.5f * Local.Y / HalfWidth;
+	OutUV.Y = 0.5f - 0.5f * Local.Z / HalfHeight;
+	return true;
 }

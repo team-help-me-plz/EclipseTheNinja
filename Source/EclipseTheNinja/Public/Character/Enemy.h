@@ -106,6 +106,14 @@ public:
 	/** 지금 암살 대상으로 지정될 수 있는지. 경계 단계 검사와 별도로 적 종류별 조건(보스 실드 등)을 추가한다. */
 	virtual bool CanBeAssassinated() const { return true; }
 
+	/**
+	 * 이 적을 암살할 때 카메라 클로즈업 연출을 재생할지.
+	 * 일반 적은 암살이 잦아 매번 줌인하면 흐름이 끊기므로 끄고, 보스처럼 특별한 대상만 켠다.
+	 * BP 기본값·레벨에 놓은 개별 적·코드(bPlayAssassinateCloseUp 직접 대입)에서 바꿀 수 있다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Assassinate|Camera")
+	bool bPlayAssassinateCloseUp = false;
+
 	/** 암살 연출 동안 MeshYOffset을 빼서 메시를 캡슐(암살자와 같은 Y)에 맞춘다. 리스폰 때 다시 켜진다. */
 	void SetMeshYOffsetSuppressed(bool bSuppressed);
 
