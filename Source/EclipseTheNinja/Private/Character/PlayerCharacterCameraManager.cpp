@@ -13,6 +13,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Components/StaticMeshComponent.h"
 #include "Misc/App.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 void APlayerCharacterCameraManager::BeginPlay()
 {
@@ -402,22 +403,60 @@ void APlayerCharacterCameraManager::ApplyCloseUpBlur(const FMinimalViewInfo& POV
 		? FMath::FInterpConstantTo(CloseUpBlurAlpha, Target, RealDeltaTime, 1.0f / CloseUpBlurBlendTime)
 		: Target;
 
-	// 피사계 심도는 원근 투영에서만 동작한다.
-	if (CloseUpBlurAlpha <= 0.0f || POV.ProjectionMode != ECameraProjectionMode::Perspective) return;
+	if (CloseUpBlurAlpha <= 0.0f) return;
 
-	// 캐릭터들이 선 이동 평면을 가운데 두고 앞뒤 CloseUpBlurFocalRegion만큼만 선명하게 남긴다.
-	// 사이드뷰라 배경·전경은 이 구간 밖에 있어 흐려지고, 같은 평면의 플레이어와 대상은 선명하다.
-	const float PlaneDistance = FMath::Abs(POV.Location.Y - PawnLocation.Y);
-	const float HalfRegion = CloseUpBlurFocalRegion * 0.5f;
+	if (!IsValid(CloseUpBlurMID))
+	{
+		UMaterialInterface* Material = CloseUpBlurMaterial.LoadSynchronous();
+		if (!IsValid(Material)) return;
+		CloseUpBlurMID = UMaterialInstanceDynamic::Create(Material, this);
+	}
+
+	// 선명한 원의 중심은 플레이어와 대상 사이 초점이다. 카메라가 아직 다가가는 중이어도 초점을 따라간다.
+	const FVector FocusPoint = FMath::Lerp(PawnLocation, CloseUpFocusLocation, CloseUpFocusWeight);
+	FVector2D CenterUV(0.5, 0.5);
+	ProjectToViewportUV(POV, FocusPoint, CenterUV);
+
+	CloseUpBlurMID->SetVectorParameterValue(TEXT("Center"), FLinearColor(CenterUV.X, CenterUV.Y, 0.0f, 0.0f));
+	CloseUpBlurMID->SetScalarParameterValue(TEXT("Radius"), CloseUpBlurRadius);
+	CloseUpBlurMID->SetScalarParameterValue(TEXT("Falloff"), CloseUpBlurFalloff);
+	CloseUpBlurMID->SetScalarParameterValue(TEXT("BlurStep"), CloseUpBlurStep);
+	// 머티리얼 블렌더블은 가중치로 섞이지 않으므로 켜고 끄는 정도는 Strength로 준다.
+	CloseUpBlurMID->SetScalarParameterValue(TEXT("Strength"), FMath::InterpEaseInOut(0.0f, 1.0f, CloseUpBlurAlpha, 2.0f));
 
 	FPostProcessSettings Settings;
-	Settings.bOverride_DepthOfFieldFocalDistance = true;
-	Settings.DepthOfFieldFocalDistance = FMath::Max(1.0f, PlaneDistance - HalfRegion);
-	Settings.bOverride_DepthOfFieldFocalRegion = true;
-	Settings.DepthOfFieldFocalRegion = CloseUpBlurFocalRegion;
-	Settings.bOverride_DepthOfFieldMinFstop = true;
-	Settings.DepthOfFieldMinFstop = 0.0f;
-	Settings.bOverride_DepthOfFieldFstop = true;
-	Settings.DepthOfFieldFstop = CloseUpBlurFstop;
-	AddCachedPPBlend(Settings, FMath::InterpEaseInOut(0.0f, 1.0f, CloseUpBlurAlpha, 2.0f));
+	Settings.WeightedBlendables.Array.Add(FWeightedBlendable(1.0f, CloseUpBlurMID));
+	AddCachedPPBlend(Settings, 1.0f);
+}
+
+bool APlayerCharacterCameraManager::ProjectToViewportUV(const FMinimalViewInfo& POV, const FVector& WorldLocation, FVector2D& OutUV) const
+{
+	// 카메라 공간: X 앞, Y 오른쪽, Z 위
+	const FVector Local = POV.Rotation.UnrotateVector(WorldLocation - POV.Location);
+
+	int32 Width = 0;
+	int32 Height = 0;
+	if (PCOwner)
+	{
+		PCOwner->GetViewportSize(Width, Height);
+	}
+	const float Aspect = (Width > 0 && Height > 0) ? static_cast<float>(Width) / Height : 16.0f / 9.0f;
+
+	// 가로 화면 반폭에 해당하는 거리 (원근은 깊이에 비례, 직교는 OrthoWidth 고정)
+	float HalfWidth = 0.0f;
+	if (POV.ProjectionMode == ECameraProjectionMode::Orthographic)
+	{
+		HalfWidth = POV.OrthoWidth * 0.5f;
+	}
+	else
+	{
+		if (Local.X <= 1.0f) return false;
+		HalfWidth = Local.X * FMath::Tan(FMath::DegreesToRadians(POV.FOV * 0.5f));
+	}
+	if (HalfWidth <= KINDA_SMALL_NUMBER) return false;
+
+	const float HalfHeight = HalfWidth / Aspect;
+	OutUV.X = 0.5f + 0.5f * Local.Y / HalfWidth;
+	OutUV.Y = 0.5f - 0.5f * Local.Z / HalfHeight;
+	return true;
 }

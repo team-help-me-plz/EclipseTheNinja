@@ -8,6 +8,8 @@
 
 class AHUD;
 class UCanvas;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 
 /**
  * 
@@ -156,17 +158,26 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, Units = "s"))
 	float CloseUpBlendOutTime = 0.6f;
 
-	// 클로즈업 중 캐릭터 이동 평면 밖(배경·전경)을 피사계 심도로 흐리게 한다. StopCloseUp도 함께 끈다.
+	// 클로즈업 중 초점(플레이어와 대상 사이)을 중심으로 한 원 안만 선명하게 두고 바깥을 흐린다. StopCloseUp도 함께 끈다.
 	UFUNCTION(BlueprintCallable, Category = "Side Scrolling Camera|Close Up")
 	void SetCloseUpBlur(bool bEnable);
 
-	// 작을수록 배경이 더 흐려진다
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0.1, ClampMax = 32))
-	float CloseUpBlurFstop = 0.8f;
+	// 원형 마스크 블러 포스트 프로세스 머티리얼. Center·Radius·Falloff·BlurStep·Strength 파라미터를 쓴다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up")
+	TSoftObjectPtr<UMaterialInterface> CloseUpBlurMaterial =
+		TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Materials/PostProcess/M_PP_CloseUpRadialBlur.M_PP_CloseUpRadialBlur")));
 
-	// 이동 평면을 가운데 두고 선명하게 남길 앞뒤 깊이. 캐릭터 두께보다 넉넉해야 플레이어와 대상이 흐려지지 않는다
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, Units = "cm"))
-	float CloseUpBlurFocalRegion = 150.0f;
+	// 선명한 원의 반지름. 화면 높이를 1로 본 비율이다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, ClampMax = 1))
+	float CloseUpBlurRadius = 0.22f;
+
+	// 원 가장자리에서 완전히 흐려지기까지의 폭 (화면 높이 비율)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, ClampMax = 1))
+	float CloseUpBlurFalloff = 0.18f;
+
+	// 흐림 세기. 블러 샘플 간격(화면 높이 비율)이라 클수록 더 번진다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, ClampMax = 0.05))
+	float CloseUpBlurStep = 0.004f;
 
 	// 흐림이 켜지고 꺼지는 데 걸리는 실제 시간
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, Units = "s"))
@@ -219,8 +230,14 @@ protected:
 	// 0이면 일반 카메라, 1이면 완전히 클로즈업
 	float CloseUpAlpha = 0.0f;
 
-	// 흐림 블렌드를 진행하고 포스트 프로세스 블렌드로 피사계 심도를 넣는 함수
+	// 흐림 블렌드를 진행하고 원형 마스크 블러 머티리얼을 포스트 프로세스 블렌드로 넣는 함수
 	void ApplyCloseUpBlur(const FMinimalViewInfo& POV, const FVector& PawnLocation);
+
+	// 월드 위치를 POV 기준 뷰포트 UV(0~1)로 바꾼다. 카메라 뒤면 false
+	bool ProjectToViewportUV(const FMinimalViewInfo& POV, const FVector& WorldLocation, FVector2D& OutUV) const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> CloseUpBlurMID;
 
 	bool bCloseUpBlurActive = false;
 	float CloseUpBlurAlpha = 0.0f;
