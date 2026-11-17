@@ -20,6 +20,7 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Widgets/InputPromptWidget.h"
+#include "Widgets/QTEPulseRingWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/ArrowComponent.h"
@@ -65,6 +66,17 @@ ATutorialSequenceTrigger::ATutorialSequenceTrigger()
     this->QTEPrompt->SetDrawAtDesiredSize(true);
     this->QTEPrompt->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     this->QTEPrompt->SetHiddenInGame(true);
+
+    this->QTEPulseRing = CreateDefaultSubobject<UWidgetComponent>(TEXT("QTEPulseRing"));
+    this->QTEPulseRing->SetupAttachment(this->QTEPrompt);
+    this->QTEPulseRing->SetWidgetSpace(EWidgetSpace::Screen);
+    this->QTEPulseRing->SetWidgetClass(UQTEPulseRingWidget::StaticClass());
+    // 파동이 퍼질 자리까지 그릴 수 있게 넉넉한 크기로 두고, 가운데를 키 안내 위치에 맞춘다
+    this->QTEPulseRing->SetDrawAtDesiredSize(false);
+    this->QTEPulseRing->SetDrawSize(FIntPoint(512, 512));
+    this->QTEPulseRing->SetPivot(FVector2D(0.5f, 0.5f));
+    this->QTEPulseRing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    this->QTEPulseRing->SetHiddenInGame(true);
 
     this->SequenceOrigin = CreateDefaultSubobject<UArrowComponent>(TEXT("SequenceOrigin"));
     this->SequenceOrigin->SetupAttachment(this->SceneRoot);
@@ -405,7 +417,7 @@ void ATutorialSequenceTrigger::BeginQTE()
             }
         }
     }
-    this->QTEPrompt->SetHiddenInGame(false);
+    SetQTEPromptVisible(true);
     SetQTEOutlineVisible(true);
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::BeginQTE()] %s : QTE 입력 대기"), *GetActorNameOrLabel());
@@ -420,7 +432,7 @@ void ATutorialSequenceTrigger::OnQTEInput()
     this->bWaitingForQTE = false;
     GetWorldTimerManager().ClearTimer(this->QTEFreezeTimer);
 
-    this->QTEPrompt->SetHiddenInGame(true);
+    SetQTEPromptVisible(false);
     SetQTEOutlineVisible(false);
     // 건너뛰기 입력은 남기고 QTE 바인딩만 뺀다
     RefreshTriggerInput();
@@ -436,6 +448,26 @@ void ATutorialSequenceTrigger::OnQTEInput()
     }
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::OnQTEInput()] %s : QTE 입력, 재생 재개"), *GetActorNameOrLabel());
+}
+
+void ATutorialSequenceTrigger::SetQTEPromptVisible(bool bVisible)
+{
+    this->QTEPrompt->SetHiddenInGame(!bVisible);
+
+    UQTEPulseRingWidget* Ring = Cast<UQTEPulseRingWidget>(this->QTEPulseRing->GetUserWidgetObject());
+    const bool bShowRing = bVisible && this->bAnimateQTEPrompt && IsValid(Ring);
+    this->QTEPulseRing->SetHiddenInGame(!bShowRing);
+    if (!bShowRing)
+    {
+        return;
+    }
+
+    // 키 안내 위젯 크기를 따라 그 둘레에서 퍼지게 하고, 뜰 때마다 첫 겹부터 다시 퍼뜨린다
+    Ring->SetSource(this->QTEPrompt->GetUserWidgetObject(), this->QTEPrompt->GetPivot());
+    Ring->Period = this->QTEPromptPulsePeriod;
+    Ring->Spread = this->QTEPromptPulseSpread;
+    Ring->RingColor = this->QTEPromptPulseColor;
+    Ring->Restart();
 }
 
 void ATutorialSequenceTrigger::SetQTEOutlineVisible(bool bVisible)
@@ -654,7 +686,7 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
     if (this->bWaitingForQTE)
     {
         this->bWaitingForQTE = false;
-        this->QTEPrompt->SetHiddenInGame(true);
+        SetQTEPromptVisible(false);
         SetQTEOutlineVisible(false);
         DisableInput(this->BlockedController.Get());
     }
@@ -797,7 +829,7 @@ void ATutorialSequenceTrigger::SkipSequence()
     if (this->bWaitingForQTE)
     {
         this->bWaitingForQTE = false;
-        this->QTEPrompt->SetHiddenInGame(true);
+        SetQTEPromptVisible(false);
         SetQTEOutlineVisible(false);
     }
 
