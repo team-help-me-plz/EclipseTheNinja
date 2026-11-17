@@ -139,6 +139,10 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UWidgetComponent> QTEPrompt = nullptr;
 
+    // QTE 키 안내 둘레로 퍼지는 파동 테두리. QTEPrompt에 붙어 같은 지점에 뜬다
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UWidgetComponent> QTEPulseRing = nullptr;
+
     // 컷신 기준 마커. bOriginFollowsMarker일 때 이 위치가 시퀀스 키 공간의 SequenceKeyAnchor 지점이 된다
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UArrowComponent> SequenceOrigin = nullptr;
@@ -233,17 +237,20 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE")
     FLinearColor QTEOutlineColor = FLinearColor::Red;
 
-    // 키 안내가 떠 있는 동안 "지금 눌러!" 느낌으로 눌림 → 튀어오름 → 원래 크기를 반복한다
+    // 키 안내가 떠 있는 동안 키 둘레로 파동 테두리를 반복해 퍼뜨려 "지금 눌러!"를 강조한다. 키 자체는 움직이지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE")
     bool bAnimateQTEPrompt = true;
 
-    // 강조 애니메이션 한 번(눌림~복귀)에 걸리는 시간
+    // 파동 한 겹이 퍼져 사라지는 데 걸리는 시간
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (ClampMin = "0.2", Units = "s", EditCondition = "bAnimateQTEPrompt"))
-    float QTEPromptPulsePeriod = 0.8f;
+    float QTEPromptPulsePeriod = 1.0f;
 
-    // 튀어오를 때 최대 크기 배율
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (ClampMin = "1.0", ClampMax = "2.0", EditCondition = "bAnimateQTEPrompt"))
-    float QTEPromptPulsePeakScale = 1.2f;
+    // 파동이 키 가장자리에서 바깥으로 퍼지는 거리(px)
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (ClampMin = "0.0", EditCondition = "bAnimateQTEPrompt"))
+    float QTEPromptPulseSpread = 48.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (EditCondition = "bAnimateQTEPrompt"))
+    FLinearColor QTEPromptPulseColor = FLinearColor(1.0f, 0.85f, 0.4f, 1.0f);
 
     // Activate를 토글할 시퀀스 프레임(표시 프레임 기준). 0보다 작으면 쓰지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Activate")
@@ -355,11 +362,7 @@ private:
 
     void SetQTEOutlineVisible(bool bVisible);
 
-    // QTE 키 안내를 보이거나 숨기고, 보이는 동안 강조 애니메이션을 돌린다
+    // QTE 키 안내를 보이거나 숨기고, 보이는 동안 키 둘레 파동을 함께 띄운다
     void SetQTEPromptVisible(bool bVisible);
-    void TickQTEPromptPulse();
-
-    FTimerHandle QTEPromptPulseTimer;
-    double QTEPromptPulseStartTime = 0.0;
 
 };

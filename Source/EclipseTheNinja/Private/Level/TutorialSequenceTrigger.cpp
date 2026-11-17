@@ -20,6 +20,7 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Widgets/InputPromptWidget.h"
+#include "Widgets/QTEPulseRingWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/ArrowComponent.h"
@@ -65,6 +66,17 @@ ATutorialSequenceTrigger::ATutorialSequenceTrigger()
     this->QTEPrompt->SetDrawAtDesiredSize(true);
     this->QTEPrompt->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     this->QTEPrompt->SetHiddenInGame(true);
+
+    this->QTEPulseRing = CreateDefaultSubobject<UWidgetComponent>(TEXT("QTEPulseRing"));
+    this->QTEPulseRing->SetupAttachment(this->QTEPrompt);
+    this->QTEPulseRing->SetWidgetSpace(EWidgetSpace::Screen);
+    this->QTEPulseRing->SetWidgetClass(UQTEPulseRingWidget::StaticClass());
+    // 파동이 퍼질 자리까지 그릴 수 있게 넉넉한 크기로 두고, 가운데를 키 안내 위치에 맞춘다
+    this->QTEPulseRing->SetDrawAtDesiredSize(false);
+    this->QTEPulseRing->SetDrawSize(FIntPoint(512, 512));
+    this->QTEPulseRing->SetPivot(FVector2D(0.5f, 0.5f));
+    this->QTEPulseRing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    this->QTEPulseRing->SetHiddenInGame(true);
 
     this->SequenceOrigin = CreateDefaultSubobject<UArrowComponent>(TEXT("SequenceOrigin"));
     this->SequenceOrigin->SetupAttachment(this->SceneRoot);
@@ -147,7 +159,6 @@ void ATutorialSequenceTrigger::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     // 재생 도중 맵을 떠나도 일시정지 메뉴 차단과 건너뛰기 IMC가 남지 않게 한다
     EndSkipInput();
-    GetWorldTimerManager().ClearTimer(this->QTEPromptPulseTimer);
     Super::EndPlay(EndPlayReason);
 }
 
@@ -442,87 +453,21 @@ void ATutorialSequenceTrigger::OnQTEInput()
 void ATutorialSequenceTrigger::SetQTEPromptVisible(bool bVisible)
 {
     this->QTEPrompt->SetHiddenInGame(!bVisible);
-    GetWorldTimerManager().ClearTimer(this->QTEPromptPulseTimer);
 
-    UUserWidget* PromptWidget = this->QTEPrompt->GetUserWidgetObject();
-    if (IsValid(PromptWidget))
-    {
-        // 숨길 때는 다음 QTE가 원래 모습에서 시작하도록 되돌린다
-        PromptWidget->SetRenderTransform(FWidgetTransform());
-        PromptWidget->SetRenderOpacity(1.0f);
-    }
-    if (!bVisible || !this->bAnimateQTEPrompt || !IsValid(PromptWidget))
+    UQTEPulseRingWidget* Ring = Cast<UQTEPulseRingWidget>(this->QTEPulseRing->GetUserWidgetObject());
+    const bool bShowRing = bVisible && this->bAnimateQTEPrompt && IsValid(Ring);
+    this->QTEPulseRing->SetHiddenInGame(!bShowRing);
+    if (!bShowRing)
     {
         return;
     }
 
-    // 시퀀스는 QTE 동안 재생 속도만 낮추고 월드는 그대로 흐르므로, 실제 시간 기준으로 프레임마다 갱신한다
-    PromptWidget->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
-    this->QTEPromptPulseStartTime = GetWorld()->GetRealTimeSeconds();
-    TickQTEPromptPulse();
-    GetWorldTimerManager().SetTimer(this->QTEPromptPulseTimer, this, &ATutorialSequenceTrigger::TickQTEPromptPulse, 1.0f / 60.0f, true);
-}
-
-void ATutorialSequenceTrigger::TickQTEPromptPulse()
-{
-    UUserWidget* PromptWidget = this->QTEPrompt->GetUserWidgetObject();
-    if (!IsValid(PromptWidget) || !this->bWaitingForQTE)
-    {
-        GetWorldTimerManager().ClearTimer(this->QTEPromptPulseTimer);
-        return;
-    }
-
-    const float Elapsed = static_cast<float>(GetWorld()->GetRealTimeSeconds() - this->QTEPromptPulseStartTime);
-    const float PeakScale = this->QTEPromptPulsePeakScale;
-    constexpr float IntroDuration = 0.18f;
-    constexpr float IntroScale = 1.7f;
-    constexpr float PressScale = 0.86f;
-    constexpr float PressOffset = 6.0f;
-    constexpr float DimOpacity = 0.7f;
-
-    float Scale = 1.0f;
-    float OffsetY = 0.0f;
-    float Opacity = 1.0f;
-    if (Elapsed < IntroDuration)
-    {
-        // 처음 뜰 때는 크게 내리꽂히듯 등장해 시선을 끈다
-        const float Alpha = Elapsed / IntroDuration;
-        Scale = FMath::Lerp(IntroScale, 1.0f, FMath::InterpEaseOut(0.0f, 1.0f, Alpha, 3.0f));
-        Opacity = Alpha;
-    }
-    else
-    {
-        // 한 주기: 눌림(살짝 작아지며 아래로) → 튀어오름(커짐, 가장 밝음) → 천천히 원래 크기로 돌아오며 어두워짐
-        const float Period = FMath::Max(this->QTEPromptPulsePeriod, 0.2f);
-        const float Phase = FMath::Fmod(Elapsed - IntroDuration, Period) / Period;
-        constexpr float PressEnd = 0.12f;
-        constexpr float PopEnd = 0.32f;
-        if (Phase < PressEnd)
-        {
-            const float Alpha = FMath::InterpEaseOut(0.0f, 1.0f, Phase / PressEnd, 2.0f);
-            Scale = FMath::Lerp(1.0f, PressScale, Alpha);
-            OffsetY = PressOffset * Alpha;
-            Opacity = FMath::Lerp(DimOpacity, 1.0f, Alpha);
-        }
-        else if (Phase < PopEnd)
-        {
-            const float Alpha = FMath::InterpEaseOut(0.0f, 1.0f, (Phase - PressEnd) / (PopEnd - PressEnd), 3.0f);
-            Scale = FMath::Lerp(PressScale, PeakScale, Alpha);
-            OffsetY = PressOffset * (1.0f - Alpha);
-        }
-        else
-        {
-            const float Alpha = FMath::InterpEaseInOut(0.0f, 1.0f, (Phase - PopEnd) / (1.0f - PopEnd), 2.0f);
-            Scale = FMath::Lerp(PeakScale, 1.0f, Alpha);
-            Opacity = FMath::Lerp(1.0f, DimOpacity, Alpha);
-        }
-    }
-
-    FWidgetTransform Transform;
-    Transform.Scale = FVector2D(Scale, Scale);
-    Transform.Translation = FVector2D(0.0f, OffsetY);
-    PromptWidget->SetRenderTransform(Transform);
-    PromptWidget->SetRenderOpacity(Opacity);
+    // 키 안내 위젯 크기를 따라 그 둘레에서 퍼지게 하고, 뜰 때마다 첫 겹부터 다시 퍼뜨린다
+    Ring->SetSource(this->QTEPrompt->GetUserWidgetObject(), this->QTEPrompt->GetPivot());
+    Ring->Period = this->QTEPromptPulsePeriod;
+    Ring->Spread = this->QTEPromptPulseSpread;
+    Ring->RingColor = this->QTEPromptPulseColor;
+    Ring->Restart();
 }
 
 void ATutorialSequenceTrigger::SetQTEOutlineVisible(bool bVisible)
