@@ -240,6 +240,9 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 		// Super를 부르지 않으므로 카메라 모디파이어(카메라 셰이크, 임팩트 프레임 흔들림 등)를 직접 적용한다.
 		ApplyCameraModifiers(DeltaTime, OutVT.POV);
 
+		// ApplyCameraModifiers가 포스트 프로세스 블렌드 목록을 비우므로 그 뒤에 넣는다.
+		ApplyCloseUpBlur(OutVT.POV, CurrentActorLocation);
+
 		UpdateOccluders(OutVT.POV.Location, TargetPawn);
 	}
 	else
@@ -347,6 +350,7 @@ void APlayerCharacterCameraManager::StartCloseUp(AActor* FocusActor)
 void APlayerCharacterCameraManager::StopCloseUp()
 {
 	bCloseUpActive = false;
+	bCloseUpBlurActive = false;
 }
 
 void APlayerCharacterCameraManager::UpdateCloseUp(FMinimalViewInfo& POV, const FVector& PawnLocation)
@@ -383,4 +387,37 @@ void APlayerCharacterCameraManager::UpdateCloseUp(FMinimalViewInfo& POV, const F
 	{
 		POV.OrthoWidth = FMath::Lerp(POV.OrthoWidth, POV.OrthoWidth * CloseUpOrthoWidthScale, Blend);
 	}
+}
+
+void APlayerCharacterCameraManager::SetCloseUpBlur(bool bEnable)
+{
+	bCloseUpBlurActive = bEnable;
+}
+
+void APlayerCharacterCameraManager::ApplyCloseUpBlur(const FMinimalViewInfo& POV, const FVector& PawnLocation)
+{
+	const float RealDeltaTime = static_cast<float>(FApp::GetDeltaTime());
+	const float Target = bCloseUpBlurActive ? 1.0f : 0.0f;
+	CloseUpBlurAlpha = CloseUpBlurBlendTime > 0.0f
+		? FMath::FInterpConstantTo(CloseUpBlurAlpha, Target, RealDeltaTime, 1.0f / CloseUpBlurBlendTime)
+		: Target;
+
+	// 피사계 심도는 원근 투영에서만 동작한다.
+	if (CloseUpBlurAlpha <= 0.0f || POV.ProjectionMode != ECameraProjectionMode::Perspective) return;
+
+	// 캐릭터들이 선 이동 평면을 가운데 두고 앞뒤 CloseUpBlurFocalRegion만큼만 선명하게 남긴다.
+	// 사이드뷰라 배경·전경은 이 구간 밖에 있어 흐려지고, 같은 평면의 플레이어와 대상은 선명하다.
+	const float PlaneDistance = FMath::Abs(POV.Location.Y - PawnLocation.Y);
+	const float HalfRegion = CloseUpBlurFocalRegion * 0.5f;
+
+	FPostProcessSettings Settings;
+	Settings.bOverride_DepthOfFieldFocalDistance = true;
+	Settings.DepthOfFieldFocalDistance = FMath::Max(1.0f, PlaneDistance - HalfRegion);
+	Settings.bOverride_DepthOfFieldFocalRegion = true;
+	Settings.DepthOfFieldFocalRegion = CloseUpBlurFocalRegion;
+	Settings.bOverride_DepthOfFieldMinFstop = true;
+	Settings.DepthOfFieldMinFstop = 0.0f;
+	Settings.bOverride_DepthOfFieldFstop = true;
+	Settings.DepthOfFieldFstop = CloseUpBlurFstop;
+	AddCachedPPBlend(Settings, FMath::InterpEaseInOut(0.0f, 1.0f, CloseUpBlurAlpha, 2.0f));
 }

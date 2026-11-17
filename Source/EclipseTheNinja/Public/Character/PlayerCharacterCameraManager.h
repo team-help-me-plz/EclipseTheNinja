@@ -156,6 +156,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, Units = "s"))
 	float CloseUpBlendOutTime = 0.6f;
 
+	// 클로즈업 중 캐릭터 이동 평면 밖(배경·전경)을 피사계 심도로 흐리게 한다. StopCloseUp도 함께 끈다.
+	UFUNCTION(BlueprintCallable, Category = "Side Scrolling Camera|Close Up")
+	void SetCloseUpBlur(bool bEnable);
+
+	// 작을수록 배경이 더 흐려진다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0.1, ClampMax = 32))
+	float CloseUpBlurFstop = 0.8f;
+
+	// 이동 평면을 가운데 두고 선명하게 남길 앞뒤 깊이. 캐릭터 두께보다 넉넉해야 플레이어와 대상이 흐려지지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, Units = "cm"))
+	float CloseUpBlurFocalRegion = 150.0f;
+
+	// 흐림이 켜지고 꺼지는 데 걸리는 실제 시간
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Side Scrolling Camera|Close Up", meta = (ClampMin = 0, Units = "s"))
+	float CloseUpBlurBlendTime = 0.25f;
+
 
 protected:
 	virtual void BeginPlay() override;
@@ -202,5 +218,11 @@ protected:
 	bool bCloseUpActive = false;
 	// 0이면 일반 카메라, 1이면 완전히 클로즈업
 	float CloseUpAlpha = 0.0f;
+
+	// 흐림 블렌드를 진행하고 포스트 프로세스 블렌드로 피사계 심도를 넣는 함수
+	void ApplyCloseUpBlur(const FMinimalViewInfo& POV, const FVector& PawnLocation);
+
+	bool bCloseUpBlurActive = false;
+	float CloseUpBlurAlpha = 0.0f;
 };
 

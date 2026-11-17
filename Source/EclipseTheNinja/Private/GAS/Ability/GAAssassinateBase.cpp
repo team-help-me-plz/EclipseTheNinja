@@ -284,7 +284,20 @@ bool UGAAssassinateBase::PlayAttackMontage()
 	// 암살자가 암살대상자와 같은 방향을 바라보도록
 	Player->SetAssassinationFacing(ExecutionRotation.Yaw);
 
-	return StartAttackMontageTask(0.0f);
+	if (!StartAttackMontageTask(0.0f)) return false;
+
+	// 클로즈업 중이면 암살 몽타주가 재생되는 동안 플레이어와 대상 말고 배경을 흐린다.
+	if (bCloseUpStarted)
+	{
+		if (const APlayerController* PC = Cast<APlayerController>(Player->GetController()))
+		{
+			if (APlayerCharacterCameraManager* CameraManager = Cast<APlayerCharacterCameraManager>(PC->PlayerCameraManager))
+			{
+				CameraManager->SetCloseUpBlur(true);
+			}
+		}
+	}
+	return true;
 }
 
 void UGAAssassinateBase::SlideVictim(float SideOffset, float ForwardOffset, float TimeToContact)
