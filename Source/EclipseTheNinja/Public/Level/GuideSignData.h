@@ -25,6 +25,14 @@ public:
 	FText	Body;
 
 	/**
+	 * 게임패드로 조작 중일 때 보여 줄 본문. 비워 두면 Body를 쓴다.
+	 * {Gamepad_FaceButton_Bottom}처럼 중괄호 안에 키 이름을 쓰면 연결된 패드에 맞는 버튼 이름으로 바뀐다
+	 * (Xbox는 A, PlayStation은 ×). Body에도 같은 방식을 쓸 수 있다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GuideSign", meta = (MultiLine = "true"))
+	FText	BodyGamepad;
+
+	/**
 	 * 반복 재생할 동영상. 비워 두면 동영상 칸을 숨긴다.
 	 * 동영상 파일은 Content/Movies 아래에 두고 File Media Source 에셋으로 지정한다.
 	 * 미디어 소스는 경로만 담은 작은 에셋이라 직접 참조하고, 실제 파일은 표지판에 다가갈 때 미리 연다.
