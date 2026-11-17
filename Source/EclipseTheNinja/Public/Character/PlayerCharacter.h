@@ -218,6 +218,12 @@ protected:
 	/** Last captured horizontal movement input value */
 	float ActionValueY = 0.0f;
 
+	// 지금 누르고 있는 좌우 이동 입력 방향(-1, 0, 1). 키를 떼면 0이 된다
+	float HeldMoveInputSign = 0.0f;
+
+	// 첫 공격을 시작할 때 이미 누르고 있던 이동 방향. 이 방향을 계속 누르는 것으로는 공격이 끊기지 않는다
+	float AttackStartMoveInputSign = 0.0f;
+
 	/** If true, this character has already wall jumped */
 	bool bHasWallJumped = false;
 
@@ -477,6 +483,9 @@ protected:
 
 	/** Called for movement input */
 	void Move(const FInputActionValue& Value);
+
+	// 이동 키를 뗐을 때 누르고 있던 방향 기록을 지운다
+	void MoveReleased(const FInputActionValue& Value);
 
 	// BP 컴파일에러 제거용 임시 함수
 	void Drop(const FInputActionValue& Value) {}
