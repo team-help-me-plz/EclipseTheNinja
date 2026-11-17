@@ -233,6 +233,18 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE")
     FLinearColor QTEOutlineColor = FLinearColor::Red;
 
+    // 키 안내가 떠 있는 동안 "지금 눌러!" 느낌으로 눌림 → 튀어오름 → 원래 크기를 반복한다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE")
+    bool bAnimateQTEPrompt = true;
+
+    // 강조 애니메이션 한 번(눌림~복귀)에 걸리는 시간
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (ClampMin = "0.2", Units = "s", EditCondition = "bAnimateQTEPrompt"))
+    float QTEPromptPulsePeriod = 0.8f;
+
+    // 튀어오를 때 최대 크기 배율
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (ClampMin = "1.0", ClampMax = "2.0", EditCondition = "bAnimateQTEPrompt"))
+    float QTEPromptPulsePeakScale = 1.2f;
+
     // Activate를 토글할 시퀀스 프레임(표시 프레임 기준). 0보다 작으면 쓰지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Activate")
     int32 ActivateFrame = -1;
@@ -342,5 +354,12 @@ private:
     TObjectPtr<USkeletalMeshComponent> QTEOutlineMesh = nullptr;
 
     void SetQTEOutlineVisible(bool bVisible);
+
+    // QTE 키 안내를 보이거나 숨기고, 보이는 동안 강조 애니메이션을 돌린다
+    void SetQTEPromptVisible(bool bVisible);
+    void TickQTEPromptPulse();
+
+    FTimerHandle QTEPromptPulseTimer;
+    double QTEPromptPulseStartTime = 0.0;
 
 };
