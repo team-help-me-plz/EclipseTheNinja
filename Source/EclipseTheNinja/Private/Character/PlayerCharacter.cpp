@@ -677,6 +677,7 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &APlayerCharacter::MoveReleased);
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::OnCameraMoveEndInput);
 
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APlayerCharacter::OnCameraMoveEndInput);
@@ -834,6 +835,7 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	if (bIsDead) return;
 
 	FVector2D MoveVector = Value.Get<FVector2D>();
+	HeldMoveInputSign = FMath::Sign(ApplyMoveInputDeadZone(MoveVector.Y));
 	if (IsWallAttached())
 	{
 		DoWAllMove(MoveVector.X);
@@ -851,6 +853,13 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	}
 
 
+}
+
+void APlayerCharacter::MoveReleased(const FInputActionValue& Value)
+{
+	HeldMoveInputSign = 0.0f;
+	// 키를 한 번 떼면 다음 이동 입력부터는 공격을 끊는다
+	AttackStartMoveInputSign = 0.0f;
 }
 
 float APlayerCharacter::ApplyMoveInputDeadZone(float RawInput) const
@@ -1036,6 +1045,8 @@ void APlayerCharacter::DoBasicAttack()
 	if (!ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
 	{
 		SnapToFacingTarget();
+		// 달리면서 공격을 눌렀을 때 누르고 있던 이동 키 때문에 바로 끊기지 않게 기억해 둔다
+		AttackStartMoveInputSign = HeldMoveInputSign;
 	}
 
 	Super::DoBasicAttack();
@@ -1160,8 +1171,22 @@ void APlayerCharacter::DoMove(float Forward)
 	if (IsParrying()) return;
 	if (bIsDead || IsAssassinating()) return;
 
-	// 공격이 끝나기 전에 반대 방향 입력으로 몸이 돌아가지 않게 한다.
-	if (IsAttacking()) return;
+	// 콤보 공격 중 이동 입력이 들어오면 공격을 끊고 바로 움직인다.
+	// 공격 시작 때부터 누르고 있던 같은 방향 입력은 무시한다(달리면서 공격 가능).
+	if (IsAttacking())
+	{
+		const float MoveSign = FMath::Sign(Forward);
+		if (MoveSign == 0.0f || MoveSign == AttackStartMoveInputSign) return;
+
+		if (FGameplayAbilitySpec* AttackSpec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack))
+		{
+			ASC->CancelAbilityHandle(AttackSpec->Handle);
+		}
+		AttackStartMoveInputSign = 0.0f;
+
+		// 다른 공격 상태가 남아 있으면 이동하지 않는다
+		if (IsAttacking()) return;
+	}
 
 	// 매달린 동안(모서리에서 오르내리는 중 포함) 일반 이동 입력이 목표 방향을 바꾸지 않게 한다.
 	if (IsOnWall()) return;
