@@ -79,7 +79,9 @@ int32 UQTEPulseRingWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
                 Points.Add(CornerCenters[Corner] + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius);
             }
         }
-        Points.Add(Points[0]);
+        // 배열 원소를 참조한 채 같은 배열에 Add하면 TArray 검사에 걸리므로 값으로 복사해 닫는다
+        const FVector2f FirstPoint = Points[0];
+        Points.Add(FirstPoint);
 
         FLinearColor Color = this->RingColor;
         Color.A *= Fade * Opacity;
