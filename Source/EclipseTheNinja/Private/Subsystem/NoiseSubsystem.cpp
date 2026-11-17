@@ -3,6 +3,7 @@
 #include "Noise/NoiseSettings.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Clone/CloneCharacter.h"
+#include "GAS/Ability/GABossPatternBase.h"
 
 #include "Engine/DataTable.h"
 
@@ -79,6 +80,12 @@ void UNoiseSubsystem::SpawnNoiseRing(const FVector& InLocation, const float InRa
 {
 	UObjectPoolSubsystem* Pool = GetWorld()->GetSubsystem<UObjectPoolSubsystem>();
 	if (!Pool || !this->NoiseRingClass)
+	{
+		return ;
+	}
+
+	// 컷신 중에는 시퀀스가 움직이는 플레이어 발소리 노티파이에도 소리 파동이 떠서 연출을 가리므로 띄우지 않는다.
+	if (UGABossPatternBase::IsAnyCinematicPlaying(GetWorld()))
 	{
 		return ;
 	}
