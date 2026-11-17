@@ -271,13 +271,12 @@ bool UEnemyDetectionComponent::CanSeeTarget(const AActor* Target, float Radius) 
     // 이 컴포넌트를 소유한 액터의 눈 위치
     const FVector Eye = OwnerEnemy->GetActorLocation() + FVector::UpVector * EyeHeight;
 
-    // 타겟의 머리(눈), 몸통(중심), 발 근처 중 한 곳이라도 보이면 감지한다.
+    // 타겟의 머리(눈), 몸통(중심) 중 한 곳이라도 보이면 감지한다.
     FVector TargetEye;
     FRotator TargetEyeRotation;
     Target->GetActorEyesViewPoint(TargetEye, TargetEyeRotation);
     const FVector TargetCenter = Target->GetActorLocation();
-    const FVector TargetFeet = TargetCenter - FVector::UpVector * Target->GetSimpleCollisionHalfHeight() * 0.8f;
-    const FVector SightPoints[] = { TargetEye, TargetCenter, TargetFeet };
+    const FVector SightPoints[] = { TargetEye, TargetCenter };
 
     FCollisionQueryParams Params(SCENE_QUERY_STAT(EnemySight), false, OwnerEnemy);
     for (const FVector& Point : SightPoints)
