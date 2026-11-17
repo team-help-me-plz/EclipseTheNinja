@@ -1,5 +1,6 @@
 #include "Widgets/QTEPulseRingWidget.h"
 #include "Rendering/DrawElements.h"
+#include "Styling/SlateBrush.h"
 
 void UQTEPulseRingWidget::SetSource(UUserWidget* InSourceWidget, const FVector2D& InSourcePivot)
 {
@@ -58,47 +59,25 @@ int32 UQTEPulseRingWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
         const float Fade = FMath::Pow(1.0f - Alpha, 1.6f);
         const float Thickness = FMath::Lerp(this->StartThickness, this->EndThickness, Alpha);
 
-        // 키 가장자리 바로 바깥에서 시작해 퍼진다
-        const FVector2f HalfSize = KeySize * 0.5f + FVector2f(this->Spread * Grow + Thickness * 0.5f + 2.0f);
+        // 둥근 상자 테두리는 상자 안쪽으로 그려지므로, 두께만큼 더 키워 키 가장자리 바로 바깥에서 시작해 퍼지게 한다
+        const FVector2f RingSize = KeySize + FVector2f(2.0f * (this->Spread * Grow + Thickness + 2.0f));
+        const FVector2f RingTopLeft = KeyCenter - RingSize * 0.5f;
         // 키가 길쭉하면 알약 모양, 정사각형이면 원으로 감싼다
-        const float Radius = FMath::Min(HalfSize.X, HalfSize.Y);
-        const FVector2f Straight = HalfSize - FVector2f(Radius);
-
-        // 둥근 사각형 둘레를 선으로만 그린다. 속을 채우지 않아야 키가 가려지지 않는다
-        constexpr int32 SegmentsPerCorner = 12;
-        TArray<FVector2f> Points;
-        Points.Reserve(SegmentsPerCorner * 4 + 5);
-        const FVector2f CornerCenters[4] = {
-            KeyCenter + FVector2f(Straight.X, Straight.Y), KeyCenter + FVector2f(-Straight.X, Straight.Y),
-            KeyCenter + FVector2f(-Straight.X, -Straight.Y), KeyCenter + FVector2f(Straight.X, -Straight.Y)};
-        for (int32 Corner = 0; Corner < 4; ++Corner)
-        {
-            for (int32 Segment = 0; Segment <= SegmentsPerCorner; ++Segment)
-            {
-                const float Angle = HALF_PI * (Corner + static_cast<float>(Segment) / SegmentsPerCorner);
-                const FVector2f Point = CornerCenters[Corner] + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius;
-                // 원 모양이면 호의 끝점과 다음 호의 시작점이 겹친다. 길이 0인 선분은 선 이음을 끊어 동서남북에 틈이 생기므로 뺀다
-                if (Points.IsEmpty() || !Points.Last().Equals(Point, 0.01f))
-                {
-                    Points.Add(Point);
-                }
-            }
-        }
-        if (Points.Num() > 2 && Points.Last().Equals(Points[0], 0.01f))
-        {
-            Points.Pop();
-        }
-        // 시작점에서도 이음매가 끊기지 않게 처음 두 점까지 다시 이어 겹쳐 닫는다
-        // 배열 원소를 참조한 채 같은 배열에 Add하면 TArray 검사에 걸리므로 값으로 복사한다
-        const FVector2f FirstPoint = Points[0];
-        const FVector2f SecondPoint = Points[1];
-        Points.Add(FirstPoint);
-        Points.Add(SecondPoint);
+        const float Radius = FMath::Min(RingSize.X, RingSize.Y) * 0.5f;
 
         FLinearColor Color = this->RingColor;
         Color.A *= Fade * Opacity;
-        FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(),
-            Points, ESlateDrawEffect::None, Color, true, Thickness);
+
+        // 둥근 상자 셰이더로 그리면 선을 이어 붙일 때 생기는 이음매·겹침 없이 매끈한 고리가 된다
+        // MakeBox의 색은 속 채우기에만 쓰이고 테두리 색은 OutlineSettings가 따로 정하므로, 속은 투명으로 넘겨 키를 가리지 않는다
+        FSlateBrush Brush;
+        Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+        Brush.OutlineSettings = FSlateBrushOutlineSettings(FVector4(Radius, Radius, Radius, Radius), FSlateColor(Color), Thickness);
+        Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+
+        FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+            AllottedGeometry.ToPaintGeometry(RingSize, FSlateLayoutTransform(RingTopLeft)),
+            &Brush, ESlateDrawEffect::None, FLinearColor::Transparent);
     }
     return LayerId;
 }
