@@ -23,6 +23,7 @@ class UAssassinationTargetingComponent;
 class UNoiseComponent;
 class UHidingComponent;
 class UMinimapComponent;
+class USpotLightComponent;
 class UGAAssassinate;
 class AEnemy;
 class UUserWidget;
@@ -104,6 +105,14 @@ protected:
 	// 미니맵 시야 밝히기와 Tab 입력, 미니맵 위젯 표시를 맡는다
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
 	TObjectPtr<UMinimapComponent> MinimapComponent;
+
+	// 플레이어 주변을 은은하게 밝히는 빛. 밝기·색·반경은 BP에서 조절한다. 숨어 있는 동안에는 꺼진다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light")
+	TObjectPtr<USpotLightComponent> AuraLight;
+
+	// 숨기 시작하거나 나올 때 빛이 꺼지고 켜지는 데 걸리는 시간. 0이면 바로 바뀐다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light", meta = (ClampMin = "0", Units = "s"))
+	float AuraLightFadeTime = 0.3f;
 
 	// 예전 BP에 저장된 암살 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
 	UPROPERTY()
@@ -388,6 +397,13 @@ private:
 	void UpdateMovementSound(float DeltaSeconds);
 	float DistanceSinceMovementSound = 0.0f;
 	const TArray<TObjectPtr<USoundBase>>* PreviousMovementSounds = nullptr;
+
+	// 숨기 상태에 맞춰 AuraLight 밝기를 서서히 0 또는 원래 값으로 맞춘다.
+	void UpdateAuraLight(float DeltaSeconds);
+	// BeginPlay 시점에 BP에서 정한 AuraLight 밝기
+	float AuraLightBaseIntensity = 0.0f;
+	// 0이면 꺼짐, 1이면 원래 밝기
+	float AuraLightAlpha = 1.0f;
 
 	FTransform SafePointTransform;
 	bool bHasSafePoint = false;
