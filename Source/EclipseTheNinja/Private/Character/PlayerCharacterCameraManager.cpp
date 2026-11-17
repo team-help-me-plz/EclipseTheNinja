@@ -12,6 +12,7 @@
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
 #include "Components/StaticMeshComponent.h"
+#include "Misc/App.h"
 
 void APlayerCharacterCameraManager::BeginPlay()
 {
@@ -233,6 +234,9 @@ void APlayerCharacterCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float 
 		}
 		bWasCameraExploreMode = bIsCameraExploreMode;
 
+		// 암살 클로즈업 같은 연출은 일반 추적 위치 위에 섞는다. 카메라 셰이크는 그 뒤에 적용해 클로즈업 중에도 흔들린다.
+		UpdateCloseUp(OutVT.POV, CurrentActorLocation);
+
 		// Super를 부르지 않으므로 카메라 모디파이어(카메라 셰이크, 임팩트 프레임 흔들림 등)를 직접 적용한다.
 		ApplyCameraModifiers(DeltaTime, OutVT.POV);
 
@@ -329,4 +333,54 @@ void APlayerCharacterCameraManager::SetCameraExploreMode(bool IsAiming)
 void APlayerCharacterCameraManager::SmoothTeleport(const FVector& Delta)
 {
 	TeleportOffset -= Delta;
+}
+
+void APlayerCharacterCameraManager::StartCloseUp(AActor* FocusActor)
+{
+	if (!IsValid(FocusActor)) return;
+
+	CloseUpFocus = FocusActor;
+	CloseUpFocusLocation = FocusActor->GetActorLocation();
+	bCloseUpActive = true;
+}
+
+void APlayerCharacterCameraManager::StopCloseUp()
+{
+	bCloseUpActive = false;
+}
+
+void APlayerCharacterCameraManager::UpdateCloseUp(FMinimalViewInfo& POV, const FVector& PawnLocation)
+{
+	// 암살 히트스톱·슬로모션 중에도 같은 빠르기로 움직이도록 게임 속도 배율이 빠진 실제 프레임 시간을 쓴다.
+	const float RealDeltaTime = static_cast<float>(FApp::GetDeltaTime());
+	if (bCloseUpActive)
+	{
+		CloseUpAlpha = CloseUpBlendInTime > 0.0f ? FMath::Min(1.0f, CloseUpAlpha + RealDeltaTime / CloseUpBlendInTime) : 1.0f;
+	}
+	else
+	{
+		CloseUpAlpha = CloseUpBlendOutTime > 0.0f ? FMath::Max(0.0f, CloseUpAlpha - RealDeltaTime / CloseUpBlendOutTime) : 0.0f;
+	}
+
+	if (CloseUpAlpha <= 0.0f)
+	{
+		CloseUpFocus.Reset();
+		return;
+	}
+
+	if (const AActor* Focus = CloseUpFocus.Get())
+	{
+		CloseUpFocusLocation = Focus->GetActorLocation();
+	}
+
+	// 플레이어와 대상 사이를 초점으로, 같은 이동 평면에서 CloseUpZoom만큼 떨어진 곳에 카메라를 둔다.
+	const FVector FocusPoint = FMath::Lerp(PawnLocation, CloseUpFocusLocation, CloseUpFocusWeight);
+	const FVector CloseUpLocation(FocusPoint.X, PawnLocation.Y + CloseUpZoom, FocusPoint.Z + CloseUpZOffset);
+
+	const float Blend = FMath::InterpEaseInOut(0.0f, 1.0f, CloseUpAlpha, 2.0f);
+	POV.Location = FMath::Lerp(POV.Location, CloseUpLocation, Blend);
+	if (POV.ProjectionMode == ECameraProjectionMode::Orthographic)
+	{
+		POV.OrthoWidth = FMath::Lerp(POV.OrthoWidth, POV.OrthoWidth * CloseUpOrthoWidthScale, Blend);
+	}
 }

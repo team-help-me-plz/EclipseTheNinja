@@ -52,6 +52,9 @@ ABossEnemy::ABossEnemy()
     // 보스는 암살로 처치되어도 회복 아이템을 떨어뜨리지 않는다.
     AssassinationDropComp->SetDropActorClass(nullptr);
 
+    // 보스 암살은 몇 번 없는 큰 순간이라 카메라 클로즈업을 켠다.
+    bPlayAssassinateCloseUp = true;
+
     // 보스 발소리는 걷기 애니메이션 노티파이가 내므로 일반 몬스터 발소리 루프는 끈다.
     WalkSoundComp->SetLoopSound(nullptr);
     FootstepSoundComp->SetFootstepSounds({});
