@@ -13,6 +13,8 @@
 #include "Components/InputComponent.h"
 #include "InputActionValue.h"
 #include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "EnhancedPlayerInput.h"
 #include "InputAction.h"
 #include "GAS/Ability/GAParry.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
@@ -1409,6 +1411,43 @@ void APlayerCharacter::DoUnCrouch()
 	bCrouchInputHeld = false;
 	EndCrouchFall();
 	UnCrouch();
+}
+
+void APlayerCharacter::SyncHeldInputsAfterInputLock()
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	const ULocalPlayer* LocalPlayer = PC ? PC->GetLocalPlayer() : nullptr;
+	const UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer
+		? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>()
+		: nullptr;
+	const UEnhancedPlayerInput* PlayerInput = Subsystem ? Subsystem->GetPlayerInput() : nullptr;
+	if (!PlayerInput)
+	{
+		return;
+	}
+
+	// 입력 컴포넌트가 빠져 있어도 매핑 컨텍스트는 남아 있어 액션 값은 계속 갱신된다
+	auto IsHeld = [PlayerInput](const UInputAction* Action)
+	{
+		return Action && PlayerInput->GetActionValue(Action).GetMagnitudeSq() > 0.f;
+	};
+
+	if (bCrouchInputHeld && CrouchAction && !IsHeld(CrouchAction))
+	{
+		DoUnCrouch();
+	}
+	if (bIsExploring && AimAction && !IsHeld(AimAction))
+	{
+		OnCameraMoveEndInput();
+	}
+	if (bPressedJump && JumpAction && !IsHeld(JumpAction))
+	{
+		DoJumpEnd();
+	}
+	if (MoveAction && !IsHeld(MoveAction))
+	{
+		MoveReleased(FInputActionValue());
+	}
 }
 
 void APlayerCharacter::DoSwiftStrike()

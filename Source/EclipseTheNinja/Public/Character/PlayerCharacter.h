@@ -597,6 +597,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoSwiftStrike();
 
+	/**
+	 * DisableInput으로 입력을 끊었다가 되살린 뒤 호출한다.
+	 * 끊긴 동안 뗀 키는 Completed가 오지 않으므로, 실제로 떼어진 키의 해제 처리(앉기·조준·점프·이동)를 대신 실행한다.
+	 */
+	void SyncHeldInputsAfterInputLock();
+
 	/** 분신술 타게팅 상태 설정. 타게팅 중에는 카메라 시점을 유지하고, 종료되면 중앙으로 복귀한다. */
 	void SetCloneTargeting(bool bTargeting);
 	bool IsCloneTargeting() const { return bIsCloneTargeting; }

@@ -106,6 +106,12 @@ void UInteractBoxComponent::OnInteractMontageEnded(UAnimMontage* InMontage, bool
 		return ;
 	}
 	this->SetOwnerInputLocked(false);
+
+	// 몽타주 동안 뗀 키(앉기 등)는 Completed가 오지 않아 눌린 상태로 남으므로 실제 키 상태에 맞춘다
+	if (APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner()))
+	{
+		Player->SyncHeldInputsAfterInputLock();
+	}
 }
 
 void UInteractBoxComponent::SetOwnerInputLocked(bool bInLocked)
