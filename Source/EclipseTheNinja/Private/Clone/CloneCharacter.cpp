@@ -2,6 +2,7 @@
 
 
 #include "Clone/CloneCharacter.h"
+#include "Character/PlayerCharacter.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Component/InteractHighlightComponent.h"
 #include "GAS/Ability/GAWallAttach.h"
@@ -513,6 +514,12 @@ void ACloneCharacter::LaunchTargetPlayer()
 	if (this->TargetPlayer.IsValid())
 	{
 		this->TargetPlayer.Get()->LaunchCharacter(this->InteractVelocity, false, true);
+
+		// 협동 점프 사운드는 플레이어 BP의 ActionSounds에서 지정한다
+		if (const APlayerCharacter* Player = Cast<APlayerCharacter>(this->TargetPlayer.Get()))
+		{
+			Player->PlayActionSound(EPlayerActionSound::CloneCoopJump);
+		}
 	}
 	this->ReleaseTargetPlayer();
 	GetWorldTimerManager().SetTimer(

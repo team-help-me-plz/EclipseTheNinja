@@ -4,6 +4,8 @@
 #include "Character/PlayerCharacter.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "Save/GameSaveSubsystem.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -315,6 +317,37 @@ USoundBase* APlayerCharacter::GetActionSound(EPlayerActionSound Action) const
 {
 	const TObjectPtr<USoundBase>* Sound = ActionSounds.Find(Action);
 	return Sound ? Sound->Get() : nullptr;
+}
+
+void APlayerCharacter::PlayCloneSwapSmoke(const FVector& InLocation) const
+{
+	UWorld*	World = GetWorld();
+	if (!CloneSwapSmokeSystem || !World || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	UNiagaraComponent*	Smoke = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World,
+		CloneSwapSmokeSystem,
+		InLocation + CloneSwapSmokeOffset
+	);
+	if (!Smoke || CloneSwapSmokeDuration <= 0.0f)
+	{
+		return;
+	}
+
+	// 루프 이펙트는 지정한 시간이 지나면 새 파티클 생성을 멈춘다. 남은 파티클이 사라지면 컴포넌트는 스스로 정리된다
+	FTimerHandle	StopTimer;
+	World->GetTimerManager().SetTimer(
+		StopTimer,
+		FTimerDelegate::CreateWeakLambda(Smoke, [Smoke]()
+		{
+			Smoke->Deactivate();
+		}),
+		CloneSwapSmokeDuration,
+		false
+	);
 }
 
 void APlayerCharacter::PlaySwordAttackSound(int32 ComboIndex, bool bFire) const

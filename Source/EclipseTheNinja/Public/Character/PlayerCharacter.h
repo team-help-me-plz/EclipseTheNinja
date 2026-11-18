@@ -28,6 +28,7 @@ class UGAAssassinate;
 class AEnemy;
 class UUserWidget;
 class USoundBase;
+class UNiagaraSystem;
 struct FInputActionValue;
 
 UENUM()
@@ -35,7 +36,11 @@ enum class EPlayerActionSound : uint8
 {
 	Kunai, SwiftStrike, Parry, Clone, BelowAssassination, Jump, Land, Hit, AssassinationStab, ParrySuccess, LedgeClimb,
 	// 분신 회수
-	CloneRecall
+	CloneRecall,
+	// 분신과 위치 교환
+	CloneSwap,
+	// 분신 협동 점프로 날아오를 때
+	CloneCoopJump
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlayerConditionChanged, EPlayerCondition);
@@ -85,6 +90,18 @@ protected:
 	/** 벽을 탈 때 소리 한 번을 내는 세로 이동 거리(cm) */
 	UPROPERTY(EditDefaultsOnly, Category = "Audio", meta = (ClampMin = "1.0", Units = "cm"))
 	float WallClimbStepDistance = 75.0f;
+
+	/** 분신과 위치를 교환할 때 두 자리(플레이어·분신)에서 각각 재생할 연기 이펙트. 비우면 재생하지 않는다 */
+	UPROPERTY(EditDefaultsOnly, Category = "Effect|Clone")
+	TObjectPtr<UNiagaraSystem> CloneSwapSmokeSystem;
+
+	/** 교환 연기 이펙트를 액터 위치에서 얼마나 옮겨 재생할지(월드 기준) */
+	UPROPERTY(EditDefaultsOnly, Category = "Effect|Clone")
+	FVector CloneSwapSmokeOffset = FVector::ZeroVector;
+
+	/** 0보다 크면 이 시간(초) 뒤 새 파티클 생성을 멈춘다. 루프 이펙트를 쓸 때 지정한다. 0이면 이펙트가 스스로 끝날 때까지 둔다 */
+	UPROPERTY(EditDefaultsOnly, Category = "Effect|Clone", meta = (ClampMin = "0.0", Units = "s"))
+	float CloneSwapSmokeDuration = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
 	TObjectPtr<UInteractBoxComponent> InteractComponent;
@@ -264,6 +281,8 @@ public:
 	void PlayActionSound(EPlayerActionSound Action, float Volume = 1.0f) const;
 	// ActionSounds에 지정한 사운드를 돌려준다. 없으면 nullptr
 	USoundBase* GetActionSound(EPlayerActionSound Action) const;
+	// 분신 위치 교환 연기 이펙트를 InLocation(+CloneSwapSmokeOffset)에서 재생한다
+	void PlayCloneSwapSmoke(const FVector& InLocation) const;
 	void PlaySwordAttackSound(int32 ComboIndex, bool bFire) const;
 	// 공격 SFX와 같은 타이밍에 부른다. 발생 위치는 bAttackNoiseFromSwordSocket으로 고른다.
 	void EmitAttackNoise();

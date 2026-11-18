@@ -400,6 +400,15 @@ void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle,
 	Character->SetActorLocation(this->SpawnedClone->GetActorLocation());
 	this->SpawnedClone->SetActorLocation(PlayerLocation);
 	this->SpawnedClone->StopCloneMovement();
+
+	// 교환한 두 자리에서 연기 이펙트와 교환 사운드를 재생한다 (설정은 플레이어 BP)
+	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(Character))
+	{
+		Player->PlayCloneSwapSmoke(PlayerLocation);
+		Player->PlayCloneSwapSmoke(CloneLocation);
+		Player->PlayActionSound(EPlayerActionSound::CloneSwap);
+	}
+
 	this->OnCloneCannotSwap.Broadcast();
 }
 
