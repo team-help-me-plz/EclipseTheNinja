@@ -718,20 +718,8 @@ void APlayerCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Othe
 
 void APlayerCharacter::Landed(const FHitResult& Hit)
 {
-	// NoiseComponent가 Super::Landed 안에서 착지 소음을 판단하므로 앉은 낙하 표시는 그 뒤에 끈다.
 	Super::Landed(Hit);
-
-	// 앉은 채 떨어져 착지하면 착지음을 내지 않는다.
-	const bool bCrouchLanding = bCrouchFalling && bCrouchInputHeld && !IsWallAttached();
-	if (!bIsCrouched && !bCrouchLanding)
-	{
-		PlayActionSound(EPlayerActionSound::Land, 0.75f);
-	}
-
-	if (bCrouchLanding)
-	{
-		++CrouchLandCount;
-	}
+	PlayActionSound(EPlayerActionSound::Land, 0.75f);
 
 	EndCrouchFall();
 	bCanCoyoteJump = false;

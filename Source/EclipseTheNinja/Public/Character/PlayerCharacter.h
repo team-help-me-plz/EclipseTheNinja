@@ -339,15 +339,6 @@ public:
 	bool CanAssassinateCurrentTarget() const;
 	bool IsWallAttached() const;
 
-	/** 앉은 채 모서리에서 떨어지는 중인지. 공중에서는 일어선 캡슐로 떨어지고 착지하면 다시 앉는다 */
-	bool IsCrouchFalling() const { return bCrouchFalling; }
-
-	/** 앉기 키를 누르고 있는지 */
-	bool IsCrouchInputHeld() const { return bCrouchInputHeld; }
-
-	/** 앉은 채 떨어지다 앉은 채 착지할 때마다 1씩 늘어난다. 애님 인스턴스가 앉은 착지 시작을 감지하는 데 쓴다 */
-	int32 GetCrouchLandCount() const { return CrouchLandCount; }
-
 	// 은신구역에 들어가는 중, 숨어 있는 중, 나오는 중 모두 true.
 	// 이 동안의 입력은 HidingComponent가 컨트롤러 IMC를 바꿔서 제한한다.
 	bool IsHiding() const;
@@ -604,9 +595,6 @@ protected:
 
 	/** 앉은 채 모서리에서 떨어지는 중인지. 앉기 키를 떼거나 착지·안전 지점 복귀·벽 붙기 때 꺼진다 */
 	bool bCrouchFalling = false;
-
-	/** 앉은 착지 횟수 */
-	int32 CrouchLandCount = 0;
 
 	/** 안전 지점 복귀처럼 강제로 떨어뜨릴 때 앉은 낙하로 치지 않게 막는다 */
 	bool bSuppressCrouchFall = false;
