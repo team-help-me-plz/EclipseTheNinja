@@ -116,6 +116,11 @@ void UGuideSignPopupWidget::OpenPopup(APlayerController* InController)
 	InController->bShowMouseCursor = true;
 	SetKeyboardFocus();
 
+	// 키 상태는 닫을 때가 아니라 열 때 비운다. 팝업이 떠 있는 동안 키를 떼면 게임은 그 키를 계속 눌린 것으로 알고,
+	// 닫을 때 비우면 Enhanced Input이 그 키를 한 번 더 눌린 것으로 평가해 여는 키(E/B)의 Started가 다시 난다.
+	// 열 때 비우면 여는 입력은 이미 시작된 뒤라 다시 나지 않고, 떠 있는 동안 누른 키는 팝업이 받아 게임에 남지 않는다
+	InController->FlushPressedKeys();
+
 	this->ShowPage(0);
 	BP_OnPopupOpened();
 }
@@ -234,10 +239,14 @@ void UGuideSignPopupWidget::RestoreAndNotify()
 
 	if (APlayerController* Controller = this->OwningController.Get())
 	{
-		Controller->SetInputMode(FInputModeGameOnly());
-		Controller->bShowMouseCursor = this->bPrevShowMouseCursor;
-		// 팝업이 떠 있는 동안 누르고 있던 키가 닫힌 뒤 게임 입력으로 이어지지 않게 비운다
-		Controller->FlushPressedKeys();
+		// 게임은 평소 GameAndUI + 커서 표시로 돈다(PlayerCharacterController::ResumeFromPauseMenu와 같게).
+		// GameOnly로 돌리면 클릭마다 뷰포트가 마우스 캡처를 잡고 놓느라 클릭이 한 번씩 먹히고 우클릭이 무시된다
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		Controller->SetInputMode(InputMode);
+		Controller->SetShowMouseCursor(this->bPrevShowMouseCursor);
+		// 키 상태는 OpenPopup에서 이미 비웠다. 여기서 다시 비우면 여는 키의 Started가 다시 나 팝업이 또 열린다
 	}
 
 	// 다른 곳이 먼저 건 일시정지는 그대로 둔다
@@ -256,8 +265,9 @@ FReply UGuideSignPopupWidget::NativeOnKeyDown(const FGeometry& InGeometry, const
 	if (Key == EKeys::Escape || Key == EKeys::Gamepad_FaceButton_Right)
 	{
 		// 끝까지 읽어야 할 때는 닫히지 않지만, 키 입력이 게임으로 새지 않게 처리한 것으로 둔다.
+		// 여는 키(패드 B)를 누른 채로 있으면 그 반복 입력이 열리자마자 팝업을 닫으므로, 반복은 닫기로 치지 않는다.
 		// 버튼을 거치지 않고 닫으므로 선택 사운드를 직접 재생한다
-		if (this->CanClose())
+		if (!InKeyEvent.IsRepeat() && this->CanClose())
 		{
 			EclipseUISound::PlaySelectSound(this);
 			this->ClosePopup();

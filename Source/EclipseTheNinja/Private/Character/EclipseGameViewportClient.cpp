@@ -1,7 +1,9 @@
 #include "Character/EclipseGameViewportClient.h"
 
 #include "Engine/World.h"
+#include "Engine/GameInstance.h"
 #include "GameFramework/GameUserSettings.h"
+#include "GameFramework/PlayerController.h"
 #include "Misc/ConfigCacheIni.h"
 
 #if WITH_EDITOR
@@ -11,6 +13,33 @@
 #include "Framework/Application/SlateApplication.h"
 #include "InputKeyEventArgs.h"
 #endif
+
+namespace
+{
+	// 게임이 누름을 본 적 없는 키의 반복 이벤트인지 판단한다.
+	// 팝업·메뉴를 닫으며 FlushPressedKeys로 키 상태를 비우면, 아직 누르고 있는 키의 반복 이벤트가
+	// 게임에는 새로 누른 것처럼 들어가 Started가 다시 난다(E를 누른 채 표지판을 닫으면 바로 다시 열림).
+	// 이런 반복은 버려, 키를 뗐다가 다시 눌러야 입력으로 받게 한다
+	bool IsOrphanRepeat(const UWorld* InWorld, const FInputKeyEventArgs& InEventArgs)
+	{
+		if (InEventArgs.Event != IE_Repeat)
+		{
+			return false;
+		}
+
+		const UGameInstance* PlayInstance = InWorld ? InWorld->GetGameInstance() : nullptr;
+		const APlayerController* Controller = PlayInstance
+			? PlayInstance->GetFirstLocalPlayerController(InWorld)
+			: nullptr;
+
+		if (!Controller || !Controller->PlayerInput)
+		{
+			return false;
+		}
+
+		return !Controller->IsInputKeyDown(InEventArgs.Key);
+	}
+}
 
 ULocalPlayer* UEclipseGameViewportClient::SetupInitialLocalPlayer(FString& OutError)
 {
@@ -41,6 +70,12 @@ bool UEclipseGameViewportClient::InputKey(const FInputKeyEventArgs& EventArgs)
 #if WITH_EDITOR
 	if (RoutePIEPauseKey(EventArgs)) return true;
 #endif
+
+	if (IsOrphanRepeat(GetWorld(), EventArgs))
+	{
+		return true;
+	}
+
 	return Super::InputKey(EventArgs);
 }
 

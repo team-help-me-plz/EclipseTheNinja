@@ -125,12 +125,18 @@ void UKeyPromptWidget::UpdateImageSize()
 		return;
 	}
 
-	// 이미지 원본 비율을 지켜 높이에 맞춘다(Space처럼 가로로 긴 키 이미지도 찌그러지지 않게)
+	// 이미지 원본 비율을 지켜 높이에 맞춘다(Space처럼 가로로 긴 키 이미지도 찌그러지지 않게).
+	// GetSizeX/Y는 에디터에서 텍스처가 아직 컴파일 중이면 정사각형 기본 텍스처 크기를 돌려준다.
+	// 메인 메뉴를 거쳐 맵을 처음 로드할 때 그 값으로 1:1이 되어 찌그러졌으므로, 원본 이미지 크기로 계산한다
 	float Aspect = 1.0f;
 	const UTexture2D* Texture = Cast<UTexture2D>(KeyImage->GetBrush().GetResourceObject());
-	if (Texture && Texture->GetSizeY() > 0)
+	if (Texture)
 	{
-		Aspect = static_cast<float>(Texture->GetSizeX()) / static_cast<float>(Texture->GetSizeY());
+		const FIntPoint SourceSize = Texture->GetImportedSize();
+		if (SourceSize.Y > 0)
+		{
+			Aspect = static_cast<float>(SourceSize.X) / static_cast<float>(SourceSize.Y);
+		}
 	}
 
 	const float Height = CurrentStyle.ImageHeight * RenderScale;
