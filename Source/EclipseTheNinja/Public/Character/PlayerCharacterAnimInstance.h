@@ -178,6 +178,16 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ActiveTurnMontage;
 
+	// 지금 턴 몽타주가 재생 중인 클립(서기/앉기). 턴 도중 자세가 바뀌었는지 비교한다.
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequence> ActiveTurnAnimation;
+
+	// 턴 도중 앉기 상태가 바뀌면 남은 회전을 새 자세의 턴 클립으로 이어서 재생한다.
+	void SwapTurnClipForCrouch();
+
+	// 남은 회전(부호 포함)에 맞는 지점부터 턴 클립을 재생한다. 재생 중인 몽타주 여부는 호출한 쪽이 확인한다.
+	bool PlayTurnClipRemaining(UAnimSequence* TurnAnimation, float TargetYaw, float RemainingDeltaYaw);
+
 	// 앉기 여부에 맞는 턴 클립과 재생 속도
 	UAnimSequence* GetTurnInPlaceAnimation() const;
 	float GetTurnInPlacePlayRate() const;
@@ -186,6 +196,8 @@ private:
 	void CacheTurnYawCurve(UAnimSequence* TurnAnimation);
 	TArray<float> TurnYawCurve;
 	float TurnYawCurveStep = 0.0f;
+	// 캐시된 누적 곡선에서 Time(초) 시점의 누적 Yaw를 보간해 구한다.
+	float GetTurnYawAtTime(float Time) const;
 	TWeakObjectPtr<UAnimSequence> CachedTurnAnimation;
 
 	float TurnTargetYaw = 0.0f;
