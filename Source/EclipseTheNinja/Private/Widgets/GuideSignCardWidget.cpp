@@ -9,6 +9,10 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Subsystem/InputGlyphSubsystem.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
 
 namespace
 {
@@ -35,11 +39,149 @@ namespace
 		if (InKey == EKeys::Gamepad_Right2D || InKey == EKeys::Gamepad_RightX || InKey == EKeys::Gamepad_RightY) return (TEXT("오른쪽 스틱"));
 		if (InKey == EKeys::Gamepad_LeftThumbstick) return (bPS ? TEXT("L3") : TEXT("LS"));
 		if (InKey == EKeys::Gamepad_RightThumbstick) return (bPS ? TEXT("R3") : TEXT("RS"));
+		// 키보드·마우스는 안내 문구에서 흔히 쓰는 짧은 이름으로
+		if (InKey == EKeys::LeftMouseButton) return (TEXT("좌클릭"));
+		if (InKey == EKeys::RightMouseButton) return (TEXT("우클릭"));
+		if (InKey == EKeys::MiddleMouseButton) return (TEXT("휠 클릭"));
+		if (InKey == EKeys::MouseWheelAxis || InKey == EKeys::MouseScrollUp || InKey == EKeys::MouseScrollDown) return (TEXT("마우스 휠"));
+		if (InKey == EKeys::SpaceBar) return (TEXT("Space"));
+		if (InKey == EKeys::LeftControl) return (TEXT("LCtrl"));
+		if (InKey == EKeys::RightControl) return (TEXT("RCtrl"));
+		if (InKey == EKeys::LeftShift) return (TEXT("LShift"));
+		if (InKey == EKeys::RightShift) return (TEXT("RShift"));
+		if (InKey == EKeys::LeftAlt) return (TEXT("LAlt"));
+		if (InKey == EKeys::RightAlt) return (TEXT("RAlt"));
 		return (InKey.GetDisplayName().ToString());
 	}
 
-	/** {키 이름}을 버튼 이름으로 바꾼다. 키 이름이 아닌 중괄호는 그대로 둔다 */
-	FText	ResolveKeyTokens(const FText& InText, EInputGlyphDevice InDevice)
+	/** 매핑 토큰이 아무 키 설정에도 없을 때 찾아볼 기본 IMC (게임플레이 / 분신 조준) */
+	const TCHAR*	DefaultContextPaths[] = {
+		TEXT("/Game/Input/IMC_Character.IMC_Character"),
+		TEXT("/Game/Input/IMC_Targeting.IMC_Targeting"),
+	};
+
+	/**
+	 * {@이름} 토큰의 현재 키를 찾는다.
+	 *  1) 키 설정의 매핑 칸 "Eclipse.이름"이 있으면 그 칸의 기본 키·액션을 쓰고, 키보드면 플레이어가 바꾼 키를 돌려준다
+	 *  2) 매핑 칸이 없으면(바꿀 수 없는 키) 액션 "IA_이름"에 연결된 키 중 장치에 맞는 첫 키
+	 *  3) 패드면 같은 액션에 연결된 패드 키
+	 */
+	FKey	FindMappedKey(const FString& InName, bool bInGamepad, APlayerController* InController)
+	{
+		const ULocalPlayer*	LocalPlayer = InController ? InController->GetLocalPlayer() : nullptr;
+		const UEnhancedInputLocalPlayerSubsystem*	Subsystem = LocalPlayer
+			? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer)
+			: nullptr;
+		const UEnhancedInputUserSettings*	Settings = Subsystem ? Subsystem->GetUserSettings() : nullptr;
+
+		TArray<const UInputMappingContext*>	Contexts;
+		if (Settings)
+		{
+			for (const UInputMappingContext* Context : Settings->GetRegisteredInputMappingContexts())
+			{
+				Contexts.AddUnique(Context);
+			}
+		}
+		for (const TCHAR* Path : DefaultContextPaths)
+		{
+			if (const UInputMappingContext* Context = LoadObject<UInputMappingContext>(nullptr, Path))
+			{
+				Contexts.AddUnique(Context);
+			}
+		}
+
+		const FName	MappingName(*FString::Printf(TEXT("Eclipse.%s"), *InName));
+		const FString	ActionName = FString::Printf(TEXT("IA_%s"), *InName);
+		const UInputAction*	Action = nullptr;
+		FKey	DefaultKey;
+		for (const UInputMappingContext* Context : Contexts)
+		{
+			if (!Context)
+			{
+				continue;
+			}
+			for (const FEnhancedActionKeyMapping& Mapping : Context->GetMappings())
+			{
+				if (Mapping.IsPlayerMappable() && Mapping.GetMappingName() == MappingName)
+				{
+					Action = Mapping.Action;
+					DefaultKey = Mapping.Key;
+					break ;
+				}
+				if (!Action && Mapping.Action && Mapping.Action->GetName() == ActionName)
+				{
+					Action = Mapping.Action;
+				}
+			}
+			if (DefaultKey.IsValid())
+			{
+				break ;
+			}
+		}
+
+		// 키보드: 바꿀 수 있는 칸이면 플레이어가 바꾼 키 (키 설정에 아직 등록되지 않았으면 기본 키)
+		if (!bInGamepad && DefaultKey.IsValid())
+		{
+			if (Settings)
+			{
+				if (const FPlayerKeyMapping* PlayerMapping = Settings->FindCurrentMappingForSlot(MappingName, EPlayerMappableKeySlot::First))
+				{
+					if (PlayerMapping->GetCurrentKey().IsValid())
+					{
+						return (PlayerMapping->GetCurrentKey());
+					}
+				}
+			}
+			return (DefaultKey);
+		}
+
+		// 그 밖: 같은 액션에 연결된 키 중 장치에 맞는 첫 키
+		if (Action)
+		{
+			for (const UInputMappingContext* Context : Contexts)
+			{
+				if (!Context)
+				{
+					continue;
+				}
+				for (const FEnhancedActionKeyMapping& Mapping : Context->GetMappings())
+				{
+					if (Mapping.Action == Action && Mapping.Key.IsValid() && Mapping.Key.IsGamepadKey() == bInGamepad)
+					{
+						return (Mapping.Key);
+					}
+				}
+			}
+		}
+		return (FKey());
+	}
+
+	/** {@이름} 토큰의 표시 이름. 이동 칸을 패드 스틱으로 보여 줄 때는 방향을 붙인다 */
+	FString	GetMappedKeyLabel(const FString& InName, EInputGlyphDevice InDevice, APlayerController* InController)
+	{
+		const bool	bGamepad = (InDevice != EInputGlyphDevice::KeyboardMouse);
+		const FKey	Key = FindMappedKey(InName, bGamepad, InController);
+		if (!Key.IsValid())
+		{
+			return (InName);
+		}
+		FString	Label = GetKeyLabel(Key, InDevice);
+		if (bGamepad && Key == EKeys::Gamepad_Left2D)
+		{
+			if (InName == TEXT("MoveUp")) Label += TEXT(" 위");
+			else if (InName == TEXT("MoveDown")) Label += TEXT(" 아래");
+			else if (InName == TEXT("MoveLeft")) Label += TEXT(" 왼쪽");
+			else if (InName == TEXT("MoveRight")) Label += TEXT(" 오른쪽");
+		}
+		return (Label);
+	}
+
+	/**
+	 * 중괄호 토큰을 키 이름으로 바꾼다. 토큰이 아닌 중괄호는 그대로 둔다.
+	 *  {@Jump}  : 키 설정의 매핑 칸(Eclipse.Jump)에 지금 연결된 키. 키 변경과 입력 장치를 따른다
+	 *  {SpaceBar}: 키 이름을 그대로 (패드 키는 패드 종류에 맞는 버튼 이름)
+	 */
+	FText	ResolveKeyTokens(const FText& InText, EInputGlyphDevice InDevice, APlayerController* InController)
 	{
 		const FString	Source = InText.ToString();
 		if (!Source.Contains(TEXT("{")))
@@ -62,8 +204,16 @@ namespace
 				break ;
 			}
 			Result += Source.Mid(Index, Open - Index);
-			const FKey	Key(*Source.Mid(Open + 1, Close - Open - 1));
-			Result += Key.IsValid() ? GetKeyLabel(Key, InDevice) : Source.Mid(Open, Close - Open + 1);
+			const FString	Token = Source.Mid(Open + 1, Close - Open - 1);
+			if (Token.StartsWith(TEXT("@")))
+			{
+				Result += GetMappedKeyLabel(Token.Mid(1), InDevice, InController);
+			}
+			else
+			{
+				const FKey	Key(*Token);
+				Result += Key.IsValid() ? GetKeyLabel(Key, InDevice) : Source.Mid(Open, Close - Open + 1);
+			}
 			Index = Close + 1;
 		}
 		return (FText::FromString(Result));
@@ -139,7 +289,12 @@ void UGuideSignCardWidget::RefreshBody()
 	}
 
 	// 비어 있는 칸은 접어서 남은 칸이 위로 붙게 한다
-	this->BodyText->SetText(ResolveKeyTokens(Body, Device));
+	APlayerController*	PlayerController = GetOwningPlayer();
+	if (!PlayerController)
+	{
+		PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	}
+	this->BodyText->SetText(ResolveKeyTokens(Body, Device, PlayerController));
 	this->BodyText->SetVisibility(Body.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 }
 
