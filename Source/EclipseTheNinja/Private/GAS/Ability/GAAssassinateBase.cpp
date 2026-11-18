@@ -8,6 +8,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "GAS/Animation/AnimNotify_AssassinateImpact.h"
 #include "Kismet/GameplayStatics.h"
+#include "Noise/NoiseRingActor.h"
 #include "Components/CapsuleComponent.h"
 #include "Curves/CurveVector.h"
 #include "GameFramework/RootMotionSource.h"
@@ -175,6 +176,9 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 		OnInterrupted();
 		return;
 	}
+
+	// 다가가며 남긴 발소리 소음 링·파동이 암살 연출 위에 남지 않게 바로 치운다 (암살 중 새 소음은 NoiseSubsystem이 막는다)
+	ANoiseRingActor::StopAllActive(Player);
 	if (!Player->GetMesh()->GetAnimInstance()) { OnInterrupted(); return; }
 	if (!Enemy->GetMesh()->GetAnimInstance()) { OnInterrupted(); return; }
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo)) { OnInterrupted(); return; }

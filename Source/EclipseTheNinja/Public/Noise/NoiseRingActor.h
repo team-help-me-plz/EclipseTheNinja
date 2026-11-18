@@ -34,6 +34,9 @@ public:
 	// 소음 위치에 반경 크기로 링을 띄운다. 애니메이션이 끝나면 풀로 반환된다.
 	void	Play(const FVector& InLocation, const float InRadius, const float InStrength);
 
+	// 월드에 떠 있는 소음 링과 파동 이펙트를 모두 즉시 치운다 (컷신이 시작될 때 화면에 남지 않게)
+	static void	StopAllActive(const UObject* WorldContextObject);
+
 protected:
 	void	NotifyEnemies(const FVector& InLocation, const float InRadius, const float InStrength);
 

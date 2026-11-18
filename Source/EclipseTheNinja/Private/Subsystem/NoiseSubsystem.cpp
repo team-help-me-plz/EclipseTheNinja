@@ -4,6 +4,7 @@
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Clone/CloneCharacter.h"
 #include "GAS/Ability/GABossPatternBase.h"
+#include "Character/PlayerCharacter.h"
 
 #include "Engine/DataTable.h"
 
@@ -47,6 +48,11 @@ void UNoiseSubsystem::MakeSomeNoise(const UObject* InObject, ENoiseType InType, 
 void UNoiseSubsystem::ReportNoise(ENoiseType InType, const FVector& InLocation, AActor* InInstigator, float InScale)
 {
 	if (!IsPlayerNoise(InInstigator))
+	{
+		return ;
+	}
+	// 암살은 소리 없이 끝나야 하므로, 암살하는 동안(다가가기·찌르기·착지)에는 소음을 내지 않는다
+	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(InInstigator); Player && Player->IsAssassinating())
 	{
 		return ;
 	}

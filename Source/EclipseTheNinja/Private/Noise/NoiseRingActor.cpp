@@ -13,6 +13,15 @@
 #include "Engine/OverlapResult.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Engine/Engine.h"
+#include "EngineUtils.h"
+#include "UObject/UObjectIterator.h"
+
+namespace
+{
+	// SpawnNoiseWave로 띄운 파동 컴포넌트. 컷신·암살이 시작될 때 이 목록으로 찾아 바로 끈다
+	TArray<TWeakObjectPtr<UNiagaraComponent>>	GActiveNoiseWaves;
+}
 
 // Sets default values
 ANoiseRingActor::ANoiseRingActor()
@@ -174,6 +183,10 @@ void ANoiseRingActor::SpawnNoiseWave(const FVector& InLocation, const float InRa
 
 	WaveComponent->SetVariableFloat(this->NoiseRadiusParamName, InRadius);
 	WaveComponent->Activate(true);
+
+	// 끝난(무효) 항목은 정리하면서 새 파동을 기록한다
+	GActiveNoiseWaves.RemoveAll([](const TWeakObjectPtr<UNiagaraComponent>& InWave) { return (!InWave.IsValid()); });
+	GActiveNoiseWaves.AddUnique(WaveComponent);
 }
 
 bool ANoiseRingActor::CalcScreenDiameter(APlayerController* InPC, const FVector& InLocation, const float InRadius, float& OutDiameter)
@@ -214,6 +227,74 @@ bool ANoiseRingActor::EnsureWidget()
 		return (true);
 	}
 	return (false);
+}
+
+void ANoiseRingActor::StopAllActive(const UObject* WorldContextObject)
+{
+	UWorld*	World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	if (!World)
+	{
+		return ;
+	}
+
+	// 링: 재생 중인 것만 풀로 돌려보낸다 (반환 시 애니메이션을 멈추고 위젯을 숨긴다)
+	TSet<UNiagaraSystem*>	WaveSystems;
+	int32	RingCount = 0;
+	int32	RingTotal = 0;
+	for (TActorIterator<ANoiseRingActor> It(World); It; ++It)
+	{
+		ANoiseRingActor*	Ring = *It;
+		++RingTotal;
+		if (Ring->NoiseWaveSystem)
+		{
+			WaveSystems.Add(Ring->NoiseWaveSystem);
+		}
+		if (Ring->bIsPlaying || Ring->NoiseWidgetComponent->IsVisible())
+		{
+			Ring->bIsPlaying = false;
+			Ring->NoiseWidgetComponent->SetVisibility(false);
+			if (Ring->NoiseRingWidget.IsValid())
+			{
+				Ring->NoiseRingWidget->StopAllAnimations();
+			}
+			UObjectPoolSubsystem::Release(Ring);
+			++RingCount;
+		}
+	}
+
+	// 파동 이펙트: 띄울 때 기록해 둔 컴포넌트를 활성 여부와 상관없이 끄고 숨긴다.
+	// (방출이 끝나 IsActive가 false여도 남은 입자가 화면에 남을 수 있다)
+	int32	WaveCount = 0;
+	int32	WaveActive = 0;
+	for (const TWeakObjectPtr<UNiagaraComponent>& WeakWave : GActiveNoiseWaves)
+	{
+		UNiagaraComponent*	Wave = WeakWave.Get();
+		if (!IsValid(Wave) || Wave->GetWorld() != World)
+		{
+			continue;
+		}
+		WaveActive += Wave->IsActive() ? 1 : 0;
+		Wave->DeactivateImmediate();
+		++WaveCount;
+	}
+	GActiveNoiseWaves.Reset();
+
+	// 기록 밖(다른 경로로 띄운 같은 파동)도 같은 시스템이면 끈다
+	for (TObjectIterator<UNiagaraComponent> It; It; ++It)
+	{
+		UNiagaraComponent*	Wave = *It;
+		if (IsValid(Wave) && Wave->GetWorld() == World && Wave->IsActive() && WaveSystems.Contains(Wave->GetAsset()))
+		{
+			Wave->DeactivateImmediate();
+			++WaveCount;
+		}
+	}
+
+	if (RingCount > 0 || WaveCount > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[ANoiseRingActor::StopAllActive] 링 %d개(전체 %d), 파동 %d개(그중 재생 중 %d) 정리"),
+			RingCount, RingTotal, WaveCount, WaveActive);
+	}
 }
 
 void ANoiseRingActor::OnNoiseEnd()

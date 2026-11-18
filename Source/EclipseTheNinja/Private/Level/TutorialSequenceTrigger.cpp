@@ -20,6 +20,7 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Noise/NoiseRingActor.h"
 #include "Widgets/InputPromptWidget.h"
 #include "Widgets/QTEPulseRingWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
@@ -273,11 +274,15 @@ void ATutorialSequenceTrigger::PlaySequence(APlayerController* PlayerController)
 
     // 재생 설정의 HUD 숨김은 AHUD만 숨기므로 체력바·스킬 아이콘 같은 UMG 위젯은 직접 숨긴다
     HideScreenWidgets();
+    // 컷신 전에 떠 있던 소음 링·파동 이펙트는 연출 화면에 남지 않게 바로 치운다
+    ANoiseRingActor::StopAllActive(this);
     // 레벨 시작과 함께 재생하면 HUD 위젯이 아직 만들어지기 전이므로, 0.1초 간격으로 몇 번 더 숨긴다
+    // 재생 직후 착지 등으로 막 생긴 소음 표시도 같이 치운다
     this->WidgetHideRetries = 10;
     GetWorldTimerManager().SetTimer(this->WidgetHideTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
     {
         HideScreenWidgets();
+        ANoiseRingActor::StopAllActive(this);
         if (--this->WidgetHideRetries <= 0 || !IsPlaying())
         {
             GetWorldTimerManager().ClearTimer(this->WidgetHideTimer);
