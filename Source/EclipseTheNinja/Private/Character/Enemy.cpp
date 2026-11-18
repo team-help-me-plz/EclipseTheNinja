@@ -68,6 +68,9 @@ AEnemy::AEnemy()
 	OverHeadWidgetComponent->SetupAttachment(RootComponent);
 	OverHeadWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	// 회전은 카메라를 향하도록 따로 맞추므로 액터 회전을 따라가지 않게 한다. 적이 돌 때 위젯이 떨리지 않는다.
+	OverHeadWidgetComponent->SetUsingAbsoluteRotation(true);
+
 	CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 	AssassinateTargetComt = CreateDefaultSubobject<UAssassinateTargetComponent>(TEXT("AssassinateTargetComp"));
 
