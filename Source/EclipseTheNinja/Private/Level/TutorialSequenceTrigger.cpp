@@ -21,6 +21,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Noise/NoiseRingActor.h"
+#include "EngineUtils.h"
 #include "Widgets/InputPromptWidget.h"
 #include "Widgets/QTEPulseRingWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
@@ -47,6 +48,27 @@
 #include "LevelSequencePlayer.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+
+namespace
+{
+    // 이 태그가 붙은 레벨 액터(조작 안내 그림·키 표시 등)는 컷신이 재생되는 동안 숨긴다
+    const FName HideInCinematicTag(TEXT("HideInCinematic"));
+
+    void SetCinematicHiddenActorsHidden(UWorld* InWorld, bool bInHidden)
+    {
+        if (!InWorld)
+        {
+            return;
+        }
+        for (TActorIterator<AActor> It(InWorld); It; ++It)
+        {
+            if (It->ActorHasTag(HideInCinematicTag))
+            {
+                It->SetActorHiddenInGame(bInHidden);
+            }
+        }
+    }
+}
 
 ATutorialSequenceTrigger::ATutorialSequenceTrigger()
 {
@@ -276,6 +298,8 @@ void ATutorialSequenceTrigger::PlaySequence(APlayerController* PlayerController)
     HideScreenWidgets();
     // 컷신 전에 떠 있던 소음 링·파동 이펙트는 연출 화면에 남지 않게 바로 치운다
     ANoiseRingActor::StopAllActive(this);
+    // 레벨에 세워 둔 조작 안내 그림·키 표시도 연출 화면에 나오지 않게 숨긴다
+    SetCinematicHiddenActorsHidden(GetWorld(), true);
     // 레벨 시작과 함께 재생하면 HUD 위젯이 아직 만들어지기 전이므로, 0.1초 간격으로 몇 번 더 숨긴다
     // 재생 직후 착지 등으로 막 생긴 소음 표시도 같이 치운다
     this->WidgetHideRetries = 10;
@@ -782,6 +806,7 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
         }
     }
     this->HiddenWidgets.Reset();
+    SetCinematicHiddenActorsHidden(GetWorld(), false);
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::OnSequenceFinished()] %s : 시퀀스 종료, 조작 반환"), *GetActorNameOrLabel());
 
