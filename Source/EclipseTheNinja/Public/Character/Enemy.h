@@ -135,6 +135,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Patrol")
 	FVector ChooseNextPatrolLocation();
 
+	// 다음 순찰 방향을 확정하고 그 목적지가 있는 X 방향(목적지 X - 현재 X)을 돌려준다.
+	// 회전하며 순찰 끝에서 조금 밀려나도 다음 목적지 선택이 이 방향을 따른다.
+	float CommitNextPatrolDirectionX();
+
+	// 순찰 끝 대기·회전 몽타주. 비어 있으면 nullptr이다.
+	UAnimMontage* GetPatrolEndIdleMontage() const { return PatrolEndIdleMontage; }
+	UAnimMontage* GetPatrolTurnMontage() const { return PatrolTurnMontage; }
+
 	UFUNCTION(BlueprintPure, Category = "AI")
 	bool IsReadyForAI() const;
 	bool IsBeingAssassinated() const;
@@ -375,6 +383,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Patrol")
 	float PatrolMaxOffset = 300.0f;
 
+	/** 순찰 끝에 도착하면 한 번 재생할 대기 몽타주. 비우면 순찰 끝 태스크의 대기 시간만큼 서 있는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI|Patrol")
+	TObjectPtr<UAnimMontage> PatrolEndIdleMontage;
+
+	/** 순찰 끝에서 반대편으로 뒤돌 때 재생할 180도 회전 몽타주. 루트 모션으로 액터를 돌린다. 비우면 즉시 돈다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI|Patrol")
+	TObjectPtr<UAnimMontage> PatrolTurnMontage;
+
 	/** 시작 위치 중심의 활동 영역. 순찰 구간과 경계 수색 지점을 제한한다. 추적/공격은 제한하지 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Detection", meta = (ClampMin = "1.0"))
 	float CombatAreaRadius = 1000.0f;
@@ -421,6 +437,10 @@ protected:
 	float PatrolMinX = 0.0f;
 	float PatrolMaxX = 0.0f;
 	bool bPatrolTowardsMax = true;
+
+	// 현재 위치에서 다음 순찰 목적지가 최대 X 쪽인지. 목적지 선택과 회전 판정이 같은 기준을 쓴다.
+	bool ResolvePatrolTowardsMax() const;
+
 	double NextAttackTime = 0.0;
 
 	/** 사망 몽타주 종료 후 시체를 유지하는 시간(초). */

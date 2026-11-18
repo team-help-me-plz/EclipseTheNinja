@@ -993,15 +993,40 @@ FVector AEnemy::ChooseNextPatrolLocation()
 		return GetActorLocation();
 
 	StartPatrol();
-	const float X = GetActorLocation().X;
-	if (bPatrolTowardsMax && X >= PatrolMaxX - 10.0f) 
-		bPatrolTowardsMax = false;
-	else if (!bPatrolTowardsMax && X <= PatrolMinX + 10.0f) 
-		bPatrolTowardsMax = true;
+	bPatrolTowardsMax = ResolvePatrolTowardsMax();
 
 	FVector Location = BehaviorOrigin;
 	Location.X = bPatrolTowardsMax ? PatrolMaxX : PatrolMinX;
 	return Location;
+}
+
+bool AEnemy::ResolvePatrolTowardsMax() const
+{
+	// 가던 쪽 끝에 닿았으면 반대편으로 방향을 바꾼다.
+	const float X = GetActorLocation().X;
+
+	if (bPatrolTowardsMax && X >= PatrolMaxX - 10.0f)
+	{
+		return false;
+	}
+
+	if (!bPatrolTowardsMax && X <= PatrolMinX + 10.0f)
+	{
+		return true;
+	}
+
+	return bPatrolTowardsMax;
+}
+
+float AEnemy::CommitNextPatrolDirectionX()
+{
+	bPatrolTowardsMax = ResolvePatrolTowardsMax();
+
+	const float TargetX = bPatrolTowardsMax
+		? PatrolMaxX
+		: PatrolMinX;
+
+	return TargetX - GetActorLocation().X;
 }
 
 bool AEnemy::IsValidAITarget(AActor* Target) const
