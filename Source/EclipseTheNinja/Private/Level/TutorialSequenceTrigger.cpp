@@ -19,6 +19,7 @@
 #include "AbilitySystemGlobals.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Widgets/InputPromptWidget.h"
 #include "Widgets/QTEPulseRingWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
@@ -372,6 +373,14 @@ void ATutorialSequenceTrigger::BeginQTE()
     }
 
     UUserWidget* PromptWidget = this->QTEPrompt->GetUserWidgetObject();
+
+    // 커서가 보이는 입력 모드라, 안내 위젯 위를 클릭하면 위젯이 클릭을 가져가 QTE 입력이 들어오지 않는다.
+    // 안내는 보여 주기만 하고 클릭은 게임으로 흘려보낸다
+    if (IsValid(PromptWidget))
+    {
+        PromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
+
     if (UInputPromptWidget* InputPrompt = Cast<UInputPromptWidget>(PromptWidget))
     {
         if (this->bShowQTEInputGlyph)
@@ -419,6 +428,64 @@ void ATutorialSequenceTrigger::BeginQTE()
     }
     SetQTEPromptVisible(true);
     SetQTEOutlineVisible(true);
+
+    // 보조 입력 경로: 위젯이 클릭을 가져가거나 액션 상태가 꼬여 Started가 오지 않아도
+    // QTE 액션에 연결된 키가 새로 눌리면 바로 받는다. 마우스 버튼은 Slate가 아는 실제 눌림으로 본다
+    TArray<FKey> QTEKeys;
+    if (const ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+    {
+        if (const UEnhancedInputLocalPlayerSubsystem* InputSubsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+        {
+            QTEKeys = InputSubsystem->QueryKeysMappedToAction(this->QTEAction);
+        }
+    }
+    if (!QTEKeys.IsEmpty())
+    {
+        TWeakObjectPtr<APlayerController> WeakController = PlayerController;
+        auto IsKeyDown = [WeakController](const FKey& InKey)
+        {
+            if (InKey.IsMouseButton() && FSlateApplication::IsInitialized()
+                && FSlateApplication::Get().GetPressedMouseButtons().Contains(InKey))
+            {
+                return true;
+            }
+            return WeakController.IsValid() && WeakController->IsInputKeyDown(InKey);
+        };
+
+        // QTE에 들어설 때 이미 눌려 있던 키는 한 번 뗀 뒤 다시 눌러야 인정한다
+        TSharedRef<TSet<FKey>> HeldKeys = MakeShared<TSet<FKey>>();
+        for (const FKey& Key : QTEKeys)
+        {
+            if (IsKeyDown(Key))
+            {
+                HeldKeys->Add(Key);
+            }
+        }
+
+        GetWorldTimerManager().SetTimer(this->QTETimer, FTimerDelegate::CreateWeakLambda(this, [this, QTEKeys, HeldKeys, IsKeyDown]()
+        {
+            if (!this->bWaitingForQTE)
+            {
+                GetWorldTimerManager().ClearTimer(this->QTETimer);
+                return;
+            }
+            for (const FKey& Key : QTEKeys)
+            {
+                if (!IsKeyDown(Key))
+                {
+                    HeldKeys->Remove(Key);
+                    continue;
+                }
+                if (!HeldKeys->Contains(Key))
+                {
+                    UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::BeginQTE()] %s : 키 직접 감지로 QTE 입력 (%s)"), *GetActorNameOrLabel(), *Key.ToString());
+                    GetWorldTimerManager().ClearTimer(this->QTETimer);
+                    OnQTEInput();
+                    return;
+                }
+            }
+        }), 1.0f / 120.0f, true);
+    }
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::BeginQTE()] %s : QTE 입력 대기"), *GetActorNameOrLabel());
 }
