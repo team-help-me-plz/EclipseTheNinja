@@ -25,9 +25,10 @@ public:
 	FText	Body;
 
 	/**
-	 * 게임패드로 조작 중일 때 보여 줄 본문. 비워 두면 Body를 쓴다.
-	 * {Gamepad_FaceButton_Bottom}처럼 중괄호 안에 키 이름을 쓰면 연결된 패드에 맞는 버튼 이름으로 바뀐다
-	 * (Xbox는 A, PlayStation은 ×). Body에도 같은 방식을 쓸 수 있다.
+	 * 게임패드로 조작 중일 때 보여 줄 본문. 비워 두면 Body를 쓴다 (패드와 키보드 문장이 달라야 할 때만 채운다).
+	 * Body와 BodyGamepad 모두 중괄호 토큰을 쓸 수 있다.
+	 *  {@Jump}   : 키 설정 매핑 칸 Eclipse.Jump(없으면 액션 IA_Jump)에 지금 연결된 키. 키 변경과 입력 장치를 따른다
+	 *  {SpaceBar}: 그 키 이름 그대로 (패드 키는 Xbox A / PlayStation ×처럼 패드 종류에 맞는 이름)
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GuideSign", meta = (MultiLine = "true"))
 	FText	BodyGamepad;

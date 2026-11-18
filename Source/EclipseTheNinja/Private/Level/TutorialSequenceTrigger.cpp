@@ -128,7 +128,11 @@ void ATutorialSequenceTrigger::ApplyMarkerOrigin()
         return;
     }
 
-    const FVector Origin = this->SequenceOrigin->GetComponentLocation() - this->SequenceKeyAnchor;
+    // PlayerEndPoint가 있으면 그 지점을 마커로 쓴다. 트리거 상자를 옮겨도 연출용 닌자는 PlayerEndPoint 쪽으로 떨어진다
+    const FVector MarkerLocation = IsValid(this->PlayerEndPoint)
+        ? this->PlayerEndPoint->GetActorLocation()
+        : this->SequenceOrigin->GetComponentLocation();
+    const FVector Origin = MarkerLocation - this->SequenceKeyAnchor;
     if (this->SequenceActor->bOverrideInstanceData && InstanceData->TransformOrigin.GetLocation().Equals(Origin, 0.01f)
         && InstanceData->TransformOrigin.GetRotation().IsIdentity())
     {

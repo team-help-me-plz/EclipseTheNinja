@@ -36,7 +36,8 @@ class UInputMappingContext;
  *    연출 분신이 실제 분신으로 바뀌어, 시퀀스가 끝난 뒤에도 수명 동안 남아 발판을 누르고 있는다
  *  - bTriggerOnOverlap을 끄면 트리거로는 재생하지 않고, 다른 액터가 PlaySequence/PlaySequenceAt을 불러 재생한다 (보스 이벤트 컷신)
  *  - bOriginFollowsMarker를 켜면 SequenceOrigin 마커 위치가 시퀀스 키 공간의 SequenceKeyAnchor 지점이 되도록
- *    TransformOrigin을 자동으로 맞춘다. 컷신 위치를 바꿀 때는 마커(또는 트리거 액터 전체)만 옮기면 된다
+ *    TransformOrigin을 자동으로 맞춘다. PlayerEndPoint가 있으면 마커 대신 그 지점을 쓰므로, 트리거 상자는 자유롭게 옮기고
+ *    컷신 위치는 PlayerEndPoint(연출용 닌자가 끝나는 자리)만 옮겨 바꾼다. 이때 SequenceKeyAnchor는 시퀀스 키 공간의 PlayerEndPoint 위치다
  *  - bAllowSkip을 켜면 이미 끝까지 본 시퀀스를 다시 재생할 때 HUD의 건너뛰기 위젯(UCinematicSkipWidget)을 켠다.
  *    입력·누른 시간·표시는 위젯이 맡고, 위젯이 끝까지 눌렸다고 알리면 이 트리거가 시퀀스를 끝 프레임으로 넘긴다
  */
@@ -151,12 +152,12 @@ protected:
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial")
     TObjectPtr<ALevelSequenceActor> SequenceActor = nullptr;
 
-    // 켜면 SequenceOrigin 마커 위치에서 SequenceKeyAnchor를 뺀 값을 SequenceActor의 TransformOrigin으로 쓴다
+    // 켜면 SequenceOrigin 마커 위치(PlayerEndPoint가 있으면 그 위치)에서 SequenceKeyAnchor를 뺀 값을 SequenceActor의 TransformOrigin으로 쓴다
     // PlaySequenceAt으로 원점을 직접 넘긴 재생에는 적용하지 않는다
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Origin")
     bool bOriginFollowsMarker = false;
 
-    // 마커가 나타내는 시퀀스 키 공간의 위치 (예: 연출용 닌자의 위치 키)
+    // 마커(또는 PlayerEndPoint)가 나타내는 시퀀스 키 공간의 위치 (예: 연출용 닌자가 끝나는 위치 키)
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Origin", meta = (EditCondition = "bOriginFollowsMarker"))
     FVector SequenceKeyAnchor = FVector::ZeroVector;
 
