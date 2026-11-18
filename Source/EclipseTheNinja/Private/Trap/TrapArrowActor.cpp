@@ -221,6 +221,9 @@ bool ATrapArrowActor::Deflect(AActor* Deflector)
 
 void ATrapArrowActor::OnReturnToPool_Implementation()
 {
+	// 풀에서 꺼낼 때 OnSpawnFromPool보다 충돌이 먼저 켜지므로, 그 사이 발사 위치의 볼륨과 겹쳐도
+	// 맞은 것으로 처리되어 바로 반환되지 않게 막아 둔다. 새로 만든 화살도 이 함수를 거친다
+	this->bHasHit = true;
 	this->ProjectileMovement->StopMovementImmediately();
 	// 벽에 박혀 붙어 있던 경우 떼어낸다
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
