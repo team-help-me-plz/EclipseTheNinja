@@ -401,7 +401,8 @@ void AGuideSign::CreateVideoObjects()
 		UMediaTexture* Texture = NewObject<UMediaTexture>(this);
 		Texture->AutoClear = true;
 		Texture->ClearColor = FLinearColor::Black;
-		Texture->SetDefaultMediaPlayer(Player);
+		// SetDefaultMediaPlayer는 에디터 전용이라 패키징에서 빠지므로 런타임용 SetMediaPlayer를 쓴다
+		Texture->SetMediaPlayer(Player);
 		Texture->UpdateResource();
 
 		this->VideoPlayers[Index] = Player;
