@@ -23,7 +23,7 @@ class UAssassinationTargetingComponent;
 class UNoiseComponent;
 class UHidingComponent;
 class UMinimapComponent;
-class USpotLightComponent;
+class UPointLightComponent;
 class UGAAssassinate;
 class AEnemy;
 class UUserWidget;
@@ -98,6 +98,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Noise")
 	TObjectPtr<UNoiseComponent> NoiseComponent;
 
+	// 켜면 칼 메시의 소켓(AttackNoiseSocketName)에서, 끄면 캐릭터 스켈레탈 메시의 중심에서 공격 소음이 난다.
+	// 소켓을 가진 메시를 찾지 못하면 캐릭터 메시 중심을 쓴다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Noise|Attack", meta = (DisplayName = "Attack Noise From Sword Socket"))
+	bool bAttackNoiseFromSwordSocket = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Noise|Attack", meta = (EditCondition = "bAttackNoiseFromSwordSocket"))
+	FName AttackNoiseSocketName = TEXT("b_TrailSocket");
+
 	// 은신구역에 들어가고 나오는 연출을 맡는다. 숨기 몽타주는 여기에 지정한다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hiding")
 	TObjectPtr<UHidingComponent> HidingComponent;
@@ -107,12 +115,18 @@ protected:
 	TObjectPtr<UMinimapComponent> MinimapComponent;
 
 	// 플레이어 주변을 은은하게 밝히는 빛. 밝기·색·반경은 BP에서 조절한다. 숨어 있는 동안에는 꺼진다.
+	// 그림자는 항상 만들지 않는다(BeginPlay에서 다시 끈다).
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light")
-	TObjectPtr<USpotLightComponent> AuraLight;
+	TObjectPtr<UPointLightComponent> AuraLight;
 
 	// 숨기 시작하거나 나올 때 빛이 꺼지고 켜지는 데 걸리는 시간. 0이면 바로 바뀐다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light", meta = (ClampMin = "0", Units = "s"))
 	float AuraLightFadeTime = 0.3f;
+
+	// 플레이어 위치에서 AuraLight까지의 월드 기준 거리. 플레이어가 좌우로 돌아도 이 위치를 유지한다.
+	// Y +는 카메라 쪽이라 정면에서 고르게 비춰 몸의 명암을 줄인다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light")
+	FVector AuraLightOffset = FVector(0.0f, 100.0f, 40.0f);
 
 	// 예전 BP에 저장된 암살 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
 	UPROPERTY()
@@ -251,6 +265,9 @@ public:
 	// ActionSounds에 지정한 사운드를 돌려준다. 없으면 nullptr
 	USoundBase* GetActionSound(EPlayerActionSound Action) const;
 	void PlaySwordAttackSound(int32 ComboIndex, bool bFire) const;
+	// 공격 SFX와 같은 타이밍에 부른다. 발생 위치는 bAttackNoiseFromSwordSocket으로 고른다.
+	void EmitAttackNoise();
+	FVector GetAttackNoiseLocation() const;
 	void PlayAssassinationWithdrawalSound() const;
 
     const UInputAction* GetAbilityInputAction(EAbilityInputID InputID) const;
@@ -397,6 +414,8 @@ private:
 
 	// 숨기 상태에 맞춰 AuraLight 밝기를 서서히 0 또는 원래 값으로 맞춘다.
 	void UpdateAuraLight(float DeltaSeconds);
+	// 플레이어가 바라보는 방향과 관계없이 AuraLight를 플레이어 위치 + AuraLightOffset(월드 기준)에 둔다.
+	void UpdateAuraLightLocation();
 	// BeginPlay 시점에 BP에서 정한 AuraLight 밝기
 	float AuraLightBaseIntensity = 0.0f;
 	// 0이면 꺼짐, 1이면 원래 밝기

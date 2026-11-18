@@ -27,6 +27,7 @@
 #include "Character/PlayerCharacterController.h"
 #include "Character/PlayerCharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Subsystem/NoiseSubsystem.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Effects/GEDefaultStats.h"
 #include "GAS/Ability/GABaseAttack.h"
@@ -49,7 +50,7 @@
 #include "Character/Enemy.h"
 #include "Component/HidingComponent.h"
 #include "Minimap/MinimapComponent.h"
-#include "Components/SpotLightComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
@@ -75,16 +76,17 @@ APlayerCharacter::APlayerCharacter()
 	MinimapComponent = CreateDefaultSubobject<UMinimapComponent>(TEXT("MinimapComponent"));
 
 	// 가슴 높이에서 주변을 은은하게 밝힌다. 밤 성 분위기를 해치지 않도록 약한 달빛 색으로 둔다.
-	AuraLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("AuraLight"));
+	AuraLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("AuraLight"));
 	AuraLight->SetupAttachment(RootComponent);
-	AuraLight->SetRelativeLocation(FVector(0.0f, 0.0f, 40.0f));
+	// 오른쪽을 볼 때(Yaw 0) 기준 위치. 실제 위치는 Tick에서 월드 기준으로 맞춘다.
+	AuraLight->SetRelativeLocation(AuraLightOffset);
 	AuraLight->SetIntensityUnits(ELightUnits::Candelas);
 	AuraLight->SetIntensity(5.0f);
 	AuraLight->SetAttenuationRadius(600.0f);
 	AuraLight->SetLightColor(FLinearColor(0.75f, 0.85f, 1.0f));
 	AuraLight->SetSourceRadius(30.0f);
-	// 캐릭터가 움직일 때 벽에 큰 그림자가 흔들리지 않게 하고 비용도 줄인다.
-	//AuraLight->SetCastShadows(false);
+	// 이 빛으로는 그림자를 만들지 않는다. 가슴 높이 광원이라 플레이어 몸이 벽·바닥에 큰 그림자를 드리운다.
+	AuraLight->SetCastShadows(false);
 
 	// 암살도 배열의 기본 항목으로 둔다. 기본 공격 항목은 부모 생성자에서 추가한다.
 	FAbilityInfo& AssassinateInfo = AbilityClassArray.AddDefaulted_GetRef();
@@ -156,10 +158,13 @@ void APlayerCharacter::BeginPlay()
   InteractComponent->SetAbsolute(false, true, true);
   if (IsValid(AuraLight))
   {
+      // BP에 그림자 켜기가 저장돼 있어도 이 빛은 그림자를 만들지 않는다.
+      AuraLight->SetCastShadows(false);
       AuraLightBaseIntensity = AuraLight->Intensity;
       AuraLightAlpha = IsHiding() ? 0.0f : 1.0f;
       AuraLight->SetIntensity(AuraLightBaseIntensity * AuraLightAlpha);
       AuraLight->SetVisibility(AuraLightAlpha > 0.0f);
+      UpdateAuraLightLocation();
   }
   WarnIfAbilityMissing(EAbilityInputID::Assassinate);
   WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
@@ -256,6 +261,8 @@ void APlayerCharacter::UpdateAuraLight(float DeltaSeconds)
 		return;
 	}
 
+	UpdateAuraLightLocation();
+
 	// 은신구역에 들어가는 중·숨어 있는 중·나오는 중에는 빛을 끈다.
 	const float TargetAlpha = IsHiding() ? 0.0f : 1.0f;
 	if (FMath::IsNearlyEqual(AuraLightAlpha, TargetAlpha))
@@ -270,6 +277,22 @@ void APlayerCharacter::UpdateAuraLight(float DeltaSeconds)
 	AuraLight->SetIntensity(AuraLightBaseIntensity * AuraLightAlpha);
 	// 완전히 꺼지면 렌더링에서도 빼서 숨은 자리 주변이 조금도 밝아지지 않게 한다.
 	AuraLight->SetVisibility(AuraLightAlpha > 0.0f);
+}
+
+void APlayerCharacter::UpdateAuraLightLocation()
+{
+	if (!IsValid(AuraLight))
+	{
+		return;
+	}
+
+	// 루트에 붙어 있으므로 상대 위치는 플레이어 회전을 따라 돈다.
+	// 회전을 되돌린 값을 상대 위치로 넣어, 왼쪽을 볼 때도 월드 기준 같은 쪽(카메라 쪽)에 있게 한다.
+	const FVector RelativeOffset = GetActorQuat().UnrotateVector(AuraLightOffset);
+	if (!AuraLight->GetRelativeLocation().Equals(RelativeOffset, 0.1f))
+	{
+		AuraLight->SetRelativeLocation(RelativeOffset);
+	}
 }
 
 void APlayerCharacter::PlayCharacterSound(USoundBase* Sound, float Volume) const
@@ -301,6 +324,31 @@ void APlayerCharacter::PlaySwordAttackSound(int32 ComboIndex, bool bFire) const
 	{
 		PlayCharacterSound(Sounds[ComboIndex - 1]);
 	}
+}
+
+void APlayerCharacter::EmitAttackNoise()
+{
+	UNoiseSubsystem::MakeSomeNoise(this, ENoiseType::Attack, GetAttackNoiseLocation(), this);
+}
+
+FVector APlayerCharacter::GetAttackNoiseLocation() const
+{
+	if (bAttackNoiseFromSwordSocket && !AttackNoiseSocketName.IsNone())
+	{
+		// 칼은 캐릭터 메시와 별도의 메시 컴포넌트이므로 소켓을 가진 메시를 찾는다.
+		TInlineComponentArray<UMeshComponent*> Meshes(this);
+		for (const UMeshComponent* MeshComp : Meshes)
+		{
+			if (MeshComp && MeshComp != GetMesh() && MeshComp->DoesSocketExist(AttackNoiseSocketName))
+			{
+				return MeshComp->GetSocketLocation(AttackNoiseSocketName);
+			}
+		}
+	}
+
+	// 캐릭터 스켈레탈 메시의 바운드 중심
+	const USkeletalMeshComponent* CharacterMesh = GetMesh();
+	return CharacterMesh ? CharacterMesh->Bounds.Origin : GetActorLocation();
 }
 
 void APlayerCharacter::PlayRandomCharacterSound(const TArray<TObjectPtr<USoundBase>>& Sounds) const
