@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Widgets/InputGlyphSet.h"
 #include "GuideSignCardWidget.generated.h"
 
 class UButton;
@@ -10,6 +11,7 @@ class UTextBlock;
 class UTexture;
 class UGuideSignData;
 class UGuideSignCardWidget;
+class UInputGlyphSubsystem;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGuideSignCardCloseRequested, UGuideSignCardWidget*, Card);
 
@@ -45,6 +47,7 @@ public:
 
 protected:
 	virtual void	NativeOnInitialized() override;
+	virtual void	NativeDestruct() override;
 
 	/** 내용을 채운 뒤 호출된다. WBP에서 연출을 붙인다. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "GuideSign")
@@ -74,4 +77,19 @@ protected:
 	/** 닫기 버튼이 표지판 배경과 구분되도록 두르는 외곽선. 닫을 수 없는 동안에는 숨긴다 */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidget>	CardCloseOutline = nullptr;
+
+private:
+	/** 지금 입력 장치(키보드 / 게임패드)에 맞는 본문을 골라 키 이름을 채워 넣는다 */
+	void	RefreshBody();
+
+	/** 팝업이 떠 있는 동안 키보드 ↔ 게임패드가 바뀌면 본문을 다시 고른다 */
+	void	HandleDeviceChanged();
+
+	/** 입력 장치. 찾지 못하면 키보드로 본다 */
+	EInputGlyphDevice	GetInputDevice() const;
+
+	TWeakObjectPtr<const UGuideSignData>	CurrentData;
+
+	TWeakObjectPtr<UInputGlyphSubsystem>	DeviceSubsystem;
+	FDelegateHandle	DeviceChangedHandle;
 };

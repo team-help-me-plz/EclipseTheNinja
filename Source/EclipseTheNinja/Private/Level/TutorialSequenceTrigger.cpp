@@ -19,6 +19,9 @@
 #include "AbilitySystemGlobals.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Noise/NoiseRingActor.h"
+#include "EngineUtils.h"
 #include "Widgets/InputPromptWidget.h"
 #include "Widgets/QTEPulseRingWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
@@ -45,6 +48,27 @@
 #include "LevelSequencePlayer.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+
+namespace
+{
+    // 이 태그가 붙은 레벨 액터(조작 안내 그림·키 표시 등)는 컷신이 재생되는 동안 숨긴다
+    const FName HideInCinematicTag(TEXT("HideInCinematic"));
+
+    void SetCinematicHiddenActorsHidden(UWorld* InWorld, bool bInHidden)
+    {
+        if (!InWorld)
+        {
+            return;
+        }
+        for (TActorIterator<AActor> It(InWorld); It; ++It)
+        {
+            if (It->ActorHasTag(HideInCinematicTag))
+            {
+                It->SetActorHiddenInGame(bInHidden);
+            }
+        }
+    }
+}
 
 ATutorialSequenceTrigger::ATutorialSequenceTrigger()
 {
@@ -272,11 +296,17 @@ void ATutorialSequenceTrigger::PlaySequence(APlayerController* PlayerController)
 
     // 재생 설정의 HUD 숨김은 AHUD만 숨기므로 체력바·스킬 아이콘 같은 UMG 위젯은 직접 숨긴다
     HideScreenWidgets();
+    // 컷신 전에 떠 있던 소음 링·파동 이펙트는 연출 화면에 남지 않게 바로 치운다
+    ANoiseRingActor::StopAllActive(this);
+    // 레벨에 세워 둔 조작 안내 그림·키 표시도 연출 화면에 나오지 않게 숨긴다
+    SetCinematicHiddenActorsHidden(GetWorld(), true);
     // 레벨 시작과 함께 재생하면 HUD 위젯이 아직 만들어지기 전이므로, 0.1초 간격으로 몇 번 더 숨긴다
+    // 재생 직후 착지 등으로 막 생긴 소음 표시도 같이 치운다
     this->WidgetHideRetries = 10;
     GetWorldTimerManager().SetTimer(this->WidgetHideTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
     {
         HideScreenWidgets();
+        ANoiseRingActor::StopAllActive(this);
         if (--this->WidgetHideRetries <= 0 || !IsPlaying())
         {
             GetWorldTimerManager().ClearTimer(this->WidgetHideTimer);
@@ -372,6 +402,14 @@ void ATutorialSequenceTrigger::BeginQTE()
     }
 
     UUserWidget* PromptWidget = this->QTEPrompt->GetUserWidgetObject();
+
+    // 커서가 보이는 입력 모드라, 안내 위젯 위를 클릭하면 위젯이 클릭을 가져가 QTE 입력이 들어오지 않는다.
+    // 안내는 보여 주기만 하고 클릭은 게임으로 흘려보낸다
+    if (IsValid(PromptWidget))
+    {
+        PromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
+
     if (UInputPromptWidget* InputPrompt = Cast<UInputPromptWidget>(PromptWidget))
     {
         if (this->bShowQTEInputGlyph)
@@ -419,6 +457,64 @@ void ATutorialSequenceTrigger::BeginQTE()
     }
     SetQTEPromptVisible(true);
     SetQTEOutlineVisible(true);
+
+    // 보조 입력 경로: 위젯이 클릭을 가져가거나 액션 상태가 꼬여 Started가 오지 않아도
+    // QTE 액션에 연결된 키가 새로 눌리면 바로 받는다. 마우스 버튼은 Slate가 아는 실제 눌림으로 본다
+    TArray<FKey> QTEKeys;
+    if (const ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+    {
+        if (const UEnhancedInputLocalPlayerSubsystem* InputSubsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+        {
+            QTEKeys = InputSubsystem->QueryKeysMappedToAction(this->QTEAction);
+        }
+    }
+    if (!QTEKeys.IsEmpty())
+    {
+        TWeakObjectPtr<APlayerController> WeakController = PlayerController;
+        auto IsKeyDown = [WeakController](const FKey& InKey)
+        {
+            if (InKey.IsMouseButton() && FSlateApplication::IsInitialized()
+                && FSlateApplication::Get().GetPressedMouseButtons().Contains(InKey))
+            {
+                return true;
+            }
+            return WeakController.IsValid() && WeakController->IsInputKeyDown(InKey);
+        };
+
+        // QTE에 들어설 때 이미 눌려 있던 키는 한 번 뗀 뒤 다시 눌러야 인정한다
+        TSharedRef<TSet<FKey>> HeldKeys = MakeShared<TSet<FKey>>();
+        for (const FKey& Key : QTEKeys)
+        {
+            if (IsKeyDown(Key))
+            {
+                HeldKeys->Add(Key);
+            }
+        }
+
+        GetWorldTimerManager().SetTimer(this->QTETimer, FTimerDelegate::CreateWeakLambda(this, [this, QTEKeys, HeldKeys, IsKeyDown]()
+        {
+            if (!this->bWaitingForQTE)
+            {
+                GetWorldTimerManager().ClearTimer(this->QTETimer);
+                return;
+            }
+            for (const FKey& Key : QTEKeys)
+            {
+                if (!IsKeyDown(Key))
+                {
+                    HeldKeys->Remove(Key);
+                    continue;
+                }
+                if (!HeldKeys->Contains(Key))
+                {
+                    UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::BeginQTE()] %s : 키 직접 감지로 QTE 입력 (%s)"), *GetActorNameOrLabel(), *Key.ToString());
+                    GetWorldTimerManager().ClearTimer(this->QTETimer);
+                    OnQTEInput();
+                    return;
+                }
+            }
+        }), 1.0f / 120.0f, true);
+    }
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::BeginQTE()] %s : QTE 입력 대기"), *GetActorNameOrLabel());
 }
@@ -710,6 +806,7 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
         }
     }
     this->HiddenWidgets.Reset();
+    SetCinematicHiddenActorsHidden(GetWorld(), false);
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::OnSequenceFinished()] %s : 시퀀스 종료, 조작 반환"), *GetActorNameOrLabel());
 

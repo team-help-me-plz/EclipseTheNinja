@@ -13,6 +13,60 @@
 #include "Kismet/GameplayStatics.h"
 #include "Subsystem/InputGlyphSubsystem.h"
 #include "Widgets/InputPromptWidget.h"
+#include "EnhancedInputSubsystemInterface.h"
+#include "InputMappingContext.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
+
+namespace
+{
+    /**
+     * InAction의 매핑 중 기본 키가 InDefaultKey인 매핑을 찾아, 플레이어가 키 설정에서 바꾼 키를 돌려준다.
+     * 이동(IA_Move)처럼 한 액션에 여러 방향 키가 묶여 있어도 "기본이 A인 칸"을 골라 그 칸의 현재 키를 보여 줄 수 있다.
+     * 바꾸지 않았으면 기본 키 그대로, 매핑을 찾지 못하면 무효 키를 돌려준다.
+     */
+    FKey FindRemappedKey(APlayerController* InController, const UInputAction* InAction, const FKey& InDefaultKey)
+    {
+        const ULocalPlayer* LocalPlayer = InController ? InController->GetLocalPlayer() : nullptr;
+        const UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer
+            ? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer)
+            : nullptr;
+        const UEnhancedInputUserSettings* Settings = Subsystem ? Subsystem->GetUserSettings() : nullptr;
+        if (!InAction || !InDefaultKey.IsValid() || !Settings)
+        {
+            return FKey();
+        }
+
+        const UEnhancedPlayerMappableKeyProfile* Profile = Settings->GetActiveKeyProfile();
+        for (const UInputMappingContext* Context : Settings->GetRegisteredInputMappingContexts())
+        {
+            if (!Context)
+            {
+                continue;
+            }
+            for (const FEnhancedActionKeyMapping& Mapping : Context->GetMappings())
+            {
+                if (Mapping.Action != InAction || Mapping.Key != InDefaultKey)
+                {
+                    continue;
+                }
+                TArray<FKey> MappedKeys;
+                if (Profile)
+                {
+                    Profile->GetPlayerMappedKeysForRebuildControlMappings(Mapping, MappedKeys);
+                }
+                for (const FKey& Key : MappedKeys)
+                {
+                    if (Key.IsValid() && Key.IsGamepadKey() == InDefaultKey.IsGamepadKey())
+                    {
+                        return Key;
+                    }
+                }
+                return InDefaultKey;
+            }
+        }
+        return FKey();
+    }
+}
 
 AKeyPromptActor::AKeyPromptActor()
 {
@@ -286,6 +340,22 @@ FKey AKeyPromptActor::ResolveKey(bool bGamepad) const
         if (World && World->IsGameWorld())
         {
             APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+
+            // 기본 키를 함께 지정했으면 그 키가 기본인 매핑 칸의 현재 키를 쓴다 (이동 A/D처럼 한 액션에 여러 키가 있을 때)
+            const FKey& DefaultKey = bGamepad ? this->GamepadKey : this->KeyboardKey;
+            const FKey RemappedKey = FindRemappedKey(PlayerController, this->InputAction, DefaultKey);
+            if (RemappedKey.IsValid())
+            {
+                return RemappedKey;
+            }
+
+            // 키 설정에 매핑이 아직 등록되지 않았으면(설정 화면을 열기 전) 플레이어가 바꾼 키도 적용되지 않으므로 기본 키가 맞다.
+            // 아래 액션 전체 검색으로 넘어가면 이동처럼 여러 키가 묶인 액션에서 맨 앞 키(D)가 나와 A 칸에도 D가 뜬다
+            if (DefaultKey.IsValid())
+            {
+                return DefaultKey;
+            }
+
             const FKey ActionKey = UInputPromptWidget::ResolveActionKey(
                 this,
                 PlayerController,

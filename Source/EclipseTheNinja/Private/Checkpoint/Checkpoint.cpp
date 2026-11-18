@@ -276,6 +276,17 @@ void ACheckpoint::RegisterAfterSequence()
     if (Subsystem->GetCurrentCheckpoint() == ECheckpointId::None)
     {
         Subsystem->ActivateCheckpoint(CheckpointId);
+
+        // 컷신이 끝날 때 플레이어는 이미 체크포인트 위에 서 있어 새로 닿지 않으므로,
+        // 직접 닿았을 때와 같은 소리·등불 연출을 여기서 보여 준다
+        if (bCheckpointActive)
+        {
+            if (ActivateSound)
+            {
+                UGameplayStatics::PlaySoundAtLocation(this, ActivateSound, GetActorLocation());
+            }
+            StartLampFlash();
+        }
     }
 }
 
