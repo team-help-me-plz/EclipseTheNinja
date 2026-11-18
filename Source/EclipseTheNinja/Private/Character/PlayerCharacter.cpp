@@ -191,7 +191,8 @@ void APlayerCharacter::BeginPlay()
 
 	// TOOD 변수로 만들기
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	Movement->MaxFlySpeed = 121.f;
+	// 벽타기 오르내리기 속도. 벽에 붙으면 Flying 모드라 이 값이 그대로 오르내리는 속도가 된다.
+	Movement->MaxFlySpeed = 181.5f;
 	Movement->BrakingDecelerationFlying = Movement->BrakingDecelerationWalking;
 
     GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()

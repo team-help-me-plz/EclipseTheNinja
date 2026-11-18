@@ -19,6 +19,8 @@
 #include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
 #include "Character/PlayerCharacter.h"
+#include "Character/PlayerCharacterCameraManager.h"
+#include "GameFramework/PlayerController.h"
 #include "Component/AssassinateTargetComponent.h"
 #include "Component/AssassinationDropComponent.h"
 #include "Component/AssassinationTargetingComponent.h"
@@ -253,6 +255,12 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 		VFXTask->ReadyForActivation();
 	}
 
+	// 대상이 클로즈업 연출을 켜 두었으면 접근부터 끝날 때까지 카메라를 당긴다.
+	if (Enemy->bPlayAssassinateCloseUp)
+	{
+		SetCloseUpActive(true);
+	}
+
 	StartApproach();
 }
 
@@ -276,7 +284,20 @@ bool UGAAssassinateBase::PlayAttackMontage()
 	// 암살자가 암살대상자와 같은 방향을 바라보도록
 	Player->SetAssassinationFacing(ExecutionRotation.Yaw);
 
-	return StartAttackMontageTask(0.0f);
+	if (!StartAttackMontageTask(0.0f)) return false;
+
+	// 클로즈업 중이면 암살 몽타주가 재생되는 동안 플레이어와 대상 말고 배경을 흐린다.
+	if (bCloseUpStarted)
+	{
+		if (const APlayerController* PC = Cast<APlayerController>(Player->GetController()))
+		{
+			if (APlayerCharacterCameraManager* CameraManager = Cast<APlayerCharacterCameraManager>(PC->PlayerCameraManager))
+			{
+				CameraManager->SetCloseUpBlur(true);
+			}
+		}
+	}
+	return true;
 }
 
 void UGAAssassinateBase::SlideVictim(float SideOffset, float ForwardOffset, float TimeToContact)
@@ -865,6 +886,9 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	// 중간에 끊겨도 게임이 느린 채로 남지 않게 먼저 속도를 되돌린다.
 	StopImpactTimeDilation(true);
 
+	// 클로즈업을 켰으면 원래 카메라로 블렌드해 돌아간다.
+	SetCloseUpActive(false);
+
 	// 대상 참조를 비우기 전에 충돌 무시, 발판 끝 이동, 루트 모션 설정을 되돌린다.
 	SetIgnoreVictimCollision(false);
 	if (bLedgeWalkLocked)
@@ -939,4 +963,27 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	TargetComponent.Reset();
 	PausedBrain.Reset();
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UGAAssassinateBase::SetCloseUpActive(bool bActive)
+{
+	if (!bActive && !bCloseUpStarted) return;
+
+	const APlayerCharacter* Player = Assassin.Get();
+	const APlayerController* PC = IsValid(Player) ? Cast<APlayerController>(Player->GetController()) : nullptr;
+	APlayerCharacterCameraManager* CameraManager = PC ? Cast<APlayerCharacterCameraManager>(PC->PlayerCameraManager) : nullptr;
+	if (bActive)
+	{
+		if (!IsValid(CameraManager) || !Victim.IsValid()) return;
+		CameraManager->StartCloseUp(Victim.Get());
+		bCloseUpStarted = true;
+	}
+	else
+	{
+		if (IsValid(CameraManager))
+		{
+			CameraManager->StopCloseUp();
+		}
+		bCloseUpStarted = false;
+	}
 }
