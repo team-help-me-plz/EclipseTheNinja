@@ -338,6 +338,7 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
 
 	// 소유자가 없어지거나 ASC가 없으면 이전 상태를 남기지 않는다.
+	const bool bWasCrouching = bIsCrouching;
 	bWallAttached = false;
 	ClimbingSpeed = 0.f;
 	bIsCrouching = false;
@@ -356,6 +357,10 @@ void UPlayerCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	}
 
 	bIsCrouching = Character->bIsCrouched;
+	if (bIsCrouching != bWasCrouching)
+	{
+		SwapTurnClipForCrouch();
+	}
 
 	const UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
 	if (IsValid(ASC))
@@ -424,6 +429,7 @@ bool UPlayerCharacterAnimInstance::TryStartTurnInPlace(float TargetYaw)
 	ActiveTurnMontage = PlaySlotAnimationAsDynamicMontage_WithBlendSettings(
 		TurnAnimation, TurnInPlaceSlotName, BlendIn, BlendOut,
 		GetTurnInPlacePlayRate(), 1, 0.0f);
+	ActiveTurnAnimation = ActiveTurnMontage ? TurnAnimation : nullptr;
 	TurnTargetYaw = TargetYaw;
 	return ActiveTurnMontage != nullptr;
 }
@@ -465,6 +471,59 @@ bool UPlayerCharacterAnimInstance::TryStartTurnInPlaceRemaining(float TargetYaw,
 		return false;
 	}
 
+	return PlayTurnClipRemaining(TurnAnimation, TargetYaw, RemainingDeltaYaw);
+}
+
+float UPlayerCharacterAnimInstance::GetTurnYawAtTime(float Time) const
+{
+	if (TurnYawCurve.Num() < 2 || TurnYawCurveStep <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	const float SampleIndex = FMath::Clamp(Time / TurnYawCurveStep, 0.0f, TurnYawCurve.Num() - 1.0f);
+	const int32 LowIndex = FMath::FloorToInt32(SampleIndex);
+	const int32 HighIndex = FMath::Min(LowIndex + 1, TurnYawCurve.Num() - 1);
+	return FMath::Lerp(TurnYawCurve[LowIndex], TurnYawCurve[HighIndex], SampleIndex - LowIndex);
+}
+
+void UPlayerCharacterAnimInstance::SwapTurnClipForCrouch()
+{
+	// 턴 도중 앉거나 일어나면 서기/앉기 턴 클립을 바꿔 끼워 돌면서 자세가 바뀌게 한다.
+	// 그대로 두면 턴 슬롯이 이전 자세의 포즈를 덮어써서 고개나 상체만 반응한다.
+	if (!IsTurningInPlace() || !ActiveTurnAnimation)
+	{
+		return;
+	}
+
+	UAnimSequence* NewAnimation = GetTurnInPlaceAnimation();
+	if (!NewAnimation || NewAnimation == ActiveTurnAnimation || !NewAnimation->HasRootMotion())
+	{
+		return;
+	}
+
+	// 지금 클립에서 아직 남은 회전(부호 포함)을 구한다. 역재생 중이면 처음으로 돌아가는 만큼이 남은 회전이다.
+	CacheTurnYawCurve(ActiveTurnAnimation);
+	if (TurnYawCurve.Num() < 2)
+	{
+		return;
+	}
+	const float CurrentYaw = GetTurnYawAtTime(Montage_GetPosition(ActiveTurnMontage));
+	const float RemainingDeltaYaw = Montage_GetPlayRate(ActiveTurnMontage) >= 0.0f
+		? TurnYawCurve.Last() - CurrentYaw
+		: -CurrentYaw;
+	if (FMath::Abs(RemainingDeltaYaw) < 1.0f)
+	{
+		return;
+	}
+
+	// 새 클립을 같은 슬롯에 재생하면 이전 턴 몽타주는 관성 블렌드로 빠진다.
+	// 남은 회전을 맞출 수 없으면 기존 턴을 그대로 끝까지 재생한다.
+	PlayTurnClipRemaining(NewAnimation, TurnTargetYaw, RemainingDeltaYaw);
+}
+
+bool UPlayerCharacterAnimInstance::PlayTurnClipRemaining(UAnimSequence* TurnAnimation, float TargetYaw, float RemainingDeltaYaw)
+{
 	CacheTurnYawCurve(TurnAnimation);
 	if (TurnYawCurve.Num() < 2)
 	{
@@ -497,16 +556,22 @@ bool UPlayerCharacterAnimInstance::TryStartTurnInPlaceRemaining(float TargetYaw,
 	FMontageBlendSettings BlendOut(FMath::Max(0.0f, TurnInPlaceBlendOutTime));
 	BlendIn.BlendMode = EMontageBlendMode::Inertialization;
 	BlendOut.BlendMode = EMontageBlendMode::Inertialization;
-	ActiveTurnMontage = PlaySlotAnimationAsDynamicMontage_WithBlendSettings(
+	UAnimMontage* NewMontage = PlaySlotAnimationAsDynamicMontage_WithBlendSettings(
 		TurnAnimation, TurnInPlaceSlotName, BlendIn, BlendOut,
 		GetTurnInPlacePlayRate(), 1, 0.0f, StartTime);
-	if (ActiveTurnMontage && bReverse)
+	if (!NewMontage)
+	{
+		return false;
+	}
+	ActiveTurnMontage = NewMontage;
+	ActiveTurnAnimation = TurnAnimation;
+	if (bReverse)
 	{
 		// 우클릭 턴의 방향 전환과 같은 방식으로 역재생한다.
 		Montage_SetPlayRate(ActiveTurnMontage, -GetTurnInPlacePlayRate());
 	}
 	TurnTargetYaw = TargetYaw;
-	return ActiveTurnMontage != nullptr;
+	return true;
 }
 
 void UPlayerCharacterAnimInstance::UpdateTurnInPlaceTarget(float TargetYaw)
@@ -543,6 +608,7 @@ void UPlayerCharacterAnimInstance::StopTurnInPlace()
 		Montage_StopWithBlendSettings(BlendOut, ActiveTurnMontage);
 	}
 	ActiveTurnMontage = nullptr;
+	ActiveTurnAnimation = nullptr;
 }
 
 void UPlayerCharacterAnimInstance::CancelTurnInPlace(float BlendOutTime)
@@ -554,6 +620,7 @@ void UPlayerCharacterAnimInstance::CancelTurnInPlace(float BlendOutTime)
 		Montage_StopWithBlendSettings(BlendOut, ActiveTurnMontage);
 	}
 	ActiveTurnMontage = nullptr;
+	ActiveTurnAnimation = nullptr;
 }
 
 float UPlayerCharacterAnimInstance::CalculateHeadPitch(const APlayerCharacter& Character) const

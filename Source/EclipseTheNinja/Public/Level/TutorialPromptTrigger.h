@@ -65,6 +65,9 @@ protected:
 private:
     bool bHasShown = false;
 
+    // 이 시각(월드 초) 전에는 다시 띄우지 않는다. 문구가 떠 있는 동안의 중복 표시를 막는다
+    double NextShowTime = 0.0;
+
     // 컷신이 끝날 때까지 문구 표시를 미루는 타이머
     FTimerHandle DeferredPromptTimer;
 
