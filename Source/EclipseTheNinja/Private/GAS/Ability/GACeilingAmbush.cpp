@@ -140,6 +140,8 @@ void UGACeilingAmbush::OnHitEvent(FGameplayEventData Payload)
 		return;
 	}
 
+	Enemy->PlayAttackSound();
+
 	// 공격력에 배율을 곱한 값을 피해로 사용한다.
 	const float Damage = SourceASC->GetNumericAttribute(UStatAttributeSet::GetAttackPowerAttribute()) * DamageMultiplier;
 	if (!FMath::IsFinite(Damage) || Damage <= 0.0f)

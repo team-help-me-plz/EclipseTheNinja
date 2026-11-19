@@ -33,6 +33,7 @@ public:
 
 	// 현재 이 컴포넌트를 대상으로 암살이 진행중인지 세팅하는 함수
 	void SetAssassinationInProgress(bool bInProgress) { bAssassinationInProgress = bInProgress; }
+	bool IsAssassinationInProgress() const { return bAssassinationInProgress; }
 
 	/** 암살가능 상태를 표시하는 테두리를 켜고끄는 함수*/
 	UFUNCTION(BlueprintCallable, Category = "Assassinate|Outline")
@@ -53,6 +54,9 @@ public:
 
 	/** 공중 암살 후 암살자가 내려설 위치. 적이 바라보는 방향 기준 오프셋을 쓰고 높이는 적의 바닥에 맞춘다. */
 	FVector GetAerialLandingLocation(const ACharacter* Assassin) const;
+
+	/** 공중 암살 착지 위치를 두 캡슐이 겹치지 않는 거리까지 뒤로 밀지 정한다. */
+	void SetAerialLandOutsideCapsule(bool bEnable) { bAerialLandOutsideCapsule = bEnable; }
 
 	/** 암살자가 적보다 충분히 높은 곳에 있고, 착지 위치 위로 나가 내려가는 경로가 발판·벽에 막히지 않는지 확인한다. */
 	bool IsAerialApproachClear(const ACharacter* Assassin) const;
@@ -180,6 +184,17 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Aerial")
 	FVector AerialLandingOffset = FVector(-40.0f, 0.0f, 0.0f);
+
+	/**
+	 * 켜면 공중 암살 착지 위치를 두 캡슐이 겹치지 않는 거리(두 반지름 + AerialCapsuleGap)까지 뒤로 민다.
+	 * AerialLandingOffset.X가 그보다 멀면 그대로 쓴다. 캡슐이 커서 겹치면 밀려나는 적(보스)에 쓴다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Aerial")
+	bool bAerialLandOutsideCapsule = false;
+
+	/** bAerialLandOutsideCapsule일 때 두 캡슐 사이에 남길 틈(cm). */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Aerial", meta = (EditCondition = "bAerialLandOutsideCapsule", ClampMin = "0.0", Units = "cm"))
+	float AerialCapsuleGap = 5.0f;
 
 	/** 아래 암살로 손 짚고 올라갈 수 있는 높이(적이 선 발판 높이 - 암살자 발 높이). 애니메이션은 약 200cm 기준이다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassinate|Below", meta = (ClampMin = "0.0", Units = "cm"))

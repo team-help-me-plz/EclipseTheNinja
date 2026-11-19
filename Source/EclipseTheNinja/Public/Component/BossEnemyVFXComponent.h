@@ -10,6 +10,7 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UNiagaraComponent;
 class UNiagaraSystem;
+class USoundBase;
 struct FAbilityEndedData;
 struct FGameplayEffectContextHandle;
 
@@ -65,6 +66,10 @@ protected:
 
 	UFUNCTION()
 	void HandleEnergyLinkBroken();
+
+	// 기믹 실패로 처형이 시작되면 실드를 즉시 끈다
+	UFUNCTION()
+	void HandleEnergyLinkFailed();
 
 	// 체력이 깎이는 피해를 받았을 때 피를 튀긴다.
 	void HandleDamageReceived(const FGameplayEffectContextHandle& Context);
@@ -124,6 +129,9 @@ protected:
 	/** 실드가 켜져 있을 때 공격이 튕겨 나가는 이펙트. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss VFX|Hit")
 	TSoftObjectPtr<UNiagaraSystem> ShieldHitSystem;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TArray<TObjectPtr<USoundBase>> ShieldHitSounds;
 
 	/** 실드 튕김 이펙트 크기 배율. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss VFX|Hit", meta = (ClampMin = "0.01"))

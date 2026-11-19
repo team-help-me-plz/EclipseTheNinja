@@ -3,6 +3,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/AssassinateTargetComponent.h"
@@ -41,7 +42,8 @@ void UGAAerialAssassinate::StartApproach()
 	ResolveJumpWindow();
 
 	// 칼날이 피격자 몸통을 지나도록, 몽타주 시작부터 칼이 꽂히는(착지) 순간까지 피격자를 옆으로 천천히 옮긴다.
-	SlideVictim(VictimSideOffset, 0.0f, ResolvedJumpStartTime + ResolvedJumpDuration);
+	const float SideOffset = Enemy->IsA<ABossEnemy>() ? BossVictimSideOffset : VictimSideOffset;
+	SlideVictim(SideOffset, 0.0f, ResolvedJumpStartTime + ResolvedJumpDuration);
 
 	// 암살 대상 피격
 	ExecuteVictim();

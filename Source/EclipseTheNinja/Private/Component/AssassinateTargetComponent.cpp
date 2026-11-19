@@ -147,7 +147,15 @@ FVector UAssassinateTargetComponent::GetAerialLandingLocation(const ACharacter* 
 	if (!IsValid(Victim) || !IsValid(Assassin)) return FVector::ZeroVector;
 
 	// 암살 몽타주가 끝났을 때 암살자가 서 있을 위치 암살대상의 뒤쪽 (AerialLandingOffset.x)가 음수
-	FVector Landing = Victim->GetActorLocation() + Victim->GetActorQuat().RotateVector(AerialLandingOffset);
+	FVector Offset = AerialLandingOffset;
+	if (bAerialLandOutsideCapsule)
+	{
+		// 캡슐이 겹치지 않도록 두 반지름 합보다 가까이 착지하지 않는다.
+		const float MinBackDistance = Victim->GetCapsuleComponent()->GetScaledCapsuleRadius()
+			+ Assassin->GetCapsuleComponent()->GetScaledCapsuleRadius() + AerialCapsuleGap;
+		Offset.X = FMath::Min(Offset.X, -MinBackDistance);
+	}
+	FVector Landing = Victim->GetActorLocation() + Victim->GetActorQuat().RotateVector(Offset);
 	// 사이드뷰의 이동 평면을 유지
 	Landing.Y = Assassin->GetActorLocation().Y;
 	// 두 캐릭터의 캡슐 바닥 높이를 맞춤 

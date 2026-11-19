@@ -1,4 +1,6 @@
 #include "Character/BaseCharacter.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "AbilitySystemComponent.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "GAS/StatAttributeSet.h"
@@ -176,6 +178,11 @@ void ABaseCharacter::PlayHitReaction()
     {
         // Restart on a new hit. Death is checked first and can replace this montage.
         MonategeDuration = AnimInstance->Montage_Play(HitReactionMontage, 1.0f, EMontagePlayReturnType::Duration);
+        // 피격 클립의 루트 이동이 캡슐을 턱 위로 밀어 올리지 않게 한다.
+        if (FAnimMontageInstance* MontageInstance = AnimInstance->GetActiveInstanceForMontage(HitReactionMontage))
+        {
+            MontageInstance->PushDisableRootMotion();
+        }
     }
 }
 

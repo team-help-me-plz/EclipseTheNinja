@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/TimerHandle.h"
-#include "Engine/StreamableManager.h"
+#include "GAS/Ability/AbilityAssetPreloader.h"
 #include "GAS/Ability/GACooldownBase.h"
 #include "GASwiftStrike.generated.h"
 
@@ -240,7 +240,7 @@ private:
 	FTimerHandle AfterimageTimerHandle;
 
 	// 미리 불러 둔 에셋이 메모리에서 내려가지 않게 잡아 둔다. 어빌리티를 잃으면 놓는다.
-	TSharedPtr<FStreamableHandle> PreloadHandle;
+	FAbilityAssetPreloader AssetPreloader;
 	FTimerHandle DashSlashTimerHandle;
 	FVector DashSlashStart = FVector::ZeroVector;
 

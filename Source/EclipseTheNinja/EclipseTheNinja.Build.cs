@@ -34,6 +34,10 @@ public class EclipseTheNinja : ModuleRules
 		if (Target.bBuildEditor)
 		{
 			PrivateDependencyModuleNames.Add("UnrealEd");
+			// 미니맵 굽기 에셋 생성
+			PrivateDependencyModuleNames.Add("AssetRegistry");
+			// 미니맵 전체 모습 PNG 내보내기
+			PrivateDependencyModuleNames.Add("ImageCore");
 		}
 
 		PublicIncludePaths.AddRange(new string[] {

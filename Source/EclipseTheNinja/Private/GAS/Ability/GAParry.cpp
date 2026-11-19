@@ -20,6 +20,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
 #include "GAS/StatAttributeSet.h"
+#include "Util/NiagaraWarmup.h"
 
 UGAParry::UGAParry()
 {
@@ -37,6 +38,18 @@ UGAParry::UGAParry()
     ActivationBlockedTags.AddTag(UGAWallSlide::GetWallSlideAbilityTag());
     ActivationBlockedTags.AddTag(UGAAssassinateBase::GetAssassinatingTag());
     BlockAbilitiesWithTag.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
+}
+
+void UGAParry::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+    Super::OnGiveAbility(ActorInfo, Spec);
+    if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+    // 적 전용 불꽃(예: 보스)은 그 적이 BeginPlay에서 따로 준비한다.
+    if (const AActor* Avatar = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr)
+    {
+        EclipseVFX::WarmupNiagaraSystem(Avatar, SuccessSparkEffect, Avatar->GetActorLocation());
+    }
 }
 
 bool UGAParry::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -91,6 +104,7 @@ void UGAParry::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         OpenWindow();
     }
     if (!IsActive()) return;
+    Player->PlayActionSound(EPlayerActionSound::Parry);
 
     if (ParryMontage)
     {
@@ -213,6 +227,11 @@ void UGAParry::HandleSuccess(AActor* Attacker, AActor* DeflectedProjectile)
     bSucceeded = true;
     CloseWindow();
 
+    if (const APlayerCharacter* Player = Cast<APlayerCharacter>(GetAvatarActorFromActorInfo()))
+    {
+        Player->PlayActionSound(EPlayerActionSound::ParrySuccess);
+    }
+
     // 불꽃은 성공 동작과 같이 적의 공격을 직접 막았을 때만 낸다. 투사체를 튕겨낼 때는 내지 않는다.
     if (!bDeflectedProjectile)
     {
@@ -322,8 +341,10 @@ void UGAParry::SpawnSuccessSpark(const AEnemy* Attacker) const
         : Player->GetActorLocation();
     const FVector Location = Hand + Facing * SuccessSparkHandOffset.X + FVector(0.0f, 0.0f, SuccessSparkHandOffset.Y);
 
+    // 풀링으로 재생해, 미리 만들어 둔(또는 앞서 쓴) 컴포넌트를 다시 쓴다.
     UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-        Player, Effect, Location, Facing.Rotation(), FVector(SuccessSparkScale));
+        Player, Effect, Location, Facing.Rotation(), FVector(SuccessSparkScale),
+        true, true, ENCPoolMethod::AutoRelease);
 }
 
 void UGAParry::EndAbility(const FGameplayAbilitySpecHandle Handle,

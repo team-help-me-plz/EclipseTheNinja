@@ -13,6 +13,7 @@ class UProjectileMovementComponent;
 class UAbilitySystemComponent;
 class UPrimitiveComponent;
 class USkeletalMeshComponent;
+class UNiagaraComponent;
 
 /**
  * 표창이 박힐 부모, 부모의 소켓 이름, 표면 지점을 가진 구조체
@@ -138,6 +139,12 @@ protected:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Kunai")
     TObjectPtr<UProjectileMovementComponent> Movement;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Kunai|VFX")
+    TObjectPtr<UNiagaraComponent> FlightTrail;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai|VFX", meta = (ClampMin = "0.0", Units = "cm"))
+    float FlightTrailWidth = 3.0f;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Kunai", meta = (ClampMin = "0.1", Units = "s"))
     float Lifetime = 1.0f;

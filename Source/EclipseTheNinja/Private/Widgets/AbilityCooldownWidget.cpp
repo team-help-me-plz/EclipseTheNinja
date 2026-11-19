@@ -2,6 +2,11 @@
 
 
 #include "Widgets/AbilityCooldownWidget.h"
+#include "Widgets/InputGlyphWidget.h"
+#include "Character/PlayerCharacter.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "GAS/Ability/GACooldownBase.h"
 #include "Character/BaseCharacter.h"
 #include "Save/GameSaveSubsystem.h"
@@ -12,6 +17,63 @@
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Character/PlayerCharacterController.h"
+#include "Widgets/InputPromptWidget.h"
+#include "Components/RichTextBlockImageDecorator.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
+
+FText UAbilityCooldownWidget::GetCooldownInputLabel(int32 BindingIndex, bool bGamepad) const
+{
+	if (!InputPromptBindings.IsValidIndex(BindingIndex)) return FText::GetEmpty();
+	const FCooldownInputPromptBinding& Binding = InputPromptBindings[BindingIndex];
+	const FText Label = UInputPromptWidget::ResolveActionLabel(this, GetOwningPlayer(), Binding.InputAction,
+		InputPromptMappingContext, Binding.KeyboardFallback, bGamepad);
+	// Preserve the compact HUD caption for the mouse button, while following any actual remap.
+	if (!bGamepad && Binding.KeyboardFallback.ToString() == TEXT("LMB") && Label.ToString() == TEXT("좌클릭"))
+		return Binding.KeyboardFallback;
+	return Label;
+}
+
+void UAbilityCooldownWidget::RefreshInputPrompts()
+{
+	const APlayerCharacterController* Controller = Cast<APlayerCharacterController>(GetOwningPlayer());
+	const bool bGamepad = Controller && Controller->IsUsingGamepad();
+	for (int32 Index = 0; Index < InputPromptBindings.Num(); ++Index)
+	{
+		const FCooldownInputPromptBinding& Binding = InputPromptBindings[Index];
+		UTextBlock* KeyText = Cast<UTextBlock>(GetWidgetFromName(Binding.KeyTextWidgetName));
+		if (!KeyText) continue;
+		UImage* Icon = Cast<UImage>(GetWidgetFromName(Binding.GamepadIconWidgetName));
+		UImage* Background = Cast<UImage>(GetWidgetFromName(Binding.KeyBackgroundWidgetName));
+		const FText Label = GetCooldownInputLabel(Index, bGamepad);
+		const FName RowName = UInputPromptWidget::GetIconNameForLabel(Label);
+		const FRichImageRow* Row = bGamepad && InputPromptIconTable && !RowName.IsNone()
+			? InputPromptIconTable->FindRow<FRichImageRow>(RowName, TEXT("CooldownInput"), false) : nullptr;
+		const bool bShowIcon = Icon && Row;
+		const float OriginalTextOpacity = OriginalKeyOpacities.FindOrAdd(Binding.KeyTextWidgetName, KeyText->GetRenderOpacity());
+		// Keep Visibility as the ability-state source (clone swap/cooldown code uses it).
+		// Opacity replaces only the keyboard caption, without changing cooldown state.
+		KeyText->SetRenderOpacity(bShowIcon ? 0.0f : OriginalTextOpacity);
+		if (!KeyText->GetText().EqualTo(Label)) KeyText->SetText(Label);
+		if (Background)
+		{
+			const float OriginalBackgroundOpacity = OriginalKeyOpacities.FindOrAdd(Binding.KeyBackgroundWidgetName, Background->GetRenderOpacity());
+			Background->SetRenderOpacity(bShowIcon && KeyText->IsVisible() ? 0.0f : OriginalBackgroundOpacity);
+		}
+		if (Icon)
+		{
+			Icon->SetVisibility(bShowIcon && KeyText->IsVisible() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+			if (bShowIcon && Icon->GetBrush().GetResourceObject() != Row->Brush.GetResourceObject()) Icon->SetBrush(Row->Brush);
+		}
+	}
+}
+
+void UAbilityCooldownWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	RefreshInputPrompts();
+}
 
 void UAbilityCooldownWidget::NativeOnInitialized()
 {
@@ -79,6 +141,13 @@ void	UAbilityCooldownWidget::InitWidget(APawn* InPawn)
 {
 	this->UnbindAbility();
 	this->StopWaitingForGrant();
+
+	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(InPawn))
+	{
+		const UInputAction* Action = Player->GetAbilityInputAction(TargetAbilityInputID);
+		if (AbilityKeyGlyph) AbilityKeyGlyph->SetInputAction(Action);
+		else AbilityKeyGlyph = InstallKeyGlyph(TEXT("AbilityKeyText"), TEXT("AbilityKeyBackground"), Action);
+	}
 	if (!InPawn)
 	{
 		return ;
@@ -124,9 +193,41 @@ void	UAbilityCooldownWidget::InitWidget(APawn* InPawn)
 	this->ObservedAbility = Ability;
 }
 
+UInputGlyphWidget* UAbilityCooldownWidget::InstallKeyGlyph(FName TextName, FName BackgroundName, const UInputAction* Action)
+{
+	if (!Action) return nullptr;
+	if (!WidgetTree) return nullptr;
+	if (InputPromptBindings.ContainsByPredicate([TextName](const FCooldownInputPromptBinding& Binding)
+		{ return Binding.KeyTextWidgetName == TextName; }))
+	{
+		// The Blueprint prompt already owns this text and its device icon.
+		return nullptr;
+	}
+
+	UWidget* Text = WidgetTree->FindWidget(TextName);
+	if (!Text) return nullptr;
+
+	UOverlay* Parent = Cast<UOverlay>(Text->GetParent());
+	if (!Parent) return nullptr;
+
+	UInputGlyphWidget* Glyph = CreateWidget<UInputGlyphWidget>(this);
+	if (!Glyph) return nullptr;
+
+	// 기존 슬롯의 순서를 유지해 사용 불가/분신 교대 표시가 키 위에 그려지게 한다.
+	if (!Parent->ReplaceOverlayChildAt(Parent->GetChildIndex(Text), Glyph)) return nullptr;
+	UOverlaySlot* GlyphSlot = CastChecked<UOverlaySlot>(Glyph->Slot);
+	GlyphSlot->SetHorizontalAlignment(HAlign_Fill);
+	GlyphSlot->SetVerticalAlignment(VAlign_Fill);
+	Glyph->SetInputAction(Action);
+	Text->SetVisibility(ESlateVisibility::Collapsed);
+	if (UWidget* Background = WidgetTree->FindWidget(BackgroundName)) Background->SetVisibility(ESlateVisibility::Collapsed);
+	return Glyph;
+}
+
 void UAbilityCooldownWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+	RefreshInputPrompts();
 
 	if (this->CooldownImage)
 	{

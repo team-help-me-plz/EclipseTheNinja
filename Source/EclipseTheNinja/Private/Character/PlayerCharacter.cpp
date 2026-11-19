@@ -2,6 +2,8 @@
 
 
 #include "Character/PlayerCharacter.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "Save/GameSaveSubsystem.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -20,6 +22,8 @@
 #include "TimerManager.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Level/EclipseWorldSettings.h"
 #include "Character/PlayerCharacterController.h"
 #include "Character/PlayerCharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -44,6 +48,7 @@
 #include "GAS/Ability/GAWallSlide.h"
 #include "Character/Enemy.h"
 #include "Component/HidingComponent.h"
+#include "Minimap/MinimapComponent.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
@@ -64,6 +69,8 @@ APlayerCharacter::APlayerCharacter()
 	NoiseComponent = CreateDefaultSubobject<UNoiseComponent>(TEXT("NoiseComponent"));
 
 	HidingComponent = CreateDefaultSubobject<UHidingComponent>(TEXT("HidingComponent"));
+
+	MinimapComponent = CreateDefaultSubobject<UMinimapComponent>(TEXT("MinimapComponent"));
 
 	// 암살도 배열의 기본 항목으로 둔다. 기본 공격 항목은 부모 생성자에서 추가한다.
 	FAbilityInfo& AssassinateInfo = AbilityClassArray.AddDefaulted_GetRef();
@@ -118,6 +125,7 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::OnJumped_Implementation()
 {
 	Super::OnJumped_Implementation();
+	PlayActionSound(EPlayerActionSound::Jump);
 
 	this->NoiseComponent->EmitNoise(ENoiseType::Jump);
 }
@@ -186,6 +194,7 @@ void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateMovementSound(DeltaSeconds);
 	// 아래의 조기 반환(공격 중 등)과 관계없이 조준 위젯은 매 프레임 갱신한다.
 	UpdateAimWidget();
 	// 상호작용 키는 암살이 우선이므로, 암살이 가능한 동안에는 상호작용 표시를 숨겨 헷갈리지 않게 한다.
@@ -203,6 +212,72 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 
 	UpdateCursorTarget();
 	UpdateCursorFacing(DeltaSeconds);
+}
+
+void APlayerCharacter::PlayCharacterSound(USoundBase* Sound, float Volume) const
+{
+	if (Sound && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation(), Volume);
+	}
+}
+
+void APlayerCharacter::PlayActionSound(EPlayerActionSound Action, float Volume) const
+{
+	if (const TObjectPtr<USoundBase>* Sound = ActionSounds.Find(Action))
+	{
+		PlayCharacterSound(Sound->Get(), Volume);
+	}
+}
+
+void APlayerCharacter::PlaySwordAttackSound(int32 ComboIndex, bool bFire) const
+{
+	const auto& Sounds = bFire ? FireAttackSounds : SwordAttackSounds;
+	if (Sounds.IsValidIndex(ComboIndex - 1))
+	{
+		PlayCharacterSound(Sounds[ComboIndex - 1]);
+	}
+}
+
+void APlayerCharacter::PlayRandomCharacterSound(const TArray<TObjectPtr<USoundBase>>& Sounds) const
+{
+	if (!Sounds.IsEmpty())
+	{
+		PlayCharacterSound(Sounds[FMath::RandRange(0, Sounds.Num() - 1)]);
+	}
+}
+
+void APlayerCharacter::PlayAssassinationWithdrawalSound() const
+{
+	PlayRandomCharacterSound(AssassinationSounds);
+}
+
+void APlayerCharacter::UpdateMovementSound(float DeltaSeconds)
+{
+	const bool bOnWall = IsWallAttached();
+	const float Speed = bOnWall ? FMath::Abs(GetVelocity().Z) : GetVelocity().Size2D();
+	if (bIsDead || IsAssassinating() || IsAttacking() || IsHiding() || Speed < 10.0f
+		|| (!bOnWall && !GetCharacterMovement()->IsMovingOnGround()))
+	{
+		DistanceSinceMovementSound = 0.0f;
+		PreviousMovementSounds = nullptr;
+		return;
+	}
+
+	const auto& Sounds = bOnWall ? WallClimbSounds : (bIsCrouched ? CrouchWalkSounds : WalkSounds);
+	if (PreviousMovementSounds != &Sounds)
+	{
+		DistanceSinceMovementSound = 0.0f;
+		PreviousMovementSounds = &Sounds;
+	}
+
+	const float StepDistance = bOnWall ? 75.0f : (bIsCrouched ? 80.0f : 130.0f);
+	DistanceSinceMovementSound += Speed * DeltaSeconds;
+	if (DistanceSinceMovementSound >= StepDistance)
+	{
+		DistanceSinceMovementSound = FMath::Fmod(DistanceSinceMovementSound, StepDistance);
+		PlayRandomCharacterSound(Sounds);
+	}
 }
 
 void APlayerCharacter::UpdateCursorTarget()
@@ -240,13 +315,20 @@ void APlayerCharacter::UpdateAimWidget()
 	APlayerController* PlayerController = Cast<APlayerController>(GetController());
 	float MouseX = 0.0f;
 	float MouseY = 0.0f;
-	const bool bCanShow = AimWidgetClass
-		&& PlayerController && PlayerController->IsLocalPlayerController()
-		&& CanThrowKunai()
-		// 투척 어빌리티는 지상에서만, 벽에 붙지 않았을 때만 실행되므로 그때만 조준점을 보여준다.
-		&& GetCharacterMovement()->IsMovingOnGround()
-		&& !IsOnWall()
-		&& PlayerController->GetMousePosition(MouseX, MouseY);
+	const bool bCanShow = [&]()
+	{
+		if (!AimWidgetClass) return false;
+		if (!IsValid(PlayerController)) return false;
+		if (!PlayerController->IsLocalPlayerController()) return false;
+		if (!CanThrowKunai()) return false;
+
+		// 벽에서는 조준만 허용한다. 실제 투척은 입력과 어빌리티 양쪽에서 차단한다.
+		bool bCanAim = GetCharacterMovement()->IsMovingOnGround();
+		if (IsWallAttached()) bCanAim = true;
+		if (!bCanAim) return false;
+
+		return PlayerController->GetMousePosition(MouseX, MouseY);
+	}();
 
 	SetAimWidgetVisible(bCanShow);
 	if (bCanShow && AimWidget)
@@ -466,6 +548,26 @@ void APlayerCharacter::SetCursorFacingActive(bool bActive)
 	bCursorFacingActive = bActive;
 }
 
+const UInputAction* APlayerCharacter::GetAbilityInputAction(EAbilityInputID InputID) const
+{
+    switch (InputID)
+    {
+    case EAbilityInputID::BasicAttack:
+    case EAbilityInputID::ThrowKunai:
+        return BasicAttackAction;
+    case EAbilityInputID::CloneTech:
+        return CloneTechAction;
+    case EAbilityInputID::ElementalFire:
+        return ElementalFireAction;
+    case EAbilityInputID::SwiftStrike:
+        return SwiftStrikeAction;
+    case EAbilityInputID::Parry:
+        return ParryAction;
+    default:
+        return nullptr;
+    }
+}
+
 void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -481,7 +583,7 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 		{
 			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Started, this, &APlayerCharacter::DoCloneTech);
 			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Completed, this, &APlayerCharacter::DoCloneTechEnd);
-			EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Canceled, this, &APlayerCharacter::DoCloneTechEnd);
+			//EnhancedInputComponent->BindAction(CloneTechAction, ETriggerEvent::Canceled, this, &APlayerCharacter::DoCloneTechEnd);
 		}
 		if (CloneRecallAction)
 		{
@@ -550,6 +652,7 @@ void APlayerCharacter::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Othe
 void APlayerCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+	PlayActionSound(EPlayerActionSound::Land, 0.75f);
 	bCanCoyoteJump = false;
 
 	// 공중에서 앉기 키를 누르고 있었다면 착지하면서 앉는다.
@@ -619,7 +722,11 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	}
 	else
 	{
-		if (MoveVector.X < 0)
+		// Require a deliberate downward tilt (within about 39 degrees of down).
+		// Small downward drift while moving sideways must not trigger ledge hanging.
+		const float DownInput = -MoveVector.X;
+		if (DownInput >= FMath::Clamp(LedgeHangDownInputThreshold, 0.1f, 1.0f)
+			&& DownInput > FMath::Abs(MoveVector.Y) * 1.25f)
 			TryActivateAbilityByInputID(EAbilityInputID::LedgeHang);
 
 		DoMove(MoveVector.Y);
@@ -635,6 +742,10 @@ void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
 	if (bIsDead)
 	{
 		return;
+	}
+	if (Data.NewValue < Data.OldValue && !IsValid(PendingAssassinationMontage))
+	{
+		PlayActionSound(EPlayerActionSound::Hit);
 	}
 	if (Data.NewValue <= 0.0f)
 	{
@@ -706,7 +817,37 @@ void APlayerCharacter::Die()
 		UE_LOG(LogTemp, Warning, TEXT("%s: Death montage was not set or could not be played."), *GetName());
 	}
 	// SetLifeSpan(0) cancels destruction, so keep a small positive minimum.
-	SetLifeSpan(FMath::Max(0.01f, MontageDuration));
+	const float DeathLifeSpan = FMath::Max(0.01f, MontageDuration);
+	SetLifeSpan(DeathLifeSpan);
+
+	// 이전 맵으로 돌아가 부활하는 맵이면 몽타주 끝 무렵 화면을 검게 덮는다. 같은 맵 부활은 기존처럼 화면을 그대로 둔다
+	if (AEclipseWorldSettings::ShouldReturnToPreviousStageOnDeath(this))
+	{
+		const float FadeDuration = FMath::Min(DeathFadeOutTime, DeathLifeSpan);
+		const float Delay = DeathLifeSpan - FadeDuration;
+		if (Delay > KINDA_SMALL_NUMBER)
+		{
+			GetWorldTimerManager().SetTimer(DeathFadeTimer,
+				FTimerDelegate::CreateUObject(this, &APlayerCharacter::StartDeathFadeOut, FadeDuration), Delay, false);
+		}
+		else
+		{
+			StartDeathFadeOut(FadeDuration);
+		}
+	}
+}
+
+void APlayerCharacter::StartDeathFadeOut(float Duration)
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	APlayerCameraManager* CameraManager = PC ? PC->PlayerCameraManager.Get() : nullptr;
+	if (!IsValid(CameraManager))
+	{
+		return;
+	}
+
+	// 처형 연출처럼 이미 어두워진 상태면 그 밝기에서 이어서 어둡게 한다
+	CameraManager->StartCameraFade(CameraManager->FadeAmount, 1.0f, Duration, FLinearColor::Black, false, true);
 }
 
 void APlayerCharacter::ReceiveAssassination(UAnimMontage* Montage)
@@ -852,6 +993,7 @@ void APlayerCharacter::SetAssassinationFacing(float Yaw)
 
 void APlayerCharacter::DoThrowKunai()
 {
+	if (IsOnWall()) return;
 	if (!CanThrowKunai() || !ASC)
 	{
 		return;
@@ -915,6 +1057,7 @@ void APlayerCharacter::DoMove(float Forward)
 
 void APlayerCharacter::DoJumpStart()
 {
+	if (IsAttacking()) return;
 	if (IsParrying()) return;
 	if (IsAssassinating()) return;
 
@@ -965,6 +1108,31 @@ void APlayerCharacter::DoWAllMove(float Up)
 
 	const bool bClimbableWall = WallAttach->GetIsClimbable();
 
+	// 벽타기 벽을 타고 내려가다가 아래가 끝났으면 매달림을 푼다.
+	//  - 발 높이에 더 이상 벽이 없으면(벽·사다리 아래 끝) 그대로 떨어진다
+	//  - 발 바로 아래가 바닥이면 내려선다
+	// 풀지 않으면 벽 아래 끝을 지나서도, 바닥에 닿은 뒤에도 벽 타는 자세로 계속 내려가려 한다.
+	if (bClimbableWall && IsWallAttached() && Up < -0.1f)
+	{
+		const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+		const float WallDirX = GetActorForwardVector().X >= 0.f ? 1.f : -1.f;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(WallClimbBottom), false, this);
+
+		FVector Feet = GetActorLocation();
+		Feet.Z -= HalfHeight - 5.f;
+		FHitResult Hit;
+		const bool bWallAtFeet = GetWorld()->LineTraceSingleByChannel(Hit, Feet, Feet + FVector(WallDirX * 80.f, 0.f, 0.f), ECC_GameTraceChannel2, Params);
+		const bool bGroundBelow = GetWorld()->LineTraceSingleByChannel(Hit, Feet, Feet - FVector(0.f, 0.f, 25.f), ECC_Visibility, Params);
+
+		if (!bWallAtFeet || bGroundBelow)
+		{
+			FGameplayTagContainer WallAttachTags;
+			WallAttachTags.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
+			GetAbilitySystemComponent()->CancelAbilities(&WallAttachTags);
+			return;
+		}
+	}
+
 	// 위 입력으로 모서리 위로 올라간다. 벽타기 벽에서는 모서리 매달림 높이에 온 뒤에만 올라간다.
 	if (Up > 0.5f)
 	{
@@ -999,6 +1167,10 @@ void APlayerCharacter::DoCameraMoveStart()
 		return;
 	}
 
+	if (!bIsExploring)
+	{
+		APC->InitializeGamepadAimCursor();
+	}
 	APC->StartCameraMove();
 	bIsExploring = true;
 }
@@ -1077,6 +1249,7 @@ void APlayerCharacter::SetCloneTargeting(bool bTargeting)
 		static const FName CloneTargetingLock(TEXT("CloneTargeting"));
 		if (bTargeting)
 		{
+			APC->InitializeGamepadAimCursor(true);
 			APC->PushInputLock(CloneTargetingLock);
 		}
 		else
@@ -1126,6 +1299,7 @@ void APlayerCharacter::MultiJump()
 			WallJumpImpulse.Z = GetCharacterMovement()->JumpZVelocity * WallJumpVerticalMultiplier;
 
 			LaunchCharacter(WallJumpImpulse, true, true);
+			PlayActionSound(EPlayerActionSound::Jump);
 			// 벽 점프 시 소리 발생
 			this->NoiseComponent->EmitNoise(ENoiseType::WallJump);
 			// 벽점프 직후 이동 입력과 재부착을 잠시 제한한다.
@@ -1440,9 +1614,16 @@ void APlayerCharacter::SetParryMovementLocked(bool bLocked)
 
     if (bLocked)
     {
-        SavedParryMovementMode = Movement->MovementMode;
-        SavedParryCustomMovementMode = Movement->CustomMovementMode;
         bParryMovementLocked = true;
+
+        // 걷기 모드를 유지해야 정지 동작 중에도 이동 발판을 따라간다.
+        UAnimInstance* ParryAnimation = GetMesh()->GetAnimInstance();
+        if (IsValid(ParryAnimation))
+        {
+            ParryLockedAnimation = ParryAnimation;
+            SavedParryRootMotionMode = static_cast<uint8>(ParryAnimation->RootMotionMode);
+            ParryAnimation->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
+        }
 
         // 남아 있는 회전 동작과 커서 회전을 정리한 방향으로 고정한다.
         CancelMoveTurn();
@@ -1464,20 +1645,22 @@ void APlayerCharacter::SetParryMovementLocked(bool bLocked)
             return;
         }
 
-        // 입력뿐 아니라 관성과 몽타주 루트 모션에 의한 이동도 막는다.
+        // 입력과 루트 이동만 잠그고 바닥 추적과 발판 이동은 계속 처리한다.
         Movement->StopMovementImmediately();
-        Movement->DisableMovement();
         return;
     }
 
     bParryMovementLocked = false;
     ConsumeMovementInputVector();
 
-    // 사망 또는 다른 이동 상태 전환을 패링 종료가 덮어쓰지 않게 한다.
-    if (bIsDead) return;
-    if (Movement->MovementMode != MOVE_None) return;
-
-    Movement->SetMovementMode(static_cast<EMovementMode>(SavedParryMovementMode), SavedParryCustomMovementMode);
+    if (UAnimInstance* Animation = ParryLockedAnimation.Get())
+    {
+        if (Animation->RootMotionMode == ERootMotionMode::IgnoreRootMotion)
+        {
+            Animation->SetRootMotionMode(static_cast<ERootMotionMode::Type>(SavedParryRootMotionMode));
+        }
+    }
+    ParryLockedAnimation.Reset();
 }
 
 void APlayerCharacter::SetDebugInvincible(bool bEnable)

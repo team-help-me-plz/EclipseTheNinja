@@ -7,6 +7,7 @@
 #include "Components/Image.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 
 void UEnemyAwarenessWidget::InitializeDetection(UEnemyDetectionComponent* InDetection)
@@ -33,7 +34,7 @@ void UEnemyAwarenessWidget::NativeTick(const FGeometry& MyGeometry, float InDelt
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
 
-    const UEnemyDetectionComponent* Component = Detection.Get();
+    UEnemyDetectionComponent* Component = Detection.Get();
     if (!Component)
     {
         HidePresentation();
@@ -58,6 +59,11 @@ void UEnemyAwarenessWidget::NativeTick(const FGeometry& MyGeometry, float InDelt
     {
         HidePresentation();
         return;
+    }
+
+    if (const UWorld* World = Enemy->GetWorld())
+    {
+        Component->UpdateDisplayedGauge(World->GetDeltaSeconds() * Enemy->CustomTimeDilation);
     }
 
     const FVector Origin = Enemy->GetActorLocation();

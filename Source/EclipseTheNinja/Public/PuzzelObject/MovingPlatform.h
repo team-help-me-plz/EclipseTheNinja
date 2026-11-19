@@ -35,6 +35,7 @@ protected:
 	virtual void	BeginPlay() override;
 
 	void	PlatformMovement(float DeltaTime);
+	bool IsCharacterBlockingMove(const FVector& Delta) const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<USceneComponent>			RootScene = nullptr;
@@ -47,6 +48,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.1"))
 	float					TargetPointTravelTime;
+
+	// 각 TargetPoint에 도착했을 때 멈춰 있는 시간(초). 0이면 멈추지 않는다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.0", Units = "s"))
+	float					ArrivalWaitTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UCheckpointBoundComponent>	CheckpointBound = nullptr;
@@ -70,6 +75,7 @@ private:
 	float	RouteProgress = 0.0;
 	float	EndPointFloat = 0.0;
 	float	CycleLength = 0.0;
+	float	WaitRemaining = 0.f;
 	
 	bool	bIsMoveForward = true;
 

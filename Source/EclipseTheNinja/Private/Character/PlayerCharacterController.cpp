@@ -2,7 +2,9 @@
 
 
 #include "Character/PlayerCharacterController.h"
+#include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerStart.h"
@@ -14,6 +16,128 @@
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "Character/PlayerCharacterCameraManager.h"
 #include "Checkpoint/CheckpointSubsystem.h"
+#include "Level/EclipseWorldSettings.h"
+#include "Save/GameSaveSubsystem.h"
+#include "Components/InputComponent.h"
+#include "Widgets/PauseMenuWidget.h"
+#include "Widgets/SettingsWidget.h"
+#include "Misc/App.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "InputKeyEventArgs.h"
+
+bool APlayerCharacterController::InputKey(const FInputKeyEventArgs& Params)
+{
+    if (Params.Key.IsGamepadKey())
+    {
+        if (Params.Event == IE_Pressed || (Params.Key.IsAnalog() && FMath::Abs(Params.AmountDepressed) > 0.25f))
+            bUsingGamepad = true;
+    }
+    else if (Params.Event == IE_Pressed
+        || (Params.Key.IsAnalog() && FMath::Abs(Params.AmountDepressed) > 0.5f
+            && FPlatformTime::Seconds() > IgnoreCursorWarpUntil))
+    {
+        bUsingGamepad = false;
+    }
+    return Super::InputKey(Params);
+}
+
+void APlayerCharacterController::SetGamepadCursorLocation(int32 X, int32 Y)
+{
+    // Warping the OS cursor for a stick must not count as physical mouse input.
+    IgnoreCursorWarpUntil = FPlatformTime::Seconds() + 0.1;
+    LastObservedMousePosition = FVector2D(X, Y);
+    bHasObservedMousePosition = true;
+    SetMouseLocation(X, Y);
+}
+
+void APlayerCharacterController::PlayerTick(float DeltaTime)
+{
+    Super::PlayerTick(DeltaTime);
+
+    if (!IsLocalPlayerController() || !GetPawn() || IsPaused()) return;
+
+    // An uncaptured, visible mouse may move without MouseX/MouseY axis events.
+    float ObservedX = 0.0f, ObservedY = 0.0f;
+    if (GetMousePosition(ObservedX, ObservedY))
+    {
+        const FVector2D ObservedPosition(ObservedX, ObservedY);
+        if (bHasObservedMousePosition && FPlatformTime::Seconds() > IgnoreCursorWarpUntil
+            && FVector2D::DistSquared(ObservedPosition, LastObservedMousePosition) > 1.0)
+            bUsingGamepad = false;
+        LastObservedMousePosition = ObservedPosition;
+        bHasObservedMousePosition = true;
+    }
+
+    // Move the existing cursor so aiming, camera exploration and clone targeting
+    // all use the same screen position. This remains available during input locks.
+    const bool bGamepadAiming = IsInputKeyDown(EKeys::Gamepad_LeftTrigger);
+    const APlayerCharacter* ControlledCharacter = Cast<APlayerCharacter>(GetPawn());
+    const bool bCloneTargeting = ControlledCharacter && ControlledCharacter->IsCloneTargeting();
+    FVector2D Stick(GetInputAnalogKeyState(EKeys::Gamepad_RightX), GetInputAnalogKeyState(EKeys::Gamepad_RightY));
+
+    // 분신 소환 커서는 스틱 값을 그대로 쓴다(뒤집으면 상하가 반대로 움직였다).
+    if (!bCloneTargeting && bGamepadAiming && !bInvertGamepadAimCursorY)
+    {
+        Stick.Y *= -1.0;
+    }
+    const float Magnitude = Stick.Size();
+    const float DeadZone = FMath::Clamp(GamepadCursorDeadZone, 0.0f, 0.95f);
+    if (Magnitude <= DeadZone)
+    {
+        GamepadCursorRemainder = FVector2D::ZeroVector;
+        return;
+    }
+    Stick = Stick / Magnitude * FMath::Clamp((Magnitude - DeadZone) / (1.0f - DeadZone), 0.0f, 1.0f);
+
+    int32 Width = 0, Height = 0;
+    GetViewportSize(Width, Height);
+    if (Width <= 0 || Height <= 0) return;
+
+    float MouseX = Width * 0.5f, MouseY = Height * 0.5f;
+    GetMousePosition(MouseX, MouseY);
+    // Clone selection slows the world; the cursor should retain its normal speed.
+    const float RealDeltaTime = FMath::Clamp(static_cast<float>(FApp::GetDeltaTime()), 0.0f, 0.05f);
+    const float SpeedMultiplier = bGamepadAiming ? FMath::Max(0.0f, GamepadAimCursorSpeedMultiplier) : 1.0f;
+    const FVector2D Position = FVector2D(MouseX, MouseY) + GamepadCursorRemainder
+        + Stick * FMath::Max(0.0f, GamepadCursorSpeed) * SpeedMultiplier * Height * RealDeltaTime;
+    const FIntPoint Pixel(FMath::Clamp(FMath::RoundToInt(Position.X), 0, Width - 1),
+        FMath::Clamp(FMath::RoundToInt(Position.Y), 0, Height - 1));
+    GamepadCursorRemainder = FVector2D(
+        FMath::Clamp(Position.X - Pixel.X, -0.5, 0.5),
+        FMath::Clamp(Position.Y - Pixel.Y, -0.5, 0.5));
+    SetGamepadCursorLocation(Pixel.X, Pixel.Y);
+}
+
+void APlayerCharacterController::InitializeGamepadAimCursor(bool bForCloneTargeting)
+{
+    if (!IsLocalPlayerController()
+        || (!bForCloneTargeting && !IsInputKeyDown(EKeys::Gamepad_LeftTrigger))) return;
+
+    // 키보드·마우스로 분신 소환 모드에 들어가면 커서를 옮기지 않고 현재 마우스 위치를 그대로 쓴다.
+    if (bForCloneTargeting && !bUsingGamepad)
+    {
+        return;
+    }
+
+    const APlayerCharacter* ControlledCharacter = Cast<APlayerCharacter>(GetPawn());
+    if (!ControlledCharacter) return;
+
+    const USkeletalMeshComponent* Mesh = ControlledCharacter->GetMesh();
+    const FVector HeadLocation = Mesh && Mesh->DoesSocketExist(GamepadAimHeadSocket)
+        ? Mesh->GetSocketLocation(GamepadAimHeadSocket) : ControlledCharacter->GetPawnViewLocation();
+    // Use the intended facing, including while a turn animation is still blending.
+    const float ForwardOffset = bForCloneTargeting ? CloneTargetingStartForwardOffset : GamepadAimStartForwardOffset;
+    const FVector Target = HeadLocation + FVector(ControlledCharacter->GetLogicalFacingSign(), 0.0f, 0.0f)
+        * FMath::Max(0.0f, ForwardOffset);
+    FVector2D ScreenPosition;
+    int32 Width = 0, Height = 0;
+    GetViewportSize(Width, Height);
+    if (Width <= 0 || Height <= 0 || !ProjectWorldLocationToScreen(Target, ScreenPosition)) return;
+
+    GamepadCursorRemainder = FVector2D::ZeroVector;
+    SetGamepadCursorLocation(FMath::Clamp(FMath::RoundToInt(ScreenPosition.X), 0, Width - 1),
+        FMath::Clamp(FMath::RoundToInt(ScreenPosition.Y), 0, Height - 1));
+}
 
 
 void APlayerCharacterController::BeginPlay()
@@ -28,6 +152,16 @@ void APlayerCharacterController::BeginPlay()
 void APlayerCharacterController::SetupInputComponent()
 {
     Super::SetupInputComponent();
+
+    if (InputComponent)
+    {
+        // 게임플레이 IMC가 잠긴 상태에서도 ESC로 메뉴를 열 수 있다.
+        InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &APlayerCharacterController::OpenPauseMenu);
+    }
+    if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent); EnhancedInput && PauseAction)
+    {
+        EnhancedInput->BindAction(PauseAction, ETriggerEvent::Started, this, &APlayerCharacterController::OpenPauseMenu);
+    }
 
     // add the input mapping context
     ApplyDefaultMappingContexts(true);
@@ -54,6 +188,132 @@ void APlayerCharacterController::SetupInputComponent()
     }
 }
 
+void APlayerCharacterController::OpenPauseMenu()
+{
+    if (!IsLocalPlayerController()) return;
+    if (PauseMenuWidget) return;
+    if (IsPaused()) return;
+    if (PauseMenuBlockCount > 0) return;
+
+    UPauseMenuWidget* Menu = CreateWidget<UPauseMenuWidget>(this);
+    if (!Menu) return;
+    if (!SetPause(true)) return;
+
+    if (!Menu->AddToPlayerScreen(10))
+    {
+        SetPause(false);
+        return;
+    }
+
+    PauseMenuWidget = Menu;
+    bShowCursorBeforePause = ShouldShowMouseCursor();
+    FocusPauseWidget(*Menu);
+    SetShowMouseCursor(true);
+}
+
+void APlayerCharacterController::FocusPauseWidget(UUserWidget& Widget)
+{
+    // 게임플레이 IMC를 그대로 유지하면서 입력은 현재 모달에만 전달한다.
+    Widget.SetCursor(EMouseCursor::Default);
+    FInputModeUIOnly InputMode;
+    InputMode.SetWidgetToFocus(Widget.TakeWidget());
+    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    SetInputMode(InputMode);
+    Widget.SetUserFocus(this);
+}
+
+void APlayerCharacterController::ResumeFromPauseMenu()
+{
+    if (!PauseMenuWidget) return;
+    if (IsPaused() && !SetPause(false)) return;
+
+    RemovePauseWidgets();
+
+    // 게임플레이의 커서 조준과 기존 입력 잠금을 유지한다.
+    FInputModeGameAndUI InputMode;
+    InputMode.SetHideCursorDuringCapture(false);
+    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    SetInputMode(InputMode);
+    SetShowMouseCursor(bShowCursorBeforePause);
+    FlushPressedKeys();
+}
+
+void APlayerCharacterController::OpenPauseSettings()
+{
+    if (!PauseMenuWidget) return;
+    if (PauseSettingsWidget) return;
+
+    USettingsWidget* Settings = CreateWidget<USettingsWidget>(this);
+    if (!Settings) return;
+    if (!Settings->AddToPlayerScreen(11)) return;
+
+    PauseSettingsWidget = Settings;
+    Settings->OnSettingsClosed.AddUniqueDynamic(this, &APlayerCharacterController::HandlePauseSettingsClosed);
+    PauseMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+    FocusPauseWidget(*Settings);
+}
+
+void APlayerCharacterController::HandlePauseSettingsClosed()
+{
+    PauseSettingsWidget = nullptr;
+    if (!PauseMenuWidget) return;
+
+    PauseMenuWidget->SetVisibility(ESlateVisibility::Visible);
+    FocusPauseWidget(*PauseMenuWidget);
+}
+
+void APlayerCharacterController::HandlePauseMenuBack()
+{
+    if (PauseSettingsWidget)
+    {
+        PauseSettingsWidget->CloseSettings();
+        return;
+    }
+
+    ResumeFromPauseMenu();
+}
+
+bool APlayerCharacterController::IsPauseMenuKey(const FKey& Key) const
+{
+    if (Key == EKeys::Escape) return true;
+    if (!PauseAction) return false;
+
+    const UEnhancedInputLocalPlayerSubsystem* Subsystem =
+        ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
+    return Subsystem && Subsystem->QueryKeysMappedToAction(PauseAction).Contains(Key);
+}
+
+void APlayerCharacterController::ReturnToMainMenu()
+{
+    if (!PauseMenuWidget) return;
+
+    ResumeFromPauseMenu();
+    if (PauseMenuWidget) return;
+
+    UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/Maps/Lv_MainMenu")));
+}
+
+void APlayerCharacterController::RemovePauseWidgets()
+{
+    if (PauseSettingsWidget)
+    {
+        PauseSettingsWidget->OnSettingsClosed.RemoveDynamic(this, &APlayerCharacterController::HandlePauseSettingsClosed);
+        PauseSettingsWidget->RemoveFromParent();
+        PauseSettingsWidget = nullptr;
+    }
+    if (PauseMenuWidget)
+    {
+        PauseMenuWidget->RemoveFromParent();
+        PauseMenuWidget = nullptr;
+    }
+}
+
+void APlayerCharacterController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    RemovePauseWidgets();
+    Super::EndPlay(EndPlayReason);
+}
+
 void APlayerCharacterController::ApplyDefaultMappingContexts(bool bAdd)
 {
     // only add IMCs for local player controllers
@@ -72,6 +332,7 @@ void APlayerCharacterController::ApplyDefaultMappingContexts(bool bAdd)
     // 다시 넣을 때 눌려 있던 키(분신 확정 좌클릭 등)가 바로 다른 행동으로 이어지지 않게 한다
     FModifyContextOptions Options;
     Options.bIgnoreAllPressedKeysUntilRelease = true;
+    Options.bNotifyUserSettings = bAdd;
     for (UInputMappingContext* CurrentContext : Contexts)
     {
         if (!CurrentContext) continue;
@@ -166,6 +427,24 @@ void APlayerCharacterController::OnUnPossess()
 void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
 {
     if (!HasAuthority() || !IsValid(DestroyedActor) || GetWorld()->bIsTearingDown) return;
+
+    // 보스 아레나처럼 사망 시 이전 맵으로 돌아가는 맵이면, 이전 맵의 마지막 체크포인트에서 부활한다
+    if (AEclipseWorldSettings::ShouldReturnToPreviousStageOnDeath(this))
+    {
+        // 이전 맵을 불러오는 동안 화면이 멈춰 죽은 맵이 보이지 않게, 맵을 열기 전 프레임을 완전히 검게 한다.
+        // 사망 몽타주 끝에서 이미 어두워지고 있다(APlayerCharacter::StartDeathFadeOut). 이 맵에서 부활하게 되면 FadeInAfterRespawn이 다시 밝힌다
+        if (IsValid(PlayerCameraManager))
+        {
+            PlayerCameraManager->SetManualCameraFade(1.0f, FLinearColor::Black, false);
+        }
+
+        UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);
+        if (Save && Save->ReturnToPreviousStage(this))
+        {
+            return;
+        }
+    }
+
     // A missing Blueprint override should still respawn the same configured player.
     const TSubclassOf<ACharacter> RespawnClass = CharacterClass ? CharacterClass.Get() : DestroyedActor->GetClass();
 
@@ -182,6 +461,7 @@ void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
             {
                 Possess(RespawnedCharacter);
                 Subsystem->RespawnAtCheckpoint(RespawnedCharacter);
+                FadeInAfterRespawn();
                 return;
             }
         }
@@ -201,7 +481,17 @@ void APlayerCharacterController::OnPawnDestroyed(AActor* DestroyedActor)
             UE_LOG(LogTemp, Display, TEXT("RespawnTest"));
             // possess the character
             Possess(RespawnedCharacter);
+            FadeInAfterRespawn();
         }
+    }
+}
+
+void APlayerCharacterController::FadeInAfterRespawn()
+{
+    // 사망 연출(보스 처형 등)이 화면을 어둡게 한 채 리스폰했으면 다시 밝힌다. 어둡지 않으면 아무것도 하지 않는다
+    if (IsValid(PlayerCameraManager) && PlayerCameraManager->FadeAmount > KINDA_SMALL_NUMBER)
+    {
+        PlayerCameraManager->StartCameraFade(PlayerCameraManager->FadeAmount, 0.0f, this->RespawnFadeInTime, FLinearColor::Black, false, false);
     }
 }
 

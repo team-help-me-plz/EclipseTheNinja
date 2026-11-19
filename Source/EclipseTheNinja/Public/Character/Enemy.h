@@ -15,11 +15,14 @@ class UAnimMontage;
 class UNiagaraSystem;
 class UGABaseAttack;
 class UEnemyDetectionComponent;
+class USoundBase;
 class UEnemySpacingComponent;
 class UCheckpointBoundComponent;
 class UAssassinateTargetComponent;
 class UAssassinationDropComponent;
 class USphereComponent;
+class UMovementLoopSoundComponent;
+class UEnemyFloorActivationComponent;
 struct FOnAttributeChangeData;
 struct FGameplayEffectContextHandle;
 
@@ -64,9 +67,14 @@ private:
 	FDelegateHandle AppearanceTableChangedHandle;
 	void UpdateAppearanceTableBinding();
 
+	FTimerHandle OverheadWidgetFacingTimer;
+	void StartOverheadWidgetFacingTimer();
+	void UpdateOverheadWidgetFacing();
+
 public:
 	// Sets default values for this character's properties
 	AEnemy();
+	void PlayAttackSound() const;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginDestroy() override;
@@ -119,7 +127,8 @@ public:
 	FVector ChooseNextPatrolLocation();
 
 	UFUNCTION(BlueprintPure, Category = "AI")
-	bool IsReadyForAI() const { return HasActorBegunPlay() && !bIsDead; }
+	bool IsReadyForAI() const;
+	bool IsBeingAssassinated() const;
 
 	// 감지/추적/공격 판정용. 생존한 플레이어인지만 확인하고 활동 영역은 검사하지 않는다.
 	UFUNCTION(BlueprintPure, Category = "AI|Target")
@@ -205,6 +214,17 @@ public:
 	virtual void OnReturnToPool_Implementation() override;
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Enemy|Audio")
+	TObjectPtr<USoundBase> AttackSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Enemy|Audio")
+	TObjectPtr<USoundBase> MonsterHitSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Enemy|Audio")
+	TObjectPtr<USoundBase> MonsterDetectionSound;
+
+	void PlayEnemySound(USoundBase* Sound) const;
+
 	/**
 	 * 공통 공격 실행부가 어빌리티 활성화·실행 중 판정·취소에 사용할 입력 ID. 기본값은 BasicAttack이다.
 	 * 파생 클래스가 변경하면 Blueprint의 AbilityClassArray에도 같은 ID로 어빌리티를 지정해야 한다.
@@ -241,8 +261,6 @@ protected:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
 
 	/** Overhead Widget 초기화 함수**/
 	UFUNCTION(BlueprintCallable, Category = "UI|Overhead")
@@ -416,6 +434,14 @@ protected:
 	/** 암살로 처치되면 사라질 때 회복 아이템을 떨어뜨리는 컴포넌트. 떨어뜨리지 않을 적은 BP에서 DropActorClass를 비운다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UAssassinationDropComponent> AssassinationDropComp;
+
+	// 땅 위를 걷는 동안 발소리 루프를 재생한다. 보스처럼 애니메이션 노티파이로 발소리를 내는 적은 사운드를 비운다
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UMovementLoopSoundComponent> WalkSoundComp;
+
+	// 플레이어와 먼 층에 있으면 틱·애니메이션·AI·감지를 멈춘다. 레벨에 층 볼륨이 없으면 아무 일도 하지 않는다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UEnemyFloorActivationComponent> FloorActivationComp;
 
 	FTimerHandle DeathDeactivateTimer;
 

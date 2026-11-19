@@ -1,4 +1,5 @@
 #include "GAS/Ability/GAAssassinateBase.h"
+#include "GAS/Ability/GABelowAssassinate.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "GAS/Task/AbilityTask_MontageRootOffset.h"
@@ -15,11 +16,13 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "BrainComponent.h"
+#include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/AssassinateTargetComponent.h"
 #include "Component/AssassinationDropComponent.h"
 #include "Component/AssassinationTargetingComponent.h"
+#include "Component/EnemyDetectionComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GAS/Ability/GABaseAttack.h"
 #include "GAS/Ability/GAWallAttach.h"
@@ -46,6 +49,25 @@ UGAAssassinateBase::UGAAssassinateBase()
 	ActivationBlockedTags.AddTag(UGABaseAttack::GetAttackingTag());
 	// 벽에 매달린 상태에서 시작하면 매달리기를 먼저 끝낸다 (ActivateAbility 전에 취소된다)
 	CancelAbilitiesWithTag.AddTag(UGAWallAttach::GetWallAttachAbilityTag());
+}
+
+void UGAAssassinateBase::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	Super::OnGiveAbility(ActorInfo, Spec);
+	if (HasAnyFlags(RF_ClassDefaultObject)) return;
+
+	// 시전할 때 쓰는 에셋을 비동기로 불러 둔다. 다 불러오기 전에 시전하면 기존처럼 그 자리에서 불러온다.
+	TArray<FSoftObjectPath> Paths = {
+		AttackMontage.ToSoftObjectPath(), VictimMontage.ToSoftObjectPath(),
+		bUseImpactVFX ? ImpactVFX.ToSoftObjectPath() : FSoftObjectPath() };
+	AddPreloadPaths(Paths);
+	AssetPreloader.Request(Paths);
+}
+
+void UGAAssassinateBase::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	AssetPreloader.Cancel();
+	Super::OnRemoveAbility(ActorInfo, Spec);
 }
 
 FGameplayTag UGAAssassinateBase::GetAssassinatingTag()
@@ -108,6 +130,8 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	bIgnoringVictimCollision = false;
 	bLedgeWalkLocked = false;
 	bImpactTriggered = false;
+	bPlayBossImpactSound = false;
+	bVictimExecuted = false;
 	bImpactVFXTriggered = false;
 	PausedBrain.Reset();
 
@@ -132,7 +156,7 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	if (!IsValid(Enemy)) { OnInterrupted(); return; }
 
 	// 암살 모션과, 암살 피격 모션 동적으로 로딩
-	ExecutionMontage = AttackMontage.LoadSynchronous();
+	ExecutionMontage = ResolveAttackMontage(Enemy).LoadSynchronous();
 	VictimExecutionMontage = VictimMontage.LoadSynchronous();
 
 	// 임팩트 프레임에서 에셋을 읽느라 연출이 멈추지 않도록 미리 준비한다.
@@ -156,6 +180,9 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	TargetComponent->SetAssassinationInProgress(true);
 	bTargetReserved = true;
 	TargetComponent->SetTargetHighlighted(false);
+
+	// 이미 실행 중인 공격 태스크도 멈춘다. 예약 상태를 먼저 기록해 재진입을 막는다.
+	Enemy->CancelAIBaseAttack();
 
 	// 칼이 꽂히는 위치와 회복 오브 드롭 위치가 어긋나지 않게 메시를 캡슐 위치로 돌린다.
 	Enemy->SetMeshYOffsetSuppressed(true);
@@ -216,8 +243,8 @@ void UGAAssassinateBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	ExecutionRotation = Enemy->GetActorRotation();
 	Player->SetAssassinationFacing(ExecutionRotation.Yaw);
 
-	// 몽타주 재생 전부터 VFX 전용 노티파이를 기다린다.
-	if (bUseImpactVFX)
+	// 기본·상단 암살은 칼을 뽑는 프레임의 VFX 노티파이에서 사운드도 재생한다.
+	if (bUseImpactVFX || !IsBareHandedExecution())
 	{
 		UAbilityTask_WaitGameplayEvent* VFXTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 			this, TAG_AssassinateVFX, nullptr, true, true);
@@ -280,11 +307,47 @@ void UGAAssassinateBase::StartVictimSlide()
 
 	// 피격자는 암살자와 같은 방향을 보므로 피격자의 오른쪽·앞이 곧 암살자의 오른쪽·앞이다.
 	// 옆은 화면 깊이 방향(월드 Y축), 앞은 피격자가 바라보는 방향이다.
-	const FVector Target = Enemy->GetActorLocation()
-		+ Enemy->GetActorRightVector().GetSafeNormal2D() * PendingVictimSideOffset
+	VictimSlideDelta = Enemy->GetActorRightVector().GetSafeNormal2D() * PendingVictimSideOffset
 		+ Enemy->GetActorForwardVector().GetSafeNormal2D() * PendingVictimForwardOffset;
+	VictimSlideOrigin = Enemy->GetActorLocation();
+	bVictimSlidePending = true;
 
-	UAbilityTask_SlideActor* SlideTask = UAbilityTask_SlideActor::SlideActor(this, Enemy, Target, PendingVictimSlideDuration);
+	UAbilityTask_SlideActor* SlideTask = UAbilityTask_SlideActor::SlideActor(
+		this, Enemy, Enemy->GetActorLocation() + VictimSlideDelta, PendingVictimSlideDuration);
+	SlideTask->ReadyForActivation();
+
+	// 살아남는 피격자(보스)는 암살자 몽타주가 끝나기 직전에 원래 평면으로 되돌린다.
+	if (Enemy->IsDead()) return;
+	const APlayerCharacter* Player = Assassin.Get();
+	const UAnimInstance* AnimInstance = IsValid(Player) ? Player->GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInstance || !IsValid(ExecutionMontage)) return;
+
+	const float Remaining = ExecutionMontage->GetPlayLength() - AnimInstance->Montage_GetPosition(ExecutionMontage);
+	const float ReturnDelay = FMath::Max(PendingVictimSlideDuration, Remaining - VictimSlideTime - 0.05f);
+	UAbilityTask_WaitDelay* ReturnTask = UAbilityTask_WaitDelay::WaitDelay(this, ReturnDelay);
+	ReturnTask->OnFinish.AddDynamic(this, &UGAAssassinateBase::ReturnSlidVictim);
+	ReturnTask->ReadyForActivation();
+}
+
+void UGAAssassinateBase::ReturnSlidVictim()
+{
+	if (!bVictimSlidePending) return;
+
+	AEnemy* Enemy = Victim.Get();
+	if (!IsValid(Enemy) || Enemy->IsDead()) return;
+
+	// 옮긴 방향으로 남아 있는 거리만 되돌린다. 되돌리는 도중에 끊겨도 남은 만큼만 옮긴다.
+	const FVector SlideDirection = VictimSlideDelta.GetSafeNormal();
+	const float RemainingDistance = FVector::DotProduct(Enemy->GetActorLocation() - VictimSlideOrigin, SlideDirection);
+	const FVector Target = Enemy->GetActorLocation() - SlideDirection * RemainingDistance;
+	if (bEnding || !IsActive())
+	{
+		// 암살이 먼저 끝났으면 태스크를 쓸 수 없으므로 바로 옮긴다.
+		Enemy->SetActorLocation(Target, false, nullptr, ETeleportType::TeleportPhysics);
+		bVictimSlidePending = false;
+		return;
+	}
+	UAbilityTask_SlideActor* SlideTask = UAbilityTask_SlideActor::SlideActor(this, Enemy, Target, VictimSlideTime);
 	SlideTask->ReadyForActivation();
 }
 
@@ -321,7 +384,15 @@ void UGAAssassinateBase::ExecuteVictim()
 	if (!IsValid(Enemy) || Enemy->IsDead()) { OnInterrupted(); return; }
 
 	// 암살 피격 애니메이션 수신
+	ABossEnemy* Boss = Cast<ABossEnemy>(Enemy);
+	const float PreviousBossHealthRatio = Boss ? Boss->GetHealthRatio() : 0.0f;
+	if (Boss)
+	{
+		Boss->SetIncomingAssassinationType(GetAssassinationType());
+	}
 	Enemy->ReceiveAssassination(VictimExecutionMontage);
+	bVictimExecuted = true;
+	bPlayBossImpactSound = IsValid(Boss) && Boss->GetHealthRatio() < PreviousBossHealthRatio;
 
 	// 실제 재생 중인 몽타주를 불러옴
 	UAnimInstance* VictimAnimInstance = Enemy->GetMesh()->GetAnimInstance();
@@ -438,6 +509,13 @@ UAbilityTask_ApplyRootMotionMoveToForce* UGAAssassinateBase::MoveAlongAttackRoot
 
 void UGAAssassinateBase::OnVFXEvent(FGameplayEventData Payload)
 {
+	if (!bEnding && IsActive() && !IsBareHandedExecution())
+	{
+		if (const APlayerCharacter* Player = Assassin.Get())
+		{
+			Player->PlayAssassinationWithdrawalSound();
+		}
+	}
 	PlayImpactVFX();
 }
 
@@ -445,7 +523,6 @@ void UGAAssassinateBase::WaitForImpact(float CurrentMontageTime)
 {
 	if (bEnding) return;
 	if (!IsActive()) return;
-	if (!bUseImpactTimeDilation) return;
 
 	// 몽타주는 1배속으로 재생하므로, 지금 몽타주 위치부터 잰 게임 시간 대기가 몽타주 시간과 같다.
 	// 예비 동작 슬로모가 걸려도 대기 시간이 같이 늘어나 시점이 어긋나지 않는다.
@@ -471,8 +548,17 @@ void UGAAssassinateBase::WaitForImpact(float CurrentMontageTime)
 		return;
 	}
 
+	if (!IsBareHandedExecution())
+	{
+		constexpr float StabSoundLeadTime = 0.08f;
+		UAbilityTask_WaitDelay* StabSoundTask = UAbilityTask_WaitDelay::WaitDelay(
+			this, FMath::Max(0.0f, ImpactTime - CurrentMontageTime - StabSoundLeadTime));
+		StabSoundTask->OnFinish.AddDynamic(this, &UGAAssassinateBase::PlayAssassinationStabSound);
+		StabSoundTask->ReadyForActivation();
+	}
+
 	// 예비 동작: 칼을 뻗기 전까지 느리게 보여 긴장을 만들고, 칼이 들어가는 구간은 원래 속도로 되돌려 빠르게 꽂는다.
-	if (!bUseAnticipation || AnticipationLeadTime <= SnapLeadTime) return;
+	if (!bUseImpactTimeDilation || !bUseAnticipation || AnticipationLeadTime <= SnapLeadTime) return;
 	const float AnticipationStart = ImpactTime - AnticipationLeadTime - CurrentMontageTime;
 	const float SnapTime = ImpactTime - SnapLeadTime - CurrentMontageTime;
 	if (AnticipationStart <= KINDA_SMALL_NUMBER || SnapTime <= KINDA_SMALL_NUMBER) return;
@@ -503,8 +589,62 @@ void UGAAssassinateBase::TriggerImpact()
 	if (!IsActive()) return;
 	bImpactTriggered = true;
 
+	if (IsBareHandedExecution())
+	{
+		PlayBelowAssassinationSound();
+	}
+
+	if (bPlayBossImpactSound)
+	{
+		if (ABossEnemy* Boss = Cast<ABossEnemy>(Victim.Get()))
+		{
+			Boss->PlayAssassinationImpactSound();
+		}
+	}
+
 	if (!bUseImpactTimeDilation) return;
 	StartImpactTimeDilation();
+}
+
+void UGAAssassinateBase::PlayAssassinationStabSound()
+{
+	if (!bEnding && IsActive())
+	{
+		if (const APlayerCharacter* Player = Assassin.Get())
+		{
+			Player->PlayActionSound(EPlayerActionSound::AssassinationStab);
+		}
+	}
+}
+
+void UGAAssassinateBase::PlayBelowAssassinationSound()
+{
+	if (BelowAssassinationSoundDelay <= 0.0f)
+	{
+		if (const APlayerCharacter* Player = Assassin.Get())
+		{
+			Player->PlayActionSound(EPlayerActionSound::BelowAssassination);
+		}
+
+		return;
+	}
+
+	// 임팩트 직후 히트스톱으로 게임 시간이 거의 멈추므로 실제 시간으로 잰다
+	const TWeakObjectPtr<APlayerCharacter> WeakPlayer = Assassin;
+	FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateLambda(
+			[WeakPlayer](float DeltaTime)
+			{
+				if (const APlayerCharacter* Player = WeakPlayer.Get())
+				{
+					Player->PlayActionSound(EPlayerActionSound::BelowAssassination);
+				}
+
+				return false;
+			}
+		),
+		BelowAssassinationSoundDelay
+	);
 }
 
 void UGAAssassinateBase::PlayImpactVFX()
@@ -751,6 +891,12 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		}
 	}
 
+	// BT 재개가 즉시 실행되더라도 암살 예약이 남아 있지 않게 한다.
+	if (bTargetReserved && TargetComponent.IsValid())
+	{
+		TargetComponent->SetAssassinationInProgress(false);
+	}
+
 	// 암살 대상이 유효한 경우
 	AEnemy* Enemy = Victim.Get();
 	if (IsValid(Enemy))
@@ -765,6 +911,17 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 			// 살아남았으면 평소 오프셋으로 되돌린다. 죽었으면 리스폰 때 되돌린다.
 			Enemy->SetMeshYOffsetSuppressed(false);
 
+			// 중간에 끊겨 아직 원래 평면으로 돌아오지 않았으면 지금 되돌린다.
+			ReturnSlidVictim();
+
+			// 암살 피해 시점에는 IsReadyForAI()가 false라 감지 갱신이 건너뛰어진다.
+			// 예약을 푼 지금 암살자를 공격자로 알려 BT 재개 전에 전투 상태로 만든다.
+			UEnemyDetectionComponent* Detection = Enemy->GetEneymDetectionComponent();
+			if (bVictimExecuted && IsValid(Player) && IsValid(Detection))
+			{
+				Detection->NotifyDamaged(Player);
+			}
+
 			if (PausedBrain.IsValid())
 			{
 				PausedBrain->ResumeLogic(TEXT("Assassination cancelled"));
@@ -772,13 +929,8 @@ void UGAAssassinateBase::EndAbility(const FGameplayAbilitySpecHandle Handle,
 		}
 	}
 
-	// 타겟의 암살이 끝났다고 표시
-	if (bTargetReserved && TargetComponent.IsValid())
-	{
-		TargetComponent->SetAssassinationInProgress(false);
-	}
-
 	// 각종 변수 초기화
+	bVictimSlidePending = false;
 	bMovementLocked = false;
 	bTargetReserved = false;
 	Assassin.Reset();

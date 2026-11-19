@@ -4,6 +4,8 @@
 #include "Abilities/GameplayAbility.h"
 #include "Containers/Ticker.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GAS/Ability/AbilityAssetPreloader.h"
+#include "Component/AssassinationTargetingComponent.h"
 #include "GAAssassinateBase.generated.h"
 
 class APlayerCharacter;
@@ -41,11 +43,26 @@ public:
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
 		bool bReplicateEndAbility, bool bWasCancelled) override;
+	// 어빌리티를 받을 때 암살·피격 몽타주와 임팩트 VFX를 미리 불러 둔다. 첫 암살 때 로딩으로 멈추지 않게 한다.
+	virtual void OnGiveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
+	virtual void OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 
 protected:
 	// 공통 조건을 통과한 대상에 대해 이 암살 방식으로 실행할 수 있는지 확인한다.
 	virtual bool CanAssassinateTarget(const APlayerCharacter* Player, const UAssassinateTargetComponent* Target,
 		const AEnemy* Enemy) const PURE_VIRTUAL(UGAAssassinateBase::CanAssassinateTarget, return false;);
+
+	// 이 어빌리티의 암살 방식. 보스가 살아남을 때 방식에 맞는 리액션을 고르는 데 쓴다.
+	virtual EAssassinationType GetAssassinationType() const { return EAssassinationType::Ground; }
+
+	// 시전할 때 이 대상에게 쓸 암살자 몽타주를 정한다. 대상에 따라 다른 동작을 쓰는 암살이 바꾼다.
+	virtual const TSoftObjectPtr<UAnimMontage>& ResolveAttackMontage(const AEnemy* Enemy) { return AttackMontage; }
+
+	// 어빌리티를 받을 때 함께 미리 불러 둘 에셋을 더한다.
+	virtual void AddPreloadPaths(TArray<FSoftObjectPath>& OutPaths) const {}
+
+	// 목 꺾기처럼 칼을 쓰지 않는 암살이면 true. 칼 찌르기·뽑기 사운드 대신 목 꺾기 사운드를 쓴다.
+	virtual bool IsBareHandedExecution() const { return false; }
 
 	// 공통 준비가 끝난 뒤 실행 위치까지 접근한다. 도착하면 PlayExecution을 호출한다.
 	virtual void StartApproach() PURE_VIRTUAL(UGAAssassinateBase::StartApproach, );
@@ -74,6 +91,10 @@ protected:
 
 	UFUNCTION()
 	void StartVictimSlide();
+
+	// 살아남은 피격자(보스)를 옆으로 옮긴 만큼 되돌려 원래 이동 평면에 세운다.
+	UFUNCTION()
+	void ReturnSlidVictim();
 
 	/** 피격자를 옆으로 옮기는 시간. 칼이나 손이 닿기 직전 이 시간 동안만 움직인다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination", meta = (ClampMin = "0.05", Units = "s"))
@@ -129,6 +150,10 @@ protected:
 	/** 몽타주에 Assassinate Impact 노티파이가 없을 때 쓰는 임팩트 시점(몽타주 시작 기준). 음수면 노티파이만 기다린다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (Units = "s"))
 	float ImpactFallbackTime = 0.4f;
+
+	/** 아래 암살 소리를 임팩트보다 얼마나 늦게 낼지(실제 시간). 히트스톱·슬로모에 늘어나지 않는다. 아래 암살에서만 쓴다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Sound", meta = (ClampMin = "0.0", Units = "s"))
+	float BelowAssassinationSoundDelay = 0.1f;
 
 	/** 히트스톱 동안의 게임 속도 배율 */
 	UPROPERTY(EditDefaultsOnly, Category = "Assassination|Impact", meta = (EditCondition = "bUseImpactTimeDilation", ClampMin = "0.001", ClampMax = "1.0"))
@@ -208,12 +233,22 @@ protected:
 	float PendingVictimSideOffset = 0.0f;
 	float PendingVictimForwardOffset = 0.0f;
 	float PendingVictimSlideDuration = 0.0f;
+	// 피격자를 옮긴 양. 살아남으면 암살이 끝나기 전에 이만큼 되돌린다.
+	FVector VictimSlideDelta = FVector::ZeroVector;
+	FVector VictimSlideOrigin = FVector::ZeroVector;
+	// 옮긴 뒤 아직 원래 평면으로 완전히 돌아오지 않았으면 true. 종료 시 남은 만큼 되돌린다.
+	bool bVictimSlidePending = false;
 	bool bLedgeWalkLocked = false;
 	bool bSavedCanWalkOffLedges = true;
 
 private:
 	bool StartAttackMontageTask(float StartTime);
 	void TriggerImpact();
+
+	UFUNCTION()
+	void PlayAssassinationStabSound();
+	// 아래 암살 소리를 BelowAssassinationSoundDelay만큼 실제 시간으로 늦춰 낸다.
+	void PlayBelowAssassinationSound();
 	void PlayImpactVFX();
 	UFUNCTION()
 	void OnVFXEvent(FGameplayEventData Payload);
@@ -248,6 +283,9 @@ private:
 	float ImpactElapsed = 0.0f;
 	float SavedTimeDilation = 1.0f;
 	bool bImpactTriggered = false;
+	bool bPlayBossImpactSound = false;
+	// 피격자에게 암살 피해를 적용했는지. 살아남은 대상을 종료 시 전투 상태로 바꿀 때 쓴다.
+	bool bVictimExecuted = false;
 	bool bImpactVFXTriggered = false;
 	bool bTimeDilationApplied = false;
 
@@ -259,4 +297,8 @@ protected:
 	bool bMovementLocked = false;
 	bool bTargetReserved = false;
 	bool bEnding = false;
+
+private:
+	// 미리 불러 둔 몽타주·VFX를 메모리에 잡아 둔다. 어빌리티를 잃으면 놓는다.
+	FAbilityAssetPreloader AssetPreloader;
 };

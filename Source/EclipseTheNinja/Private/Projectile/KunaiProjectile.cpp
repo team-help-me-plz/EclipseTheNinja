@@ -15,7 +15,11 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
+#include "Component/CuttableComponent.h"
 
 AKunaiProjectile::AKunaiProjectile()
 {
@@ -48,6 +52,17 @@ AKunaiProjectile::AKunaiProjectile()
     Movement->bShouldBounce = false;
     Movement->bConstrainToPlane = true;
     Movement->SetPlaneConstraintNormal(FVector::YAxisVector);
+
+    FlightTrail = CreateDefaultSubobject<UNiagaraComponent>(TEXT("FlightTrail"));
+    FlightTrail->SetupAttachment(Mesh);
+    FlightTrail->bAutoActivate = false;
+
+    static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TrailSystem(
+        TEXT("/Game/VFX/Projectiles/NS_ProjectileTrail.NS_ProjectileTrail"));
+    if (TrailSystem.Succeeded())
+    {
+        FlightTrail->SetAsset(TrailSystem.Object);
+    }
 }
 
 void AKunaiProjectile::InitializeKunai(
@@ -104,6 +119,7 @@ void AKunaiProjectile::InitializeKunai(
     Movement->Velocity = LaunchVelocity;
     Movement->MaxSpeed = LaunchVelocity.Size();
     Movement->Activate(true);
+    FlightTrail->Activate(true);
 }
 
 void AKunaiProjectile::IgnoreActorCollision(AActor* InActor)
@@ -156,6 +172,8 @@ bool AKunaiProjectile::SweepLaunchPath(
 {
     if (!World) return false;
     FCollisionQueryParams LaunchParams(QueryParams);
+    // 발판 위에서 몸 중심이 줄과 겹친 채 바깥으로 던지는 경우는 막지 않는다.
+    LaunchParams.bFindInitialOverlaps = false;
     // 비행 중뿐 아니라 손 앞에 다른 진영의 표창이 있는 경우에도 발사를 막지 않는다.
     for (TActorIterator<AKunaiProjectile> It(World); It; ++It)
     {
@@ -186,6 +204,7 @@ void AKunaiProjectile::BeginPlay()
     // 메시가 BP에서 충돌/물리 설정을 덮어썼어도 판정은 전용 구체 하나로 제한한다.
     Mesh->SetSimulatePhysics(false);
     Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    FlightTrail->SetVariableFloat(TEXT("User.TrailSize"), FlightTrailWidth);
     Collision->OnComponentHit.AddDynamic(this, &AKunaiProjectile::OnProjectileHit);
 }
 
@@ -210,6 +229,8 @@ void AKunaiProjectile::OnReturnToPool_Implementation()
 
 void AKunaiProjectile::ClearThrowState()
 {
+    FlightTrail->DeactivateImmediate();
+
     if (AActor* Attached = AttachedActor.Get())
     {
         Attached->OnDestroyed.RemoveDynamic(this, &AKunaiProjectile::OnAttachedActorDestroyed);
@@ -426,6 +447,28 @@ void AKunaiProjectile::OnProjectileHit(
     Collision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     Movement->StopMovementImmediately();
     Movement->Deactivate();
+
+    // 발사 직전 스윕으로 명중시킨 경우에는 줄의 물리 Hit 이벤트가 오지 않으므로 직접 끊는다.
+    if (bPlayerThrow)
+    {
+        UCuttableComponent* Rope = Cast<UCuttableComponent>(OtherComp);
+        if (IsValid(Rope))
+        {
+            UNoiseSubsystem::MakeSomeNoise(this, ENoiseType::Kunai, Hit.ImpactPoint, GetInstigator());
+            Rope->CutRope();
+            GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+            {
+                // 이번 Hit 처리가 끝난 다음 비행을 복구한다. 피해 정보와 남은 수명은 유지한다.
+                if (IsHidden()) return;
+                bConsumed = false;
+                Collision->SetCollisionEnabled(GetClass()->GetDefaultObject<AKunaiProjectile>()->Collision->GetCollisionEnabled());
+                Movement->SetUpdatedComponent(Collision);
+                Movement->Velocity = LaunchVelocity;
+                Movement->Activate(true);
+            }));
+            return;
+        }
+    }
     
     // 스폰 시 발사 방향으로 회전하고 비행 중에는 bRotationFollowsVelocity로 속도 방향을 따르므로
     // 정면이 곧 비행 방향이다. 회전에서 구한 단위 벡터라 0이 될 수 없고, 이동 정지 순서와도 무관하다.
@@ -467,6 +510,7 @@ void AKunaiProjectile::OnProjectileHit(
         return;
     }
 
+    FlightTrail->Deactivate();
     AttachToHitTarget(AttachTarget, OtherActor, IncomingDirection);
 }
 

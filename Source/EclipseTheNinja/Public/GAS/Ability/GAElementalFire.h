@@ -8,6 +8,7 @@
 
 class UNiagaraSystem;
 class UNiagaraComponent;
+class USoundBase;
 
 DECLARE_MULTICAST_DELEGATE(FOnElementalFireStateChanged);
 
@@ -81,6 +82,9 @@ public:
 #endif
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TObjectPtr<USoundBase> FireImbueSound;
+
 	// 칼에 불을 붙이는 GE (GE_ElementalFire)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire")
 	TSubclassOf<UGameplayEffect> FireElementEffectClass;

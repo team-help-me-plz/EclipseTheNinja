@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Containers/Ticker.h"
 #include "GameFramework/Actor.h"
+#include "Checkpoint/CheckpointId.h"
 #include "LevelClearTrigger.generated.h"
 
 class UBoxComponent;
@@ -22,7 +23,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLevelCleared);
  *  - 클리어 시 플레이어 입력을 막고, TravelDelay 후 NextLevel로 이동한다
  *  - NextLevel은 레벨에 배치한 인스턴스의 디테일 패널에서 맵 에셋을 골라 설정
  *  - bQuitGameOnClear를 켜면 레벨 이동 대신 카운트다운 메시지를 띄운 뒤 게임을 종료한다
- *  - EndingSequence를 지정하면 클리어 직후 엔딩 컷신을 플레이어 위치 기준으로 재생하고, 끝난 뒤에 이동·종료를 이어 간다
+ *  - EndingSequence를 지정하면 클리어 직후 엔딩 컷신을 보스 시체 위치 기준으로 재생하고, 끝난 뒤에 이동·종료를 이어 간다
  */
 UCLASS()
 class ECLIPSETHENINJA_API ALevelClearTrigger : public AActor
@@ -59,6 +60,9 @@ protected:
     // 엔딩이 끝나면(또는 엔딩이 없으면) 다음 레벨 이동이나 게임 종료 카운트다운을 시작하는 함수
     void FinishClear();
 
+    // 시체 발밑(Origin)에서 Direction 쪽으로 플레이어가 걸어올 수 있는 거리. 벽에 막히거나 바닥이 끊기는 곳까지 잰다
+    float GetEndingApproachClearance(const APawn* PlayerPawn, const FVector& Origin, const FVector& Direction) const;
+
     // 엔딩 컷신이 끝 프레임에 도달하면 호출된다
     UFUNCTION()
     void OnEndingSequenceEnded(ATutorialSequenceTrigger* Trigger);
@@ -85,15 +89,35 @@ protected:
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Boss")
     TObjectPtr<ABossEnemy> BossToDefeat = nullptr;
 
-    // 클리어 직후 재생할 엔딩 컷신. 원점 근처에 만든 시퀀스를 플레이어 발밑 기준으로 재생한다
+    // 클리어 직후 재생할 엔딩 컷신. 원점 근처에 만든 시퀀스를 보스 시체 발밑 기준으로 재생한다(보스가 없으면 플레이어 발밑)
     // 비워 두거나 재생할 수 없으면 바로 이동·종료로 넘어간다
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending")
     TObjectPtr<ATutorialSequenceTrigger> EndingSequence = nullptr;
 
-    // EndingSequence의 시퀀스는 플레이어가 +X(오른쪽)를 볼 때 기준으로 만든다.
-    // 클리어 순간 플레이어가 -X(왼쪽)를 보고 있으면 대신 이 좌우 대칭 시퀀스를 재생해, 원래 바라보던 방향을 그대로 잇는다
+    // EndingSequence의 시퀀스는 플레이어가 시체 왼쪽(-X)에서 걸어와 +X(오른쪽)를 보는 기준으로 만든다.
+    // 왼쪽 길이 벽이나 낭떠러지로 막혀 있으면 대신 이 좌우 대칭 시퀀스(오른쪽에서 걸어와 -X를 봄)를 재생한다
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending")
     TObjectPtr<ULevelSequence> EndingSequenceFacingLeft = nullptr;
+
+    // 엔딩에서 플레이어가 걸어오기 시작하는 곳의 시체 끝으로부터 거리(cm). 시퀀스의 걷기 시작 위치와 같아야 한다
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending", meta = (ClampMin = "0.0", Units = "cm"))
+    float EndingApproachDistance = 400.0f;
+
+    // 쓰러진 보스 시체가 보스 캡슐 중심에서 보스가 바라보던 방향의 뒤쪽으로 퍼지는 범위(cm). 사망 애니메이션 마지막 자세에서 잰 값이다
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending", meta = (ClampMin = "0.0", Units = "cm"))
+    float EndingCorpseNearOffset = 18.0f;
+
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending", meta = (ClampMin = "0.0", Units = "cm"))
+    float EndingCorpseFarOffset = 168.0f;
+
+    // 엔딩에서 플레이어가 멈춰 서는 곳의 시체 끝으로부터 거리(cm). 시퀀스의 걷기 끝 위치와 같아야 한다
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending", meta = (ClampMin = "0.0", Units = "cm"))
+    float EndingStopDistance = 100.0f;
+
+    // 시퀀스에서 걷기 시작부터 멈출 때까지 걸리는 시간(초). 트인 거리가 EndingApproachDistance보다 짧으면
+    // 그만큼 걷기 앞부분을 건너뛰고 재생해, 걷기 시작점이 벽이나 발판 안에 놓이지 않게 한다
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "LevelClear|Ending", meta = (ClampMin = "0.0", Units = "s"))
+    float EndingWalkDuration = 58.0f / 30.0f;
 
     // 오른쪽을 볼 때 재생할 원래 시퀀스. 처음 클리어할 때 EndingSequence 액터에 지정된 시퀀스를 기억해 둔다
     UPROPERTY(Transient)
@@ -113,20 +137,38 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LevelClear", meta = (EditCondition = "!bQuitGameOnClear"))
     FString TravelOptions;
 
+    // 다음 레벨에서 이 체크포인트 위치로 시작한다. None이면 그 레벨의 시작 위치(PlayerStart·시작 체크포인트)
+    // 예: 성 안에서 성 밖으로 되돌아갈 때 성 밖의 "성 안 문 앞" 체크포인트
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (EditCondition = "!bQuitGameOnClear"))
+    ECheckpointId ArrivalCheckpoint = ECheckpointId::None;
+
+    // 끄면 이 맵을 클리어 목록에 넣지 않는다. 앞 맵으로 되돌아가는 출구에서 끈다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (EditCondition = "!bQuitGameOnClear"))
+    bool bMarkLevelCleared = true;
+
     // 클리어 후 다음 레벨로 이동하기까지의 대기 시간(초)
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (ClampMin = "0.0", EditCondition = "!bQuitGameOnClear"))
     float TravelDelay = 1.0f;
+
+    // 마지막 스테이지(보스)면 켠다. 클리어를 게임 완료로 저장하고, NextLevel(메인 메뉴 등)을 이어하기 위치로 저장하지 않는다.
+    // 이동 전에 게임 종료 때와 같은 카운트다운 UI(TravelMessageFormat)를 보여 준다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear")
+    bool bFinalStage = false;
+
+    // 마지막 스테이지 카운트다운 안내 메시지. {0}에 QuitCountdownSeconds가 들어간다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear", meta = (EditCondition = "bFinalStage && !bQuitGameOnClear"))
+    FText TravelMessageFormat = NSLOCTEXT("LevelClearTrigger", "TravelMessage", "목표에 도달했습니다. {0}초 후 메인 메뉴로 돌아갑니다.");
 
     // 켜면 레벨 이동 대신 카운트다운 후 게임을 종료한다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit")
     bool bQuitGameOnClear = false;
 
     // 게임 종료까지 세는 초
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit", meta = (ClampMin = "1", EditCondition = "bQuitGameOnClear"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit", meta = (ClampMin = "1", EditCondition = "bQuitGameOnClear || bFinalStage"))
     int32 QuitCountdownSeconds = 5;
 
     // 카운트다운 중 게임을 일시정지할지 여부
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit", meta = (EditCondition = "bQuitGameOnClear"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "LevelClear|Quit", meta = (EditCondition = "bQuitGameOnClear || bFinalStage"))
     bool bPauseGameOnQuitCountdown = true;
 
     // 카운트다운 안내 메시지. {0}에 QuitCountdownSeconds가 들어간다
@@ -135,6 +177,9 @@ protected:
 
 private:
     bool bIsCleared = false;
+
+    // 카운트다운이 끝나면 게임을 종료하지 않고 NextLevel로 이동한다(마지막 스테이지)
+    bool bCountdownTravels = false;
 
     // 보스 처치 순간의 플레이어 방향을 기록했는지, 그때 -X(왼쪽)를 보고 있었는지
     bool bHasDefeatFacing = false;

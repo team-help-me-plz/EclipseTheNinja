@@ -47,6 +47,14 @@ struct FSavedLevelState
 	/** 키는 액터 이름. */
 	UPROPERTY(SaveGame)
 	TMap<FName, FSavedActorState> ActorStates;
+
+	/** 미니맵에서 밝힌 칸. 한 칸이 1비트다. */
+	UPROPERTY(SaveGame)
+	TArray<uint8> MinimapRevealed;
+
+	/** MinimapRevealed를 만든 격자의 범위·칸 크기 해시. 다르면 예전 기록을 버린다. */
+	UPROPERTY(SaveGame)
+	int32 MinimapGridHash = 0;
 };
 
 /**
@@ -79,6 +87,29 @@ public:
 	UPROPERTY(SaveGame)
 	bool bHasRespawnTransform = false;
 
+	/**
+	 * 앞 맵의 출구가 지정한 도착 지점. Level을 열면 이 체크포인트의 "위치"로만 옮기고 비운다.
+	 * 체크포인트를 활성화하지 않으므로 현재 체크포인트·사망 시 리스폰 지점은 그 맵의 원래 규칙(시작 체크포인트 등)을 따른다.
+	 */
+	UPROPERTY(SaveGame)
+	ECheckpointId ArrivalCheckpoint = ECheckpointId::None;
+
+	/**
+	 * 지금 맵으로 넘어오기 직전 맵과, 떠날 때 그 맵에서 마지막으로 켠 체크포인트·재시작 위치.
+	 * 스테이지를 넘어갈 때 기록하고, 사망 시 이전 맵으로 돌아가는 맵(AEclipseWorldSettings::bReturnToPreviousStageOnDeath)에서 쓴다.
+	 */
+	UPROPERTY(SaveGame)
+	TSoftObjectPtr<UWorld> ReturnLevel;
+
+	UPROPERTY(SaveGame)
+	ECheckpointId ReturnCheckpoint = ECheckpointId::None;
+
+	UPROPERTY(SaveGame)
+	FTransform ReturnRespawnTransform;
+
+	UPROPERTY(SaveGame)
+	bool bHasReturnRespawnTransform = false;
+
 	/** 마지막으로 저장한 살아 있는 플레이어의 현재 체력. */
 	UPROPERTY(SaveGame)
 	float Health = 0.f;
@@ -102,4 +133,8 @@ public:
 	/** 맵별 퍼즐 액터 상태. 키는 맵 패키지 이름. 다음 맵으로 넘어가도 지우지 않아 이전 맵에 다시 들어가면 그대로 복원한다. */
 	UPROPERTY(SaveGame)
 	TMap<FName, FSavedLevelState> LevelStates;
+
+	/** 끝까지 본 컷신 시퀀스 에셋의 패키지 이름. 다시 재생할 때는 길게 눌러 건너뛸 수 있다. */
+	UPROPERTY(SaveGame)
+	TArray<FName> SeenSequences;
 };

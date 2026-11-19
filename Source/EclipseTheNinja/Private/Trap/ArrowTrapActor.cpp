@@ -7,9 +7,12 @@
 #include "Checkpoint/CheckpointBoundComponent.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Component/ActivateHighlightComponent.h"
+#include "Save/GameSaveSubsystem.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
+#include "UObject/ConstructorHelpers.h"
 
 // Sets default values
 AArrowTrapActor::AArrowTrapActor()
@@ -28,6 +31,15 @@ AArrowTrapActor::AArrowTrapActor()
 
 	this->CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 	this->ActivateHighlight = CreateDefaultSubobject<UActivateHighlightComponent>(TEXT("ActivateHighlight"));
+
+	// 발사 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
+	static ConstructorHelpers::FObjectFinder<USoundBase> FireSoundFinder(
+		TEXT("/Game/Audio/arrow_release.arrow_release"));
+
+	if (FireSoundFinder.Succeeded())
+	{
+		this->FireSound = FireSoundFinder.Object;
+	}
 }
 
 void AArrowTrapActor::ResetToInitial_Implementation()
@@ -42,6 +54,18 @@ void AArrowTrapActor::BeginPlay()
 	Super::BeginPlay();
 
 	this->bIsFire = this->bIsStartFire;
+
+	// 이어하기라면 저장된 발사 상태에서 시작한다. 단발 함정은 bIsFire가 의미 없으므로 자동 발사 함정만 복원한다
+	if (this->bIsAutoFire)
+	{
+		UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this);
+		FSavedActorState State;
+
+		if (Save && Save->TakeActorState(this, State))
+		{
+			this->bIsFire = State.bIsOn;
+		}
+	}
 
 	// 이 함정이 쓸 화살을 미리 생성하도록 요청 (화살 풀이 등록되어 있을 때만 적용, 함정 수만큼 합산됨)
 	if (UObjectPoolSubsystem* PoolSubsystem = GetWorld()->GetSubsystem<UObjectPoolSubsystem>())
@@ -105,6 +129,17 @@ void AArrowTrapActor::ToggleActivate_Implementation()
 		this->SpawnArrow();
 	}
 	this->bIsFire = !this->bIsFire;
+
+	// 자동 발사 함정의 켜짐/꺼짐을 저장한다. 체크포인트에 묶인 함정은 Subsystem이 기록을 거른다
+	if (this->bIsAutoFire)
+	{
+		if (UGameSaveSubsystem* Save = UGameSaveSubsystem::Get(this))
+		{
+			FSavedActorState State;
+			State.bIsOn = this->bIsFire;
+			Save->RecordActorState(this, State);
+		}
+	}
 }
 
 void AArrowTrapActor::ShowActivationIndicator_Implementation()

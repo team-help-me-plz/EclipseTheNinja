@@ -51,7 +51,7 @@ public:
 	// 소환 몽타주 재생 속도. 0 이하가 되지 않게 막는다.
 	float GetSummonPlayRate() const { return FMath::Max(0.01f, SummonPlayRate); }
 
-	// 동료를 SummonCount만큼 불러 등장시킨다. 한 생애에 한 번만 실행되며 실제로 꺼낸 수를 돌려준다.
+	// 동료를 SummonCount만큼 불러 등장시킨다. 한 마리라도 성공하면 기회를 소모하고, 전부 실패하면 재시도한다.
 	int32 SummonAllies(AActor* CombatActor);
 
 	// 체크포인트 리스폰용. 소환 기회를 되돌린다.
@@ -62,6 +62,7 @@ protected:
 
 	// 월드 X 위치의 등장 경로를 찾는다. 그 X의 플레이 평면에 바닥이 없으면 false다.
 	bool FindEntrance(float X, float BackgroundDirectionY, FEnemyClimbEntrance& OutEntrance) const;
+	bool IsEntranceClear(const FEnemyClimbEntrance& Entrance) const;
 
 	// 카메라 반대쪽(배경 쪽) Y 방향. 카메라를 찾지 못하면 +Y다.
 	float GetBackgroundDirectionY() const;
@@ -103,7 +104,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI|Summon|Animation", meta = (ClampMin = "0.01"))
 	float SummonPlayRate = 1.0f;
 
-	/** 플레이 평면에서 배경 쪽 가장자리를 찾을 최대 거리(cm). 못 찾으면 이 거리를 가장자리로 쓴다. */
+	/** 배경 쪽 가장자리를 찾을 최대 거리(cm). 가장자리가 없으면 이 거리 뒤에서 등장하며, 착지 위치와 걸어 나올 경로는 검증한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Summon|Location", meta = (ClampMin = "10.0", Units = "cm"))
 	float MaxEdgeSearchDistance = 800.0f;
 

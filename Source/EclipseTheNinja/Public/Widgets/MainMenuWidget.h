@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Styling/CoreStyle.h"
+#include "Widgets/MenuInputFeedback.h"
 #include "MainMenuWidget.generated.h"
 
 class UButton;
@@ -24,6 +25,7 @@ class ECLIPSETHENINJA_API UMainMenuWidget : public UUserWidget
 
 public:
 	virtual bool	Initialize() override;
+	void FocusInitialMenuButton();
 
 protected:
     UFUNCTION() void HandleOverwriteConfirmed();
@@ -36,6 +38,13 @@ protected:
     UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UButton> OverwriteCancelButton;
     UPROPERTY(BlueprintReadOnly, meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SaveStatusText;
 	virtual void	NativeConstruct() override;
+	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="MainMenu|Input")
+	TArray<FMenuFocusFeedbackBinding> FocusFeedbackBindings;
+	virtual FReply NativeOnFocusReceived(const FGeometry& InGeometry, const FFocusEvent& InFocusEvent) override;
+	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual FNavigationReply NativeOnNavigation(const FGeometry& InGeometry, const FNavigationEvent& InNavigationEvent, const FNavigationReply& InDefaultReply) override;
 
 	UFUNCTION()
 	void	HandleStartClicked();
@@ -134,6 +143,8 @@ protected:
 	TObjectPtr<USettingsWidget>	SettingsWidget = nullptr;
 
 private:
+	FMenuInputFeedback InputFeedback;
+	void FocusMenuButton(UButton* Button);
 	void		BuildDefaultLayout();
 	UButton*	MakeMenuButton(UVerticalBox* InParent, const FText& InLabel);
 };

@@ -2,9 +2,23 @@
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Animation/AnimMontage.h"
+#include "Character/BossEnemy.h"
 #include "Character/Enemy.h"
+#include "Components/CapsuleComponent.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/AssassinateTargetComponent.h"
+
+const TSoftObjectPtr<UAnimMontage>& UGABelowAssassinate::ResolveAttackMontage(const AEnemy* Enemy)
+{
+	// 몽타주를 고르는 시점에 보스 찌르기 여부도 정한다. 사운드와 이동 거리가 이 값을 따른다.
+	bUsingBossStab = IsValid(Enemy) && Enemy->IsA<ABossEnemy>() && !BossAttackMontage.IsNull();
+	return bUsingBossStab ? BossAttackMontage : AttackMontage;
+}
+
+void UGABelowAssassinate::AddPreloadPaths(TArray<FSoftObjectPath>& OutPaths) const
+{
+	OutPaths.Add(BossAttackMontage.ToSoftObjectPath());
+}
 
 bool UGABelowAssassinate::CanAssassinateTarget(const APlayerCharacter* Player,
 	const UAssassinateTargetComponent* Target, const AEnemy* Enemy) const
@@ -26,6 +40,27 @@ void UGABelowAssassinate::StartApproach()
 	ClimbLocation = Plan.ClimbLocation;
 	GrabLocation = Plan.GrabLocation;
 	VictimForwardPush = Plan.VictimForwardPush;
+	ResolvedGrabTime = GrabTime;
+	ResolvedVictimSideOffset = VictimSideOffset;
+
+	if (bUsingBossStab)
+	{
+		// 보스는 찌르는 거리에 서되 캡슐이 겹치지 않을 만큼은 떨어진다. 올라선 자리가 그보다 가까우면
+		// 올라선 자리에서 찌르고, 모자란 거리만큼 보스를 앞으로 민다.
+		const FVector Back = -Enemy->GetActorForwardVector().GetSafeNormal2D();
+		const float CapsuleClearance = Enemy->GetCapsuleComponent()->GetScaledCapsuleRadius()
+			+ Player->GetCapsuleComponent()->GetScaledCapsuleRadius() + 5.0f;
+		const float StabDistance = FMath::Max(BossStabDistance, CapsuleClearance);
+		const float ClimbDistance = FMath::Max(0.0f, FVector::DotProduct(ClimbLocation - Enemy->GetActorLocation(), Back));
+		const float StandDistance = FMath::Min(StabDistance, ClimbDistance);
+
+		GrabLocation = Enemy->GetActorLocation() + Back * StandDistance;
+		GrabLocation.Y = ClimbLocation.Y;
+		GrabLocation.Z = ClimbLocation.Z;
+		VictimForwardPush = StabDistance - StandDistance;
+		ResolvedGrabTime = BossGrabTime;
+		ResolvedVictimSideOffset = BossVictimSideOffset;
+	}
 
 	// 적 뒤로 다가가는 동안 적 캡슐에 막히지 않게 한다. 처치되면 적 충돌은 꺼진다.
 	SetIgnoreVictimCollision(true);
@@ -72,7 +107,7 @@ void UGABelowAssassinate::OnSectionCrossfade()
 	// 목을 잡는 순간 손이 피격자 목에 오도록, 지금부터 목을 잡는 순간까지 피격자를 천천히 옮긴다.
 	// 옆은 애니메이션 간격, 앞은 적이 모서리에 가까워 잡는 거리가 모자란 만큼이다.
 	// 목 꺾기 구간을 방금 시작했으므로 잡는 순간까지는 GrabTime이 남았다.
-	SlideVictim(VictimSideOffset, VictimForwardPush, GrabTime);
+	SlideVictim(ResolvedVictimSideOffset, VictimForwardPush, ResolvedGrabTime);
 
 	// 페어 애니메이션이라 목 꺾기 구간과 함께 피격자 몽타주를 시작해 처치를 확정한다.
 	ExecuteVictim();
@@ -111,7 +146,7 @@ void UGABelowAssassinate::OnClimbFinished()
 
 	// 목 꺾기 구간은 섞기 시간만큼 먼저 시작했으므로, 그만큼 앞선 지점부터 목을 잡는 순간까지 적 뒤로 다가간다.
 	const float WalkStartTime = ResolvedClimbEndTime + CrossfadeTime;
-	const float WalkDuration = FMath::Max(0.05f, GrabTime - CrossfadeTime);
+	const float WalkDuration = FMath::Max(0.05f, ResolvedGrabTime - CrossfadeTime);
 	UAbilityTask_ApplyRootMotionMoveToForce* WalkTask = MoveAlongAttackRootMotion(WalkStartTime, WalkDuration, GrabLocation);
 	if (!WalkTask) { OnInterrupted(); return; }
 	WalkTask->OnTimedOutAndDestinationReached.AddDynamic(this, &UGABelowAssassinate::OnGrabReached);

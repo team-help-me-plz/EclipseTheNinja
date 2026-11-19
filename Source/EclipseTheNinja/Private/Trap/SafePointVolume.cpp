@@ -54,6 +54,7 @@ void ASafePointVolume::OnCollisionBeginOverlap(UPrimitiveComponent* OverlappedCo
 			TEXT("[ASafePointVolume::OnCollisionBeginOverlap] %s의 SafePoint가 nullptr입니다"),
 			*this->GetName()
 		);
+		return;
 	}
 	if (!OtherActor || !OtherActor->Implements<UInteractor>())
 	{

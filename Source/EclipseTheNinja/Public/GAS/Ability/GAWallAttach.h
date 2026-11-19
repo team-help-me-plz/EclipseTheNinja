@@ -6,6 +6,8 @@
 #include "Abilities/GameplayAbility.h"
 #include "GAWallAttach.generated.h"
 
+class USoundBase;
+
 /**
  * 벽 감지와 매달림 고정을 관리하고, 종료 시 메시 위치와 낙하 이동을 복원한다.
  * 매달린 동안 기본 공격은 제한하며 공중·아래 암살 시작 시 취소된다.
@@ -44,6 +46,9 @@ public:
 	bool CanClimbToward(const ACharacter* Player, float Up) const;
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "WallAttach|Audio")
+	TObjectPtr<USoundBase> AttachSound;
+
 	UFUNCTION()
 	void OnCompleted();
 

@@ -144,6 +144,12 @@ protected:
 	// 기습 어빌리티가 실행 중인지
 	bool IsAmbushAbilityActive() const;
 
+	// 기습·낙하 중 플레이어·분신 캡슐과 부딪히지 않도록 캡슐의 Pawn 채널 응답을 끄거나 되돌린다.
+	void SetIgnorePawnCollision(bool bIgnore);
+
+	// 착지 후 분신과 겹쳐 있지 않을 때만 Pawn 채널 응답을 되돌린다. 겹친 채 되돌리면 밀려나며 튄다.
+	void TryRestorePawnCollision();
+
 	/** 시작할 때 천장에 매달려 있을지. 끄면 처음부터 일반 근접 적으로 행동한다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Ceiling")
 	bool bStartOnCeiling = true;
@@ -319,4 +325,8 @@ private:
 	// 기습 중 루트 모션을 무시하기 전의 ABP 설정
 	TEnumAsByte<ERootMotionMode::Type> SavedRootMotionMode = ERootMotionMode::RootMotionFromMontagesOnly;
 	bool bRootMotionOverridden = false;
+
+	// 기습·낙하 동안 꺼 둔 캡슐의 Pawn 채널 응답과 그 이전 값
+	bool bPawnCollisionIgnored = false;
+	TEnumAsByte<ECollisionResponse> SavedPawnResponse = ECR_Block;
 };

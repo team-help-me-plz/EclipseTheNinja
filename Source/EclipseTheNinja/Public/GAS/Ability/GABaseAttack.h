@@ -5,6 +5,8 @@
 #include "Abilities/GameplayAbility.h"
 #include "GABaseAttack.generated.h"
 
+class UForceFeedbackEffect;
+
 /** One click, one montage, and at most one damage application per target. */
 UCLASS()
 class ECLIPSETHENINJA_API UGABaseAttack : public UGameplayAbility
@@ -39,6 +41,13 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Attack", meta = (ClampMin = "0.01"))
 	float PlayRate = 1.0f;
+
+	// 플레이어의 3타가 적에게 적중했을 때 게임패드에 줄 진동. 비워 두면 진동하지 않는다
+	UPROPERTY(EditDefaultsOnly, Category = "Attack|ForceFeedback")
+	TObjectPtr<UForceFeedbackEffect> ComboFinisherHitForceFeedback;
+
+	// 3타 적중 진동을 플레이어 컨트롤러로 재생한다
+	void PlayComboFinisherHitForceFeedback(const ACharacter* InCharacter) const;
 
 	UFUNCTION()
 	void OnAttackCompleted();

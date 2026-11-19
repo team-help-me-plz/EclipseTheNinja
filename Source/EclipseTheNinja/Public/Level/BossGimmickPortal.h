@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Interface/Activatable.h"
+#include "Checkpoint/CheckpointId.h"
 #include "BossGimmickPortal.generated.h"
 
 class UBoxComponent;
@@ -47,6 +48,9 @@ public:
 	/** 보스의 링크 상태를 반영한다. 보스 스테이지 포탈은 열리고 닫히며, 기믹 스테이지 포탈은 레이저를 켜고 끈다. */
 	void SetLinkActive(bool bActive);
 
+	/** 레벨이 표시된 뒤, 로딩 중 먼저 트리거에 닿은 플레이어의 입장을 다시 확인한다. */
+	void RefreshBossStageEntry();
+
 	/** 지금 플레이어를 들여보내는지. */
 	UFUNCTION(BlueprintPure, Category = "Gimmick Portal")
 	bool IsPortalOpen() const;
@@ -56,6 +60,9 @@ public:
 
 	/** 도착 직후 잠시 동안 이 포탈로 들어가지 못하게 한다. */
 	void BlockEntry(float Duration);
+
+	/** 기믹 방에 들어가기 전 체크포인트로 되돌린다. 기억한 값이 없으면 아무것도 하지 않는다(보스 스테이지 포탈만 기억한다). */
+	void RestoreCheckpointBeforeGimmick();
 
 	/** 반대쪽 포탈에서 순간이동한 플레이어가 이 포탈에 도착하면(화면이 다시 밝아지기 시작할 때) 호출된다. */
 	UPROPERTY(BlueprintAssignable, Category = "Gimmick Portal")
@@ -127,6 +134,13 @@ protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Gimmick Portal", meta = (EditCondition = "PortalSide == EBossGimmickPortalSide::GimmickStage"))
 	TArray<TObjectPtr<AActor>> ActivateOnLinkBroken;
 
+	/**
+	 * 기믹 스테이지 포탈만 사용. 켜면 보스 스테이지로 나가는 출구로만 쓴다.
+	 * 보스 스테이지 포탈이 도착지로 고르지 않으므로, 기믹 방 끝(레버 옆)에 두어 시작점까지 되돌아가지 않고 나가게 한다.
+	 */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Gimmick Portal", meta = (EditCondition = "PortalSide == EBossGimmickPortalSide::GimmickStage"))
+	bool bExitOnly = false;
+
 	/** 화면이 어두워지는(그리고 다시 밝아지는) 시간(초). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gimmick Portal", meta = (ClampMin = "0.0", Units = "s"))
 	float FadeTime = 0.3f;
@@ -138,6 +152,10 @@ protected:
 	/** 포탈이 열려 있을 때 재생하는 이펙트. 기본은 NS_SpatialDistortion7. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gimmick Portal|VFX")
 	TSoftObjectPtr<UNiagaraSystem> PortalSystem;
+
+	/** 링크가 활성화되면 이 입구에서 해제 레버까지 에너지 빔을 생성한다. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Gimmick Portal|VFX", meta = (EditCondition = "PortalSide == EBossGimmickPortalSide::GimmickStage && !bExitOnly", EditConditionHides))
+	bool bGenerateStageEnergyLink = true;
 
 	/** 스테이지 레버까지 잇는 레이저. 기본은 보스와 같은 NS_Laser_Twist_2. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gimmick Portal|VFX")
@@ -161,6 +179,14 @@ private:
 
 	// 이 시간(월드 초)까지는 들어가지 못한다
 	double EntryBlockedUntil = 0.0;
+
+	// 보스 스테이지 포탈만 사용. 기믹 스테이지로 들어갈 때의 체크포인트를 기억했다가 돌아오면 되돌린다.
+	// 기믹 방 안 체크포인트가 보스전 리스폰 위치로 남지 않게 한다.
+	ECheckpointId CheckpointBeforeGimmick = ECheckpointId::None;
+	bool bHasCheckpointBeforeGimmick = false;
+
+	// 기믹 스테이지로 들어갈 때(true)와 보스 스테이지로 돌아올 때(false) 링크 시간과 체크포인트를 처리한다.
+	void HandleStageChange(ABossGimmickPortal* Destination);
 
 	// 화면이 어두워지는 동안 옮길 플레이어와 목적지
 	TWeakObjectPtr<APawn> TeleportingPlayer;

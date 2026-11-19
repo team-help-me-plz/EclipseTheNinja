@@ -7,6 +7,8 @@
 #include "Subsystem/UIMessageSubsystem.h"
 
 #include "Components/BoxComponent.h"
+#include "Sound/SoundBase.h"
+#include "UObject/ConstructorHelpers.h"
 
 ALeverSwitch::ALeverSwitch()
 {
@@ -26,6 +28,15 @@ ALeverSwitch::ALeverSwitch()
 	// 분신 조준 커서 트레이스(Visibility)에 걸리도록 부모 BeginPlay의 스태틱 메시 설정과 맞춘다
 	this->InteractCollision->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	this->InteractCollision->SetGenerateOverlapEvents(true);
+
+	// 레버 동작 기본 사운드(에셋 시트). 부모(버튼) 기본값을 덮어쓴다
+	static ConstructorHelpers::FObjectFinder<USoundBase> LeverSoundFinder(
+		TEXT("/Game/Audio/Wood_Move_1-1_wav.Wood_Move_1-1_wav"));
+
+	if (LeverSoundFinder.Succeeded())
+	{
+		this->InteractSound = LeverSoundFinder.Object;
+	}
 }
 
 void ALeverSwitch::Interact_Implementation(AActor* InActor)
@@ -47,30 +58,36 @@ void ALeverSwitch::Interact_Implementation(AActor* InActor)
 		}
 		return ;
 	}
-	// 레버가 넘어가는 중이거나, 한 번만 당길 수 있는 레버를 이미 당겼을 때
-	if (this->bIsInteractCooldown || (!this->bIsReinteractable && this->bIsInteracted))
-	{
-		return ;
-	}
-	this->bIsInteractCooldown = true;
-	this->bIsInteracted = true;
+	// 나머지 검사(쿨타임, 한 번만 당기는 레버)와 작동은 부모가 한다
+	Super::Interact_Implementation(InActor);
+}
+
+void ALeverSwitch::PerformSwitchAction()
+{
 	this->bIsToggled = !this->bIsToggled;
 	this->PlayLeverAnim();
-	this->PlayInteractSound();
-	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
 	GetWorldTimerManager().SetTimer(
-		InteractionCooldownTimer,
+		this->LeverAnimTimer,
 		this,
-		&ALeverSwitch::ResetInteractionCooldown,
+		&ALeverSwitch::OnLeverAnimFinished,
 		this->InteractInterval,
 		false
 	);
-	this->RefreshInteractState();
+}
+
+void ALeverSwitch::OnLeverAnimFinished()
+{
+	// 레버가 다 넘어간 뒤에 대상을 작동시킨다
+	this->ToggleTargets();
+
+	// 대상이 실제로 작동한 뒤에 기록한다. 손잡이가 넘어가는 도중 종료하면 당기지 않은 것으로 남는다
+	this->SaveSwitchStateIfSettled();
 }
 
 void ALeverSwitch::ResetToInitial_Implementation()
 {
 	Super::ResetToInitial_Implementation();
+	GetWorldTimerManager().ClearTimer(this->LeverAnimTimer);
 
 	// Off 자세로 되돌린다
 	this->bIsToggled = false;
@@ -113,16 +130,6 @@ void ALeverSwitch::BeginPlay()
 		);
 		this->LeverMesh->Stop();
 	}
-}
-
-void ALeverSwitch::ResetInteractionCooldown()
-{
-	// 레버가 다 넘어간 뒤에 대상을 작동시킨다
-	Super::ResetInteractionCooldown();
-	this->ToggleTargets();
-
-	// 대상이 실제로 작동한 뒤에 기록한다. 손잡이가 넘어가는 도중 종료하면 당기지 않은 것으로 남는다
-	this->SaveSwitchState();
 }
 
 FSavedActorState ALeverSwitch::MakeSaveState() const

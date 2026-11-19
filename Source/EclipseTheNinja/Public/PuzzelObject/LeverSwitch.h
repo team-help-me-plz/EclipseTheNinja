@@ -31,7 +31,9 @@ public:
 protected:
 	virtual void	BeginPlay() override;
 
-	virtual void	ResetInteractionCooldown() override;
+	// 손잡이를 넘기고, 다 넘어간 뒤(InteractInterval) 대상을 작동시킨다
+	virtual void	PerformSwitchAction() override;
+	void	OnLeverAnimFinished();
 
 	// 눌림 여부에 On 자세를 더해 저장한다
 	virtual FSavedActorState	MakeSaveState() const override;
@@ -57,5 +59,8 @@ private:
 	float	PlayRate = 1.f;
 
 	int32	LockedVineCount = 0;
+
+	// 손잡이가 다 넘어가면 대상을 작동시킨다. 시간 스위치는 쿨타임이 더 길어서 쿨타임 타이머와 따로 둔다
+	FTimerHandle	LeverAnimTimer;
 
 };

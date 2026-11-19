@@ -86,6 +86,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact|Cooldown", meta = (ClampMin = "0.05"))
 	float	InteractInterval = 0.5f;
 
+	// 0보다 크면 시간 스위치: 작동한 뒤 이 시간(초) 동안 쿨타임이 걸리고, 끝나면 스스로 한 번 더 작동해 대상을 되돌린다.
+	// 되돌린 뒤에는 InteractInterval 쿨타임이 걸린다. InteractInterval보다 짧으면 InteractInterval로 맞춘다
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interact|Cooldown", meta = (ClampMin = "0.0", Units = "s"))
+	float	AutoReinteractTime = 0.0f;
+
+	// 스위치를 실제로 작동시킨다(쿨타임·사운드·대상 작동). 플레이어 상호작용과 시간 스위치의 자동 복귀가 함께 쓴다
+	void	ActivateSwitch();
+	// 스위치마다 다른 작동 내용. 기본은 대상 토글 후 세이브, 레버는 손잡이를 넘긴 뒤 대상을 토글한다
+	virtual void	PerformSwitchAction();
+	// 자동 복귀를 기다리는 중이 아니면 스위치 상태를 세이브에 기록한다. 시간 스위치가 켜진 동안은 남기지 않는다
+	void	SaveSwitchStateIfSettled() const;
+
 	// 스위치(버튼·레버)를 작동시켰을 때 재생할 사운드. 비워 두면 재생하지 않는다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
 	TObjectPtr<USoundBase>	InteractSound = nullptr;
@@ -107,6 +119,8 @@ protected:
 	bool			bIsInteractCooldown = false;
 	// Interact 함수가 한 번이라도 불렸는가
 	bool			bIsInteracted = false;
+	// 시간 스위치가 켜져 있어 쿨타임이 끝나면 스스로 되돌아갈 차례인가
+	bool			bIsAutoReturnPending = false;
 
 private:
 

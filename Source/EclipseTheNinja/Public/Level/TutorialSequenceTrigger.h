@@ -5,9 +5,11 @@
 #include "CoreMinimal.h"
 #include "Components/SlateWrapperTypes.h"
 #include "GameFramework/Actor.h"
+#include "InputCoreTypes.h"
 #include "TutorialSequenceTrigger.generated.h"
 
 class UArrowComponent;
+class ACheckpoint;
 class UBoxComponent;
 class ALevelSequenceActor;
 class ULevelSequence;
@@ -17,6 +19,9 @@ class UInputAction;
 class ACloneCharacter;
 class UMaterialInterface;
 class USkeletalMeshComponent;
+class UInputMappingContext;
+class USkipPromptWidget;
+struct FInputActionInstance;
 
 /**
  * 튜토리얼 컷신 재생 트리거 액터.
@@ -34,6 +39,8 @@ class USkeletalMeshComponent;
  *  - bTriggerOnOverlap을 끄면 트리거로는 재생하지 않고, 다른 액터가 PlaySequence/PlaySequenceAt을 불러 재생한다 (보스 이벤트 컷신)
  *  - bOriginFollowsMarker를 켜면 SequenceOrigin 마커 위치가 시퀀스 키 공간의 SequenceKeyAnchor 지점이 되도록
  *    TransformOrigin을 자동으로 맞춘다. 컷신 위치를 바꿀 때는 마커(또는 트리거 액터 전체)만 옮기면 된다
+ *  - bAllowSkip을 켜면 이미 끝까지 본 시퀀스를 다시 재생할 때 SkipAction 키(IMC_SkipCinematic: ESC·게임패드 메뉴 버튼)를 SkipHoldTime초 동안 눌러 건너뛸 수 있다.
+ *    누르는 동안 화면 우측 상단에 테두리가 시계방향으로 차는 안내가 뜨고, 그동안 일시정지 메뉴는 열리지 않는다
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTutorialSequenceEnded, ATutorialSequenceTrigger*, Trigger);
 
@@ -51,8 +58,9 @@ public:
 
     // 시퀀스의 절대 위치 트랜스폼(스포너블 카메라·연출 메시)을 Origin 기준으로 옮겨 재생하는 함수
     // 원점 근처에 만든 시퀀스를 처형·그로기처럼 매번 위치가 다른 곳에서 재생할 때 쓴다
+    // StartTime(초)을 주면 시퀀스를 그 위치부터 재생한다
     UFUNCTION(BlueprintCallable, Category = "Tutorial")
-    void PlaySequenceAt(APlayerController* PlayerController, const FTransform& Origin);
+    void PlaySequenceAt(APlayerController* PlayerController, const FTransform& Origin, float StartTime = 0.0f);
 
     // 지금 재생 중인지
     UFUNCTION(BlueprintPure, Category = "Tutorial")
@@ -66,12 +74,16 @@ public:
     UFUNCTION(BlueprintPure, Category = "Tutorial")
     ULevelSequence* GetSequenceAsset() const;
 
+    // 시퀀스가 끝난 뒤 맵 이름을 띄우는 입장 시퀀스 트리거인지
+    bool ShowsMapNameOnEnd() const { return this->bShowMapNameOnEnd; }
+
     // 시퀀스가 끝나 조작을 돌려준 직후 호출된다
     UPROPERTY(BlueprintAssignable, Category = "Tutorial")
     FOnTutorialSequenceEnded OnSequenceEnded;
 
 protected:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     // 에디터에서 트리거를 옮기면 시퀀스 TransformOrigin도 바로 따라가게 한다
     virtual void OnConstruction(const FTransform& Transform) override;
@@ -105,6 +117,8 @@ protected:
     // 재생 위치가 ActivateFrame에 도달했으면 ActivateTargets를 토글하고, 아니면 남은 시간만큼 다시 기다리는 함수
     // QTE로 멈춘 시간이 있어도 실제 재생 위치를 기준으로 맞춘다
     void CheckActivateFrame();
+    void CheckAssassinationStabSoundFrame();
+    void CheckAssassinationWithdrawalSoundFrame();
 
     // 화면에 떠 있는 UMG 위젯(체력바·스킬 아이콘 등)을 숨기고 원래 표시 상태를 기억하는 함수. 이미 숨긴 위젯은 건너뛴다
     void HideScreenWidgets();
@@ -153,6 +167,15 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
     bool bPlayOnBeginPlay = false;
 
+    // 인트로가 끝난 뒤 등록하고 활성화할 시작 체크포인트.
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial")
+    TObjectPtr<ACheckpoint> CheckpointOnFinish = nullptr;
+
+    // 켜면 시퀀스가 끝나 화면 위젯을 되돌린 뒤 맵 이름 표시를 요청한다 (입장 시퀀스 트리거에서만 켠다)
+    // 레벨에 이 값이 켜진 트리거가 있으면 입장 즉시 띄우지 않고 이 시퀀스가 끝날 때까지 기다린다. 맵 이름은 레벨당 한 번만 뜬다
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial")
+    bool bShowMapNameOnEnd = false;
+
     // 켜면 한 번 재생한 뒤에는 다시 들어와도 재생하지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
     bool bPlayOnce = true;
@@ -178,6 +201,9 @@ protected:
     // QTE에서 기다릴 입력. 게임에서 같은 행동에 쓰는 액션을 지정해 실제 조작 키를 익히게 한다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE")
     TObjectPtr<UInputAction> QTEAction = nullptr;
+
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial|QTE")
+    bool bShowQTEInputGlyph = false;
 
     // QTE에 들어선 직후 잠깐 재생할 속도. 이 속도로 QTEFreezeDelay초 흐른 뒤 완전히 멈춰 입력을 기다린다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -213,6 +239,13 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Activate")
     int32 ActivateFrame = -1;
 
+    // 암살 어빌리티와 같은 플레이어 사운드를 지정 프레임에서 재생한다.
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial|Assassination Sound")
+    int32 AssassinationStabSoundFrame = -1;
+
+    UPROPERTY(EditInstanceOnly, Category = "Tutorial|Assassination Sound")
+    int32 AssassinationWithdrawalSoundFrame = -1;
+
     // ActivateFrame에 토글할 액터들. Activatable 인터페이스를 구현한 액터만 처리한다 (예: 문)
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Activate")
     TArray<TObjectPtr<AActor>> ActivateTargets;
@@ -241,11 +274,70 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Clone")
     bool bStartCloneCooldownOnHandoff = true;
 
+    // 켜면 이미 끝까지 본 시퀀스를 다시 재생할 때 SkipAction 키를 길게 눌러 건너뛸 수 있다 (예: 보스 진입 컷신)
+    // 건너뛰면 끝 프레임으로 바로 넘어가므로 QTE·ActivateFrame·HandoffCloneFrame 처리는 하지 않는다. 연출만 있는 시퀀스에 켠다
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Skip")
+    bool bAllowSkip = false;
+
+    // 건너뛰기 입력 액션. 기본은 IA_SkipCinematic
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip"))
+    TObjectPtr<UInputAction> SkipAction = nullptr;
+
+    // 건너뛰기 키를 정하는 매핑 컨텍스트. 기본은 IMC_SkipCinematic(ESC·게임패드 메뉴 버튼, 일시정지와 같은 키)
+    // 건너뛰기를 받는 동안 게임플레이 IMC보다 높은 우선순위로 넣고, 일시정지 메뉴는 열리지 않게 막는다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip"))
+    TObjectPtr<UInputMappingContext> SkipMappingContext = nullptr;
+
+    // 이 시간(초) 동안 계속 누르면 건너뛴다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip", ClampMin = "0.05", Units = "s"))
+    float SkipHoldTime = 0.5f;
+
+    // 건너뛴 직후 화면을 검정에서 이 시간(초) 동안 밝혀 컷이 툭 끊기지 않게 한다. 0이면 페이드 없이 넘어간다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip", ClampMin = "0.0", Units = "s"))
+    float SkipFadeInDuration = 0.3f;
+
+    // 누르는 동안 우측 상단에 띄울 안내 위젯. 모양을 바꾸려면 USkipPromptWidget을 상속한 위젯 블루프린트를 지정한다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip"))
+    TSubclassOf<USkipPromptWidget> SkipPromptClass;
+
 private:
+    // 지금 재생이 건너뛰기를 받을 수 있으면 건너뛰기 입력을 켜고 일시정지 메뉴를 막는다
+    void BeginSkipInput();
+
+    // 건너뛰기 입력을 끄고 안내를 지우고 일시정지 메뉴 차단을 푼다. 켜져 있지 않으면 아무것도 하지 않는다
+    void EndSkipInput();
+
+    // QTE·건너뛰기 중 지금 필요한 입력만 이 액터의 입력 컴포넌트에 다시 바인딩한다. 둘 다 필요 없으면 입력을 끈다
+    void RefreshTriggerInput();
+
+    // 건너뛰기 키를 누르고 있는 동안 매 프레임 호출된다. 누른 시간이 SkipHoldTime에 닿으면 건너뛴다
+    void OnSkipHeld(const FInputActionInstance& Instance);
+
+    // SkipHoldTime 전에 키를 떼면 안내를 숨기고 진행을 되돌린다
+    void OnSkipReleased();
+
+    // 끝 프레임으로 넘어가 시퀀스가 정상 종료 경로로 끝나게 한다
+    void SkipSequence();
+
+    // 본 기록에 쓰는 시퀀스 에셋의 패키지 이름. 시퀀스가 없으면 NAME_None
+    FName GetSeenSequenceKey() const;
+
+    // bAllowSkip일 때 지금 시퀀스를 끝까지 본 것으로 기록한다
+    void MarkSequenceSeen() const;
+
+    bool bSkipEnabled = false;
+    bool bSkipped = false;
+
+    UPROPERTY(Transient)
+    TObjectPtr<USkipPromptWidget> SkipPrompt = nullptr;
+
     bool bHasPlayed = false;
 
     // PlaySequenceAt이 원점을 직접 정한 재생이면 마커 원점을 덮어쓰지 않는다
     bool bOriginOverridden = false;
+
+    // 이번 재생을 시작할 시퀀스 위치(초). PlaySequenceAt이 정하고 재생을 시작하면 0으로 되돌린다
+    float PendingStartTime = 0.0f;
 
     // 입력을 막아 둔 폰과 컨트롤러. 시퀀스가 끝나면 되돌린다
     TWeakObjectPtr<APawn> BlockedPawn;
@@ -263,6 +355,8 @@ private:
     bool bWaitingForQTE = false;
 
     FTimerHandle ActivateTimer;
+    FTimerHandle AssassinationStabSoundTimer;
+    FTimerHandle AssassinationWithdrawalSoundTimer;
     // 이번 재생에서 토글한 액터. bRevertActivateOnFinish일 때 끝나면 다시 토글한다
     TArray<TWeakObjectPtr<AActor>> ActivatedActors;
 

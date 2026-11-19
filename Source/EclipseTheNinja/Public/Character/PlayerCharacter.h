@@ -22,10 +22,18 @@ class UInteractBoxComponent;
 class UAssassinationTargetingComponent;
 class UNoiseComponent;
 class UHidingComponent;
+class UMinimapComponent;
 class UGAAssassinate;
 class AEnemy;
 class UUserWidget;
+class USoundBase;
 struct FInputActionValue;
+
+UENUM()
+enum class EPlayerActionSound : uint8
+{
+	Kunai, SwiftStrike, Parry, Clone, BelowAssassination, Jump, Land, Hit, AssassinationStab, ParrySuccess, LedgeClimb
+};
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlayerConditionChanged, EPlayerCondition);
 
@@ -42,6 +50,27 @@ class ECLIPSETHENINJA_API APlayerCharacter : public ABaseCharacter, public IInte
 	UCameraComponent* Camera;
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TMap<EPlayerActionSound, TObjectPtr<USoundBase>> ActionSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> SwordAttackSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> FireAttackSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> AssassinationSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> WalkSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> CrouchWalkSounds;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	TArray<TObjectPtr<USoundBase>> WallClimbSounds;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
 	TObjectPtr<UInteractBoxComponent> InteractComponent;
 
@@ -58,6 +87,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hiding")
 	TObjectPtr<UHidingComponent> HidingComponent;
 
+	// 미니맵 시야 밝히기와 Tab 입력, 미니맵 위젯 표시를 맡는다
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
+	TObjectPtr<UMinimapComponent> MinimapComponent;
+
 	// 예전 BP에 저장된 암살 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
 	UPROPERTY()
 	TSubclassOf<UGAAssassinate> AssassinationAbilityClass_DEPRECATED;
@@ -67,6 +100,10 @@ protected:
 	/** Move Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* MoveAction;
+
+	/** Minimum downward movement value required to start hanging from a ledge. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Gamepad", meta = (ClampMin = "0.1", ClampMax = "1"))
+	float LedgeHangDownInputThreshold = 0.65f;
 
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -170,6 +207,13 @@ protected:
 	EPlayerCondition	PlayerCondition = EPlayerCondition::Normal;
 
 public:
+	void PlayActionSound(EPlayerActionSound Action, float Volume = 1.0f) const;
+	void PlaySwordAttackSound(int32 ComboIndex, bool bFire) const;
+	void PlayAssassinationWithdrawalSound() const;
+
+    const UInputAction* GetAbilityInputAction(EAbilityInputID InputID) const;
+    const UInputAction* GetCloneRecallInputAction() const { return CloneRecallAction; }
+
     float GetLogicalFacingSign() const { return FMath::Cos(FMath::DegreesToRadians(FacingTargetYaw)) >= 0.0f ? 1.0f : -1.0f; }
     UFUNCTION(BlueprintCallable, Category="Parry")
     void DoParry();
@@ -302,6 +346,12 @@ protected:
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
+	void PlayCharacterSound(USoundBase* Sound, float Volume = 1.0f) const;
+	void PlayRandomCharacterSound(const TArray<TObjectPtr<USoundBase>>& Sounds) const;
+	void UpdateMovementSound(float DeltaSeconds);
+	float DistanceSinceMovementSound = 0.0f;
+	const TArray<TObjectPtr<USoundBase>>* PreviousMovementSounds = nullptr;
+
 	FTransform SafePointTransform;
 	bool bHasSafePoint = false;
 	// 커서의 위치 갱신
@@ -335,8 +385,8 @@ private:
 	bool bMoveTurnActive = false;
 
     bool bParryMovementLocked = false;
-    uint8 SavedParryMovementMode = 0;
-    uint8 SavedParryCustomMovementMode = 0;
+    TWeakObjectPtr<UAnimInstance> ParryLockedAnimation;
+    uint8 SavedParryRootMotionMode = 0;
 
     // bDebugInvincible에 맞춰 무적 태그를 붙이거나 뗀다. 태그는 개수로 관리되므로 붙인 횟수를 따로 기억한다.
     void SyncDebugInvincibleTag();
@@ -407,6 +457,18 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Combat|Death")
 	void Die();
 
+	/**
+	 * 죽으면 이전 맵으로 돌아가는 맵(AEclipseWorldSettings::bReturnToPreviousStageOnDeath, 보스 아레나)에서
+	 * 사망 몽타주가 끝나기 이 시간(초) 전부터 화면을 검게 덮는다. 이전 맵을 불러오는 동안 죽은 맵 화면이 보이지 않게 한다
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Death", meta = (ClampMin = "0.0", Units = "s"))
+	float DeathFadeOutTime = 0.5f;
+
+	// 사망 몽타주 끝 무렵 화면을 검게 덮기 시작한다
+	void StartDeathFadeOut(float Duration);
+
+	FTimerHandle DeathFadeTimer;
+
 	// ReceiveAssassination 안에서만 유효하다. Die가 사망 몽타주 대신 재생한다.
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> PendingAssassinationMontage;
@@ -462,6 +524,7 @@ public:
 
 	/** 분신술 타게팅 상태 설정. 타게팅 중에는 카메라 시점을 유지하고, 종료되면 중앙으로 복귀한다. */
 	void SetCloneTargeting(bool bTargeting);
+	bool IsCloneTargeting() const { return bIsCloneTargeting; }
 
 protected:
 

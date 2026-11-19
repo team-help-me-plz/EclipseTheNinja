@@ -5,6 +5,7 @@
 #include "BossLostTargetComponent.generated.h"
 
 class ABossEnemy;
+class UAudioComponent;
 class UEnemyDetectionComponent;
 class UAnimMontage;
 class USoundBase;
@@ -50,6 +51,7 @@ public:
 
 	/** 대상을 잊지 않고 놓침 처리만 멈춘다. BT가 다른 분기로 넘어갈 때 호출한다. */
 	void StopLostTarget();
+	void InterruptLostTarget();
 
 	/** 대상을 놓친 뒤의 진행 단계. */
 	UFUNCTION(BlueprintPure, Category = "Lost Target")
@@ -157,6 +159,8 @@ protected:
 private:
 	UPROPERTY(Transient)
 	TWeakObjectPtr<ABossEnemy> Boss;
+
+	TWeakObjectPtr<UAudioComponent> RoarAudio;
 
 	/** 포효를 시작할 때의 대상. 난사 패턴의 근접 판정 대상으로 쓴다. */
 	TWeakObjectPtr<APawn> LostTarget;

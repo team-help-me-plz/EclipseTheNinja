@@ -12,6 +12,8 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 // Sets default values
 AVentPassage::AVentPassage()
@@ -88,6 +90,11 @@ void AVentPassage::Interact_Implementation(AActor* InActor)
 
 	LockTraveler(TargetCharacter);
 	this->AlignToEntryPoint(TargetCharacter);
+
+	if (this->EnterSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, this->EnterSound, GetActorLocation());
+	}
 
 	UAnimInstance* AnimInstance = TargetCharacter->GetMesh() ? TargetCharacter->GetMesh()->GetAnimInstance() : nullptr;
 	if (AnimInstance && this->EnterMontage && AnimInstance->Montage_Play(this->EnterMontage) > 0.f)
@@ -190,6 +197,11 @@ void AVentPassage::OutVent(ACharacter* InCharacter)
 	}
 	this->StartInteractCooldown();
 	this->AlignToEntryPoint(InCharacter);
+
+	if (this->ExitSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, this->ExitSound, GetActorLocation());
+	}
 
 	UAnimInstance* AnimInstance = InCharacter->GetMesh() ? InCharacter->GetMesh()->GetAnimInstance() : nullptr;
 	if (AnimInstance && this->EnterMontage

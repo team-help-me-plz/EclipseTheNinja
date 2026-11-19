@@ -5,9 +5,12 @@
 #include "Interface/Activatable.h"
 #include "GameplayAbilitySpecHandle.h"
 #include "Character/BossPatternRow.h"
+#include "Component/AssassinationTargetingComponent.h"
 #include "BossEnemy.generated.h"
 
 class UGameplayAbility;
+class UAudioComponent;
+class USoundBase;
 class UBossHealthBarWidget;
 class UBossLostTargetComponent;
 class UBossEnemyGimmickComponent;
@@ -43,10 +46,19 @@ class ECLIPSETHENINJA_API ABossEnemy : public AEnemy, public IActivatable
 
 public:
 	ABossEnemy();
+	void StartBattleMusic();
+	void SetPlayerInGimmickStage(bool bInStage);
+	bool IsPlayerInGimmickStage() const { return bPlayerInGimmickStage; }
+	void PlayGroggySound() const;
+	void PlayAssassinationImpactSound();
 
 	/** 컷신·그로기처럼 보스가 패턴을 쓰면 안 되는 동안 켠다. 켜져 있으면 패턴 어빌리티가 발동하지 않는다. */
-	void SetCinematicLocked(bool bLocked) { bCinematicLocked = bLocked; }
-	bool IsCinematicLocked() const { return bCinematicLocked; }
+	void SetCinematicLocked(bool bLocked);
+	bool IsCinematicLocked() const
+	{
+		if (PendingEnergyLinkIndex != INDEX_NONE) return true;
+		return bCinematicLocked;
+	}
 
 	/** Also callable by an arena trigger/cinematic. Detection of combat starts the UI automatically. */
 	UFUNCTION(BlueprintCallable, Category = "Boss|UI")
@@ -125,6 +137,15 @@ public:
 	// 체력이 낮으면 즉시 처치하고, 아니면 가장 가까운 아래쪽 에너지 링크 체력까지 깎는다.
 	virtual void ReceiveAssassination(UAnimMontage* Montage) override;
 
+	/** 암살 피해를 적용하는 중이면 true. 일반 피격 연출(피 튀김)을 건너뛰는 데 쓴다. */
+	bool IsApplyingAssassinationDamage() const { return bApplyingAssassinationDamage; }
+
+	/** 다음 암살이 어떤 방식인지 알린다. 살아남을 때 그 방식에 맞는 리액션 몽타주를 고른다. */
+	void SetIncomingAssassinationType(EAssassinationType Type) { IncomingAssassinationType = Type; }
+
+	/** 대상을 놓쳐 포효를 시작하면 포효 방식의 재암살 제한을 해제한다. */
+	void NotifyLostTargetRoarStarted();
+
 	// 레버가 작동하면 실드를 해제한다.
 	virtual void ToggleActivate_Implementation() override;
 
@@ -189,6 +210,42 @@ public:
 	virtual float GetAIAttackCooldown() const override { return 0.1f; }
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> DetectionSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> HitSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> DeathSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> BattleMusic;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> PhaseThreeBattleMusic;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> GimmickStageMusic;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> GimmickBreakSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Boss|Audio")
+	TObjectPtr<USoundBase> GroggySound;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> BattleMusicComponent;
+
+	UFUNCTION()
+	void HandleBossAwarenessChanged(float Gauge, EEnemyAlertLevel Level);
+
+	void HandleBossDied(AEnemy* Enemy, bool bAssassinated);
+	void StopBattleMusic();
+	bool bInCombatAwareness = false;
+	bool bPlayerInGimmickStage = false;
+	bool bApplyingAssassinationDamage = false;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Boss|UI")
 	TSubclassOf<UBossHealthBarWidget> BossHealthBarClass;
 
@@ -314,6 +371,7 @@ protected:
 
 	// 실드를 켜고 제한시간 타이머를 시작한다.
 	void ActivateEnergyLink(int32 LinkIndex);
+	void TryActivatePendingEnergyLink();
 
 	// 제한시간 안에 실드를 해제하지 못하면 플레이어 입력을 막고 처형을 시작한다.
 	void OnEnergyLinkTimeExpired();
@@ -336,7 +394,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Energy Link")
 	TArray<float> EnergyLinkThresholds = { 0.7f, 0.3f };
 
-	/** 실드 해제(기믹) 제한시간(초). 지나면 보스가 플레이어를 처형한다. 0 이하면 시간 제한 없이 레버를 기다린다. */
+	/**
+	 * 실드 해제(기믹) 제한시간(초). 기믹 스테이지에 있는 동안에도 흐르므로 기믹 방 공략 시간까지 넣어 정한다.
+	 * 지나면 보스가 플레이어를 처형한다. 0 이하면 시간 제한 없이 레버를 기다린다.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Energy Link", meta = (ClampMin = "0.0", Units = "s"))
 	float EnergyLinkTimeLimit = 60.0f;
 
@@ -362,6 +423,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
 	TObjectPtr<UAnimMontage> AssassinationReactionMontage;
 
+	/** 공중 암살을 당하고 체력이 남아 있을 경우 재생하는 몽타주. 비우면 AssassinationReactionMontage를 쓴다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution")
+	TObjectPtr<UAnimMontage> AerialAssassinationReactionMontage;
+
 	/** 보스가 플레이어 등 뒤 몇 cm에 서서 처형할지. 두 캡슐이 겹치는 거리보다 가까워지지는 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Execution", meta = (ClampMin = "0.0", Units = "cm"))
 	float ExecutionBehindDistance = 150.0f;
@@ -377,6 +442,14 @@ protected:
 	/** 암살 한 번에 깎는 최대 체력 비율. 남은 체력이 이 값 이하면 즉시 처치한다. 기획: 20%. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float AssassinationDamageRatio = 0.2f;
+
+	/** 켜면 시간제 쿨다운, 끄면 보스가 대상을 놓쳐 포효를 시작할 때까지 재암살을 차단한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (DisplayName = "Use Assassination Cooldown"))
+	bool bUseAssassinationCooldown = true;
+
+	/** 암살 피해를 받은 시점부터 재암살까지의 대기 시간. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Assassination", meta = (EditCondition = "bUseAssassinationCooldown", ClampMin = "0.0", Units = "s"))
+	float AssassinationCooldown = 10.0f;
 
 	/** 실드가 켜져 있는 동안 보스 주위에 디버그 구를 그린다. 실드 이펙트(VFXComp)가 생겨 기본은 끈다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boss|Debug")
@@ -434,7 +507,22 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Boss|Energy Link")
 	bool bEnergyLinkActive = false;
 
+	// 체력은 먼저 임계값에 고정하고, 암살 연출이 끝나면 링크를 켠다.
+	int32 PendingEnergyLinkIndex = INDEX_NONE;
+	bool bClampingEnergyLinkHealth = false;
+	bool bReceivingAssassination = false;
+
+	// 다음 ReceiveAssassination이 고를 리액션 종류. 암살 어빌리티가 직전에 정하고, 적용하면 None으로 되돌린다.
+	EAssassinationType IncomingAssassinationType = EAssassinationType::None;
+
+	// 두 값을 함께 기록해 에디터에서 모드를 바꿔도 마지막 암살 이력을 유지한다.
+	double AssassinationReadyTime = 0.0;
+	bool bAssassinationBlockedUntilRoar = false;
+
 	FTimerHandle EnergyLinkTimer;
 
 	bool bCinematicLocked = false;
+	bool bGimmickAISuspended = false;
+
+	void ResumeAIFromGimmickStage();
 };

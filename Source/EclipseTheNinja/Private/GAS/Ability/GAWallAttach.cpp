@@ -12,6 +12,8 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimInstance.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "GAS/Ability/GALedgeHang.h"
 #include "GAS/Ability/GALedgeClimb.h"
@@ -148,6 +150,11 @@ void UGAWallAttach::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 		// 모서리에서 내려와 매달린 경우는 GALedgeHang이 높이 오프셋을 이미 줬으므로 벽 쪽(X)만 섞인다
 		BlendMeshTo(Player, BaseMeshRelativeLocation + FVector(AnimXOffset, 0.f, AnimZOffset));
 		bMeshOffsetApplied = true;
+	}
+
+	if (AttachSound && Player->GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySoundAtLocation(Player, AttachSound, Player->GetActorLocation());
 	}
 }
 

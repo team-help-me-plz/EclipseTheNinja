@@ -1,6 +1,9 @@
 #include "Level/BossGimmickPortal.h"
+#include "Level/BossGimmickStage.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "Character/BossEnemy.h"
+#include "Checkpoint/CheckpointSubsystem.h"
 #include "Character/PlayerCharacter.h"
 #include "Component/BossEnemyGimmickComponent.h"
 #include "Components/BoxComponent.h"
@@ -40,7 +43,9 @@ ABossGimmickPortal::ABossGimmickPortal()
 	PortalVFX->SetRelativeScale3D(FVector(0.3f));
 	PortalVFX->SetAutoActivate(false);
 
-	// 포탈과 레이저 에셋은 Blueprint 기본값 또는 레벨 인스턴스에서 지정한다.
+	// 입구와 레버 사이에도 보스와 같은 링크 이펙트를 사용한다.
+	LaserSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
+		TEXT("/Game/VFX/LaserFX_BP/Niagara/NormalType/NS_Laser_Twist_2.NS_Laser_Twist_2")));
 }
 
 void ABossGimmickPortal::BeginPlay()
@@ -79,8 +84,36 @@ void ABossGimmickPortal::SetLinkActive(bool bActive)
 
 bool ABossGimmickPortal::IsPortalOpen() const
 {
-	// 기믹 스테이지 포탈은 레버를 당긴 뒤에도 돌아갈 수 있어야 하므로 항상 열려 있다.
-	return PortalSide == EBossGimmickPortalSide::GimmickStage || bLinkActive;
+	// 기믹 방에서는 링크를 해제한 뒤에도 돌아갈 수 있어야 한다.
+	if (PortalSide == EBossGimmickPortalSide::GimmickStage) return true;
+	if (!bLinkActive) return false;
+
+	if (const ABossGimmickStage* Stage = ABossGimmickStage::FindByLinkId(GetWorld(), LinkId))
+	{
+		return Stage->IsReadyForEntry();
+	}
+
+	return true;
+}
+
+void ABossGimmickPortal::RefreshBossStageEntry()
+{
+	RefreshPortalVisual();
+	if (!IsPortalOpen()) return;
+	if (GetWorldTimerManager().IsTimerActive(TeleportTimer)) return;
+	if (GetWorld()->GetTimeSeconds() < EntryBlockedUntil) return;
+
+	TArray<AActor*> Players;
+	Trigger->GetOverlappingActors(Players, APlayerCharacter::StaticClass());
+	for (AActor* Actor : Players)
+	{
+		APlayerCharacter* Player = CastChecked<APlayerCharacter>(Actor);
+		if (Player->IsPlayerControlled())
+		{
+			BeginTeleport(Player);
+			return;
+		}
+	}
 }
 
 FTransform ABossGimmickPortal::GetArrivalTransform() const
@@ -91,6 +124,23 @@ FTransform ABossGimmickPortal::GetArrivalTransform() const
 void ABossGimmickPortal::BlockEntry(float Duration)
 {
 	EntryBlockedUntil = GetWorld()->GetTimeSeconds() + Duration;
+}
+
+void ABossGimmickPortal::RestoreCheckpointBeforeGimmick()
+{
+	if (!bHasCheckpointBeforeGimmick)
+	{
+		return;
+	}
+
+	UCheckpointSubsystem* CP = GetWorld() ? GetWorld()->GetSubsystem<UCheckpointSubsystem>() : nullptr;
+	if (!CP)
+	{
+		return;
+	}
+
+	CP->RestoreCheckpoint(CheckpointBeforeGimmick);
+	bHasCheckpointBeforeGimmick = false;
 }
 
 void ABossGimmickPortal::ToggleActivate_Implementation()
@@ -145,8 +195,13 @@ ABossGimmickPortal* ABossGimmickPortal::FindDestination() const
 {
 	for (TActorIterator<ABossGimmickPortal> It(GetWorld()); It; ++It)
 	{
-		if (*It != this && It->LinkId == LinkId && It->PortalSide != PortalSide)
+		if (*It != this && It->LinkId == LinkId && It->PortalSide != PortalSide && It->HasActorBegunPlay())
 		{
+			// 출구 전용 포탈은 보스 스테이지에서 들어갈 도착지가 아니다
+			if (It->bExitOnly)
+			{
+				continue;
+			}
 			return *It;
 		}
 	}
@@ -207,6 +262,11 @@ void ABossGimmickPortal::FinishTeleport()
 
 	APlayerController* PC = Cast<APlayerController>(Player->GetController());
 
+	if (!IsPortalOpen())
+	{
+		Destination = nullptr;
+	}
+
 	if (IsValid(Destination))
 	{
 		// 도착한 포탈에 바로 다시 들어가지 않게 막는다.
@@ -219,7 +279,7 @@ void ABossGimmickPortal::FinishTeleport()
 		}
 
 		// 카메라 보정(SmoothTeleport)은 쓰지 않는다. 먼 거리라 화면이 끌려가므로 어두운 동안 바로 따라붙게 둔다.
-		Player->SetActorLocationAndRotation(
+		const bool bTeleported = Player->SetActorLocationAndRotation(
 			Arrival.GetLocation(),
 			Arrival.GetRotation(),
 			false,
@@ -227,7 +287,11 @@ void ABossGimmickPortal::FinishTeleport()
 			ETeleportType::ResetPhysics
 		);
 
-		if (PC)
+		if (!bTeleported)
+		{
+			Destination = nullptr;
+		}
+		else if (PC)
 		{
 			PC->SetControlRotation(Arrival.Rotator());
 		}
@@ -251,7 +315,51 @@ void ABossGimmickPortal::FinishTeleport()
 
 	if (IsValid(Destination))
 	{
+		HandleStageChange(Destination);
 		Destination->OnPlayerArrived.Broadcast(Destination, Player);
+	}
+}
+
+void ABossGimmickPortal::HandleStageChange(ABossGimmickPortal* Destination)
+{
+	UWorld* World = GetWorld();
+	if (!World || !IsValid(Destination))
+	{
+		return;
+	}
+
+	const bool bEnteringGimmick = Destination->GetPortalSide() == EBossGimmickPortalSide::GimmickStage;
+	ABossGimmickPortal* RoomPortal = bEnteringGimmick ? Destination : this;
+	if (ABossGimmickStage* Stage = ABossGimmickStage::FindOwningStage(RoomPortal))
+	{
+		Stage->SetPlayerInside(bEnteringGimmick);
+	}
+
+	// 링크 제한시간은 기믹 방에 있는 동안에도 계속 흐른다. 기믹 방 공략 시간은 보스의 EnergyLinkTimeLimit로 맞춘다.
+	if (UBossEnemyGimmickComponent* Gimmick = UBossEnemyGimmickComponent::FindByLinkId(this, LinkId))
+	{
+		if (ABossEnemy* Boss = Cast<ABossEnemy>(Gimmick->GetOwner()))
+		{
+			Boss->SetPlayerInGimmickStage(bEnteringGimmick);
+		}
+	}
+
+	// 기믹 방 체크포인트는 그 방 안에서만 쓴다. 보스 스테이지로 돌아오면 들어가기 전 체크포인트로 되돌린다
+	UCheckpointSubsystem* CP = World->GetSubsystem<UCheckpointSubsystem>();
+	if (!CP)
+	{
+		return;
+	}
+
+	ABossGimmickPortal* BossSide = bEnteringGimmick ? this : Destination;
+	if (bEnteringGimmick)
+	{
+		BossSide->CheckpointBeforeGimmick = CP->GetCurrentCheckpoint();
+		BossSide->bHasCheckpointBeforeGimmick = true;
+	}
+	else
+	{
+		BossSide->RestoreCheckpointBeforeGimmick();
 	}
 }
 
@@ -272,15 +380,12 @@ void ABossGimmickPortal::RefreshPortalVisual()
 
 void ABossGimmickPortal::RefreshStageLaser()
 {
-	const bool bShowLaser = bLinkActive
-		&& PortalSide == EBossGimmickPortalSide::GimmickStage
-		&& IsValid(StageLever);
-
-	if (!bShowLaser)
+	if (!bLinkActive || !bGenerateStageEnergyLink || bExitOnly
+		|| PortalSide != EBossGimmickPortalSide::GimmickStage || !IsValid(StageLever))
 	{
 		if (LaserComp)
 		{
-			LaserComp->Deactivate();
+			LaserComp->DeactivateImmediate();
 		}
 		return;
 	}
