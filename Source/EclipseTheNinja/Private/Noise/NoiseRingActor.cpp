@@ -11,6 +11,17 @@
 #include "Engine/LocalPlayer.h"
 #include "Components/SphereComponent.h"
 #include "Engine/OverlapResult.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "Engine/Engine.h"
+#include "EngineUtils.h"
+#include "UObject/UObjectIterator.h"
+
+namespace
+{
+	// SpawnNoiseWave로 띄운 파동 컴포넌트. 컷신·암살이 시작될 때 이 목록으로 찾아 바로 끈다
+	TArray<TWeakObjectPtr<UNiagaraComponent>>	GActiveNoiseWaves;
+}
 
 // Sets default values
 ANoiseRingActor::ANoiseRingActor()
@@ -83,6 +94,17 @@ void ANoiseRingActor::Play(const FVector& InLocation, const float InRadius, cons
 	// 표시에 실패해도 판정은 해야 하므로 위젯 확인보다 먼저 알린다.
 	this->NotifyEnemies(InLocation, InRadius, InStrength);
 
+	// 파동 이펙트는 위젯과 별개로 자체 수명으로 끝나므로 위젯 확인 전에 띄운다.
+	this->SpawnNoiseWave(InLocation, InRadius);
+
+	// 위젯을 쓰지 않으면 기다릴 애니메이션이 없으므로 다음 틱에 바로 반환한다.
+	if (!this->bShowRingWidget)
+	{
+		this->NoiseWidgetComponent->SetVisibility(false);
+		GetWorldTimerManager().SetTimerForNextTick(this, &ANoiseRingActor::ReleaseToPool);
+		return ;
+	}
+
 	// 풀이 등록되지 않아 일반 스폰된 경우 OnSpawnFromPool이 호출되지 않으므로 여기서도 확인한다.
 	if (!this->EnsureWidget())
 	{
@@ -133,6 +155,40 @@ void ANoiseRingActor::NotifyEnemies(const FVector& InLocation, const float InRad
 	}
 }
 
+void ANoiseRingActor::SpawnNoiseWave(const FVector& InLocation, const float InRadius)
+{
+	if (!this->NoiseWaveSystem)
+	{
+		return ;
+	}
+
+	// 링 액터는 풀로 재사용되므로 이펙트는 붙이지 않고 위치에 따로 띄워 끝나면 자동 반환시킨다.
+	// 반경을 넣은 뒤 재생해야 첫 프레임부터 크기가 맞으므로 자동 활성화는 끈다.
+	UNiagaraComponent* WaveComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		this,
+		this->NoiseWaveSystem,
+		InLocation,
+		FRotator::ZeroRotator,
+		FVector(1.f),
+		true,	// bAutoDestroy
+		false,	// bAutoActivate
+		ENCPoolMethod::AutoRelease,
+		true	// bPreCullCheck
+	);
+
+	if (!WaveComponent)
+	{
+		return ;
+	}
+
+	WaveComponent->SetVariableFloat(this->NoiseRadiusParamName, InRadius);
+	WaveComponent->Activate(true);
+
+	// 끝난(무효) 항목은 정리하면서 새 파동을 기록한다
+	GActiveNoiseWaves.RemoveAll([](const TWeakObjectPtr<UNiagaraComponent>& InWave) { return (!InWave.IsValid()); });
+	GActiveNoiseWaves.AddUnique(WaveComponent);
+}
+
 bool ANoiseRingActor::CalcScreenDiameter(APlayerController* InPC, const FVector& InLocation, const float InRadius, float& OutDiameter)
 {
 	if (!InPC)
@@ -171,6 +227,74 @@ bool ANoiseRingActor::EnsureWidget()
 		return (true);
 	}
 	return (false);
+}
+
+void ANoiseRingActor::StopAllActive(const UObject* WorldContextObject)
+{
+	UWorld*	World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	if (!World)
+	{
+		return ;
+	}
+
+	// 링: 재생 중인 것만 풀로 돌려보낸다 (반환 시 애니메이션을 멈추고 위젯을 숨긴다)
+	TSet<UNiagaraSystem*>	WaveSystems;
+	int32	RingCount = 0;
+	int32	RingTotal = 0;
+	for (TActorIterator<ANoiseRingActor> It(World); It; ++It)
+	{
+		ANoiseRingActor*	Ring = *It;
+		++RingTotal;
+		if (Ring->NoiseWaveSystem)
+		{
+			WaveSystems.Add(Ring->NoiseWaveSystem);
+		}
+		if (Ring->bIsPlaying || Ring->NoiseWidgetComponent->IsVisible())
+		{
+			Ring->bIsPlaying = false;
+			Ring->NoiseWidgetComponent->SetVisibility(false);
+			if (Ring->NoiseRingWidget.IsValid())
+			{
+				Ring->NoiseRingWidget->StopAllAnimations();
+			}
+			UObjectPoolSubsystem::Release(Ring);
+			++RingCount;
+		}
+	}
+
+	// 파동 이펙트: 띄울 때 기록해 둔 컴포넌트를 활성 여부와 상관없이 끄고 숨긴다.
+	// (방출이 끝나 IsActive가 false여도 남은 입자가 화면에 남을 수 있다)
+	int32	WaveCount = 0;
+	int32	WaveActive = 0;
+	for (const TWeakObjectPtr<UNiagaraComponent>& WeakWave : GActiveNoiseWaves)
+	{
+		UNiagaraComponent*	Wave = WeakWave.Get();
+		if (!IsValid(Wave) || Wave->GetWorld() != World)
+		{
+			continue;
+		}
+		WaveActive += Wave->IsActive() ? 1 : 0;
+		Wave->DeactivateImmediate();
+		++WaveCount;
+	}
+	GActiveNoiseWaves.Reset();
+
+	// 기록 밖(다른 경로로 띄운 같은 파동)도 같은 시스템이면 끈다
+	for (TObjectIterator<UNiagaraComponent> It; It; ++It)
+	{
+		UNiagaraComponent*	Wave = *It;
+		if (IsValid(Wave) && Wave->GetWorld() == World && Wave->IsActive() && WaveSystems.Contains(Wave->GetAsset()))
+		{
+			Wave->DeactivateImmediate();
+			++WaveCount;
+		}
+	}
+
+	if (RingCount > 0 || WaveCount > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[ANoiseRingActor::StopAllActive] 링 %d개(전체 %d), 파동 %d개(그중 재생 중 %d) 정리"),
+			RingCount, RingTotal, WaveCount, WaveActive);
+	}
 }
 
 void ANoiseRingActor::OnNoiseEnd()

@@ -6,7 +6,10 @@
 #include "Components/StaticMeshComponent.h"
 #include "CuttableComponent.generated.h"
 
-DECLARE_MULTICAST_DELEGATE(FOnRopeCut);
+class APawn;
+
+// 줄을 끊은 폰(표창을 던진 폰, 스위치를 작동시킨 폰). 알 수 없으면 nullptr
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnRopeCut, APawn*);
 
 /**
  *
@@ -19,7 +22,7 @@ class ECLIPSETHENINJA_API UCuttableComponent : public UStaticMeshComponent
 public:
 	UCuttableComponent();
 
-	void	CutRope();
+	void	CutRope(APawn* InCutter = nullptr);
 	void	RestoreRope();
 	void	SetRopeLength(const float InLength);
 

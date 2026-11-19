@@ -7,6 +7,7 @@
 #include "TutorialPromptTrigger.generated.h"
 
 class UBoxComponent;
+class ABaseDoor;
 
 /**
  * 튜토리얼 안내 트리거 액터.
@@ -57,8 +58,15 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial")
     bool bShowOnce = true;
 
+    // 지정하면 이 문이 닫혀 있을 때만 문구를 띄운다 (예: 레버로 여는 문 앞 안내). 열린 뒤에는 들어와도 띄우지 않는다
+    UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Condition")
+    TObjectPtr<ABaseDoor> ShowOnlyWhileDoorClosed = nullptr;
+
 private:
     bool bHasShown = false;
+
+    // 이 시각(월드 초) 전에는 다시 띄우지 않는다. 문구가 떠 있는 동안의 중복 표시를 막는다
+    double NextShowTime = 0.0;
 
     // 컷신이 끝날 때까지 문구 표시를 미루는 타이머
     FTimerHandle DeferredPromptTimer;

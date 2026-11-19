@@ -16,6 +16,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "TimerManager.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 UBossEnemyVFXComponent::UBossEnemyVFXComponent()
 {
@@ -121,7 +122,7 @@ void UBossEnemyVFXComponent::CreateTrail()
 		return;
 	}
 
-	UNiagaraSystem* System = TrailSystem.LoadSynchronous();
+	UNiagaraSystem* System = UEclipseAssetManager::GetAsset(TrailSystem);
 	if (!System)
 	{
 		return;
@@ -148,7 +149,7 @@ void UBossEnemyVFXComponent::CreateTrail()
 		TrailComp->SetCustomTimeDilation(1.0f / FMath::Max(0.1f, TrailLifetimeScale));
 
 		// 원본 머티리얼은 그대로 두고, 보스 트레일에만 색을 바꾼 머티리얼을 넣는다.
-		if (UMaterialInterface* BaseMaterial = TrailMaterial.LoadSynchronous())
+		if (UMaterialInterface* BaseMaterial = UEclipseAssetManager::GetAsset(TrailMaterial))
 		{
 			TrailMID = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 			TrailMID->SetVectorParameterValue(TEXT("Color"), TrailColor);
@@ -211,7 +212,7 @@ void UBossEnemyVFXComponent::HandleEnergyLinkActivated(int32 LinkIndex)
 
 	if (!ShieldComp)
 	{
-		UNiagaraSystem* System = ShieldSystem.LoadSynchronous();
+		UNiagaraSystem* System = UEclipseAssetManager::GetAsset(ShieldSystem);
 		if (!System)
 		{
 			return;
@@ -472,7 +473,7 @@ UNiagaraComponent* UBossEnemyVFXComponent::SpawnOneShot(
 	float ActiveTime
 ) const
 {
-	UNiagaraSystem* LoadedSystem = System.LoadSynchronous();
+	UNiagaraSystem* LoadedSystem = UEclipseAssetManager::GetAsset(System);
 	UWorld* World = GetWorld();
 	if (!LoadedSystem || !World)
 	{

@@ -2,6 +2,7 @@
 
 #include "Level/TutorialSequenceTrigger.h"
 
+#include "AssetManagement/EclipseStageManagerSubsystem.h"
 #include "Character/PlayerCharacter.h"
 #include "Character/PlayerCharacterController.h"
 #include "Checkpoint/Checkpoint.h"
@@ -12,19 +13,24 @@
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Save/GameSaveSubsystem.h"
 #include "Subsystem/MapNameSubsystem.h"
-#include "Widgets/SkipPromptWidget.h"
+#include "Widgets/HUDWidget.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Noise/NoiseRingActor.h"
+#include "EngineUtils.h"
 #include "Widgets/InputPromptWidget.h"
+#include "Widgets/QTEPulseRingWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/ArrowComponent.h"
 #include "Components/TextBlock.h"
 #include "Components/SizeBox.h"
 #include "Components/BoxComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputComponent.h"
@@ -42,6 +48,27 @@
 #include "LevelSequencePlayer.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+
+namespace
+{
+    // 이 태그가 붙은 레벨 액터(조작 안내 그림·키 표시 등)는 컷신이 재생되는 동안 숨긴다
+    const FName HideInCinematicTag(TEXT("HideInCinematic"));
+
+    void SetCinematicHiddenActorsHidden(UWorld* InWorld, bool bInHidden)
+    {
+        if (!InWorld)
+        {
+            return;
+        }
+        for (TActorIterator<AActor> It(InWorld); It; ++It)
+        {
+            if (It->ActorHasTag(HideInCinematicTag))
+            {
+                It->SetActorHiddenInGame(bInHidden);
+            }
+        }
+    }
+}
 
 ATutorialSequenceTrigger::ATutorialSequenceTrigger()
 {
@@ -64,27 +91,22 @@ ATutorialSequenceTrigger::ATutorialSequenceTrigger()
     this->QTEPrompt->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     this->QTEPrompt->SetHiddenInGame(true);
 
+    this->QTEPulseRing = CreateDefaultSubobject<UWidgetComponent>(TEXT("QTEPulseRing"));
+    this->QTEPulseRing->SetupAttachment(this->QTEPrompt);
+    this->QTEPulseRing->SetWidgetSpace(EWidgetSpace::Screen);
+    this->QTEPulseRing->SetWidgetClass(UQTEPulseRingWidget::StaticClass());
+    // 파동이 퍼질 자리까지 그릴 수 있게 넉넉한 크기로 두고, 가운데를 키 안내 위치에 맞춘다
+    this->QTEPulseRing->SetDrawAtDesiredSize(false);
+    this->QTEPulseRing->SetDrawSize(FIntPoint(512, 512));
+    this->QTEPulseRing->SetPivot(FVector2D(0.5f, 0.5f));
+    this->QTEPulseRing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    this->QTEPulseRing->SetHiddenInGame(true);
+
     this->SequenceOrigin = CreateDefaultSubobject<UArrowComponent>(TEXT("SequenceOrigin"));
     this->SequenceOrigin->SetupAttachment(this->SceneRoot);
     this->SequenceOrigin->ArrowColor = FColor::Cyan;
     this->SequenceOrigin->ArrowSize = 2.0f;
     this->SequenceOrigin->SetHiddenInGame(true);
-
-    this->SkipPromptClass = USkipPromptWidget::StaticClass();
-
-    // 건너뛰기 입력 기본 에셋. 레벨에 놓인 인스턴스마다 바꿀 수 있다
-    static ConstructorHelpers::FObjectFinder<UInputAction> SkipActionFinder(
-        TEXT("/Game/Input/IA_SkipCinematic.IA_SkipCinematic"));
-    static ConstructorHelpers::FObjectFinder<UInputMappingContext> SkipContextFinder(
-        TEXT("/Game/Input/IMC_SkipCinematic.IMC_SkipCinematic"));
-    if (SkipActionFinder.Succeeded())
-    {
-        this->SkipAction = SkipActionFinder.Object;
-    }
-    if (SkipContextFinder.Succeeded())
-    {
-        this->SkipMappingContext = SkipContextFinder.Object;
-    }
 }
 
 void ATutorialSequenceTrigger::OnConstruction(const FTransform& Transform)
@@ -106,7 +128,11 @@ void ATutorialSequenceTrigger::ApplyMarkerOrigin()
         return;
     }
 
-    const FVector Origin = this->SequenceOrigin->GetComponentLocation() - this->SequenceKeyAnchor;
+    // PlayerEndPoint가 있으면 그 지점을 마커로 쓴다. 트리거 상자를 옮겨도 연출용 닌자는 PlayerEndPoint 쪽으로 떨어진다
+    const FVector MarkerLocation = IsValid(this->PlayerEndPoint)
+        ? this->PlayerEndPoint->GetActorLocation()
+        : this->SequenceOrigin->GetComponentLocation();
+    const FVector Origin = MarkerLocation - this->SequenceKeyAnchor;
     if (this->SequenceActor->bOverrideInstanceData && InstanceData->TransformOrigin.GetLocation().Equals(Origin, 0.01f)
         && InstanceData->TransformOrigin.GetRotation().IsIdentity())
     {
@@ -131,7 +157,20 @@ void ATutorialSequenceTrigger::BeginPlay()
     {
         // 시작 컷신은 오버랩이 필요 없으므로 트리거를 끈다
         this->SequenceTrigger->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-        PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
+
+        // 스테이지 로딩 화면이 떠 있는 동안 재생하면 앞부분이 가려지므로, 로드가 끝난 뒤 재생한다 (이미 끝났으면 바로 재생)
+        if (UEclipseStageManagerSubsystem* Stage = GetWorld()->GetSubsystem<UEclipseStageManagerSubsystem>())
+        {
+            Stage->CallOrRegister_OnStageLoaded(FOnEclipseStageLoaded::FDelegate::CreateWeakLambda(this,
+                [this](const UEclipseStageDefinition*)
+                {
+                    PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
+                }));
+        }
+        else
+        {
+            PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
+        }
         return;
     }
 
@@ -255,13 +294,23 @@ void ATutorialSequenceTrigger::PlaySequence(APlayerController* PlayerController)
         }
     }
 
+    // 건너뛸 수 있는 재생이면 화면 위젯을 숨기기 전에 HUD의 건너뛰기 안내를 찾아, HUD 안에서 안내만 남기고 숨기게 한다
+    this->bSkipped = false;
+    BeginSkipInput();
+
     // 재생 설정의 HUD 숨김은 AHUD만 숨기므로 체력바·스킬 아이콘 같은 UMG 위젯은 직접 숨긴다
     HideScreenWidgets();
+    // 컷신 전에 떠 있던 소음 링·파동 이펙트는 연출 화면에 남지 않게 바로 치운다
+    ANoiseRingActor::StopAllActive(this);
+    // 레벨에 세워 둔 조작 안내 그림·키 표시도 연출 화면에 나오지 않게 숨긴다
+    SetCinematicHiddenActorsHidden(GetWorld(), true);
     // 레벨 시작과 함께 재생하면 HUD 위젯이 아직 만들어지기 전이므로, 0.1초 간격으로 몇 번 더 숨긴다
+    // 재생 직후 착지 등으로 막 생긴 소음 표시도 같이 치운다
     this->WidgetHideRetries = 10;
     GetWorldTimerManager().SetTimer(this->WidgetHideTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
     {
         HideScreenWidgets();
+        ANoiseRingActor::StopAllActive(this);
         if (--this->WidgetHideRetries <= 0 || !IsPlaying())
         {
             GetWorldTimerManager().ClearTimer(this->WidgetHideTimer);
@@ -277,9 +326,6 @@ void ATutorialSequenceTrigger::PlaySequence(APlayerController* PlayerController)
     SequencePlayer->SetPlaybackPosition(FMovieSceneSequencePlaybackParams(this->PendingStartTime, EUpdatePositionMethod::Jump));
     SequencePlayer->SetPlayRate(1.0f);
     SequencePlayer->Play();
-
-    this->bSkipped = false;
-    BeginSkipInput();
 
     if (this->StartFadeInDuration > 0.0f && IsValid(PlayerController) && IsValid(PlayerController->PlayerCameraManager))
     {
@@ -360,6 +406,14 @@ void ATutorialSequenceTrigger::BeginQTE()
     }
 
     UUserWidget* PromptWidget = this->QTEPrompt->GetUserWidgetObject();
+
+    // 커서가 보이는 입력 모드라, 안내 위젯 위를 클릭하면 위젯이 클릭을 가져가 QTE 입력이 들어오지 않는다.
+    // 안내는 보여 주기만 하고 클릭은 게임으로 흘려보낸다
+    if (IsValid(PromptWidget))
+    {
+        PromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+    }
+
     if (UInputPromptWidget* InputPrompt = Cast<UInputPromptWidget>(PromptWidget))
     {
         if (this->bShowQTEInputGlyph)
@@ -405,8 +459,66 @@ void ATutorialSequenceTrigger::BeginQTE()
             }
         }
     }
-    this->QTEPrompt->SetHiddenInGame(false);
+    SetQTEPromptVisible(true);
     SetQTEOutlineVisible(true);
+
+    // 보조 입력 경로: 위젯이 클릭을 가져가거나 액션 상태가 꼬여 Started가 오지 않아도
+    // QTE 액션에 연결된 키가 새로 눌리면 바로 받는다. 마우스 버튼은 Slate가 아는 실제 눌림으로 본다
+    TArray<FKey> QTEKeys;
+    if (const ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+    {
+        if (const UEnhancedInputLocalPlayerSubsystem* InputSubsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+        {
+            QTEKeys = InputSubsystem->QueryKeysMappedToAction(this->QTEAction);
+        }
+    }
+    if (!QTEKeys.IsEmpty())
+    {
+        TWeakObjectPtr<APlayerController> WeakController = PlayerController;
+        auto IsKeyDown = [WeakController](const FKey& InKey)
+        {
+            if (InKey.IsMouseButton() && FSlateApplication::IsInitialized()
+                && FSlateApplication::Get().GetPressedMouseButtons().Contains(InKey))
+            {
+                return true;
+            }
+            return WeakController.IsValid() && WeakController->IsInputKeyDown(InKey);
+        };
+
+        // QTE에 들어설 때 이미 눌려 있던 키는 한 번 뗀 뒤 다시 눌러야 인정한다
+        TSharedRef<TSet<FKey>> HeldKeys = MakeShared<TSet<FKey>>();
+        for (const FKey& Key : QTEKeys)
+        {
+            if (IsKeyDown(Key))
+            {
+                HeldKeys->Add(Key);
+            }
+        }
+
+        GetWorldTimerManager().SetTimer(this->QTETimer, FTimerDelegate::CreateWeakLambda(this, [this, QTEKeys, HeldKeys, IsKeyDown]()
+        {
+            if (!this->bWaitingForQTE)
+            {
+                GetWorldTimerManager().ClearTimer(this->QTETimer);
+                return;
+            }
+            for (const FKey& Key : QTEKeys)
+            {
+                if (!IsKeyDown(Key))
+                {
+                    HeldKeys->Remove(Key);
+                    continue;
+                }
+                if (!HeldKeys->Contains(Key))
+                {
+                    UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::BeginQTE()] %s : 키 직접 감지로 QTE 입력 (%s)"), *GetActorNameOrLabel(), *Key.ToString());
+                    GetWorldTimerManager().ClearTimer(this->QTETimer);
+                    OnQTEInput();
+                    return;
+                }
+            }
+        }), 1.0f / 120.0f, true);
+    }
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::BeginQTE()] %s : QTE 입력 대기"), *GetActorNameOrLabel());
 }
@@ -420,7 +532,7 @@ void ATutorialSequenceTrigger::OnQTEInput()
     this->bWaitingForQTE = false;
     GetWorldTimerManager().ClearTimer(this->QTEFreezeTimer);
 
-    this->QTEPrompt->SetHiddenInGame(true);
+    SetQTEPromptVisible(false);
     SetQTEOutlineVisible(false);
     // 건너뛰기 입력은 남기고 QTE 바인딩만 뺀다
     RefreshTriggerInput();
@@ -436,6 +548,26 @@ void ATutorialSequenceTrigger::OnQTEInput()
     }
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::OnQTEInput()] %s : QTE 입력, 재생 재개"), *GetActorNameOrLabel());
+}
+
+void ATutorialSequenceTrigger::SetQTEPromptVisible(bool bVisible)
+{
+    this->QTEPrompt->SetHiddenInGame(!bVisible);
+
+    UQTEPulseRingWidget* Ring = Cast<UQTEPulseRingWidget>(this->QTEPulseRing->GetUserWidgetObject());
+    const bool bShowRing = bVisible && this->bAnimateQTEPrompt && IsValid(Ring);
+    this->QTEPulseRing->SetHiddenInGame(!bShowRing);
+    if (!bShowRing)
+    {
+        return;
+    }
+
+    // 키 안내 위젯 크기를 따라 그 둘레에서 퍼지게 하고, 뜰 때마다 첫 겹부터 다시 퍼뜨린다
+    Ring->SetSource(this->QTEPrompt->GetUserWidgetObject(), this->QTEPrompt->GetPivot());
+    Ring->Period = this->QTEPromptPulsePeriod;
+    Ring->Spread = this->QTEPromptPulseSpread;
+    Ring->RingColor = this->QTEPromptPulseColor;
+    Ring->Restart();
 }
 
 void ATutorialSequenceTrigger::SetQTEOutlineVisible(bool bVisible)
@@ -593,6 +725,8 @@ void ATutorialSequenceTrigger::OnSequencePaused()
 
     // 마지막 컷 위에 결과를 띄우는 동안 ESC는 다시 일시정지 메뉴가 받게 한다
     EndSkipInput();
+    // 건너뛰기 안내 때문에 남겨 둔 HUD도 마지막 컷 동안은 숨긴다
+    HideScreenWidgets();
     MarkSequenceSeen();
 
     this->OnSequenceEnded.Broadcast(this);
@@ -604,8 +738,16 @@ void ATutorialSequenceTrigger::HideScreenWidgets()
     UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, TopLevelWidgets, UUserWidget::StaticClass(), true);
     for (UUserWidget* Widget : TopLevelWidgets)
     {
-        if (IsValid(Widget) && Widget->IsVisible() && Widget != this->QTEPrompt->GetUserWidgetObject() && Widget != this->SkipPrompt
-            && !this->HiddenWidgets.Contains(Widget))
+        if (!IsValid(Widget) || Widget == this->QTEPrompt->GetUserWidgetObject())
+        {
+            continue;
+        }
+        // 건너뛸 수 있는 재생이면 HUD는 숨기지 않는다. HUD가 건너뛰기 안내만 남기고 나머지를 직접 숨긴다
+        if (this->bSkipEnabled && Widget->IsA<UHUDWidget>())
+        {
+            continue;
+        }
+        if (Widget->IsVisible() && !this->HiddenWidgets.Contains(Widget))
         {
             this->HiddenWidgets.Add(Widget, Widget->GetVisibility());
             Widget->SetVisibility(ESlateVisibility::Hidden);
@@ -644,7 +786,7 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
     if (this->bWaitingForQTE)
     {
         this->bWaitingForQTE = false;
-        this->QTEPrompt->SetHiddenInGame(true);
+        SetQTEPromptVisible(false);
         SetQTEOutlineVisible(false);
         DisableInput(this->BlockedController.Get());
     }
@@ -668,6 +810,7 @@ void ATutorialSequenceTrigger::OnSequenceFinished()
         }
     }
     this->HiddenWidgets.Reset();
+    SetCinematicHiddenActorsHidden(GetWorld(), false);
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::OnSequenceFinished()] %s : 시퀀스 종료, 조작 반환"), *GetActorNameOrLabel());
 
@@ -704,43 +847,23 @@ void ATutorialSequenceTrigger::MarkSequenceSeen() const
 
 void ATutorialSequenceTrigger::BeginSkipInput()
 {
-    APlayerController* PlayerController = this->BlockedController.Get();
-    if (!this->bAllowSkip || this->bSkipEnabled || !IsValid(PlayerController))
+    APlayerCharacterController* CharacterController = Cast<APlayerCharacterController>(this->BlockedController.Get());
+    if (!this->bAllowSkip || this->bSkipEnabled || !IsValid(CharacterController))
     {
-        return;
-    }
-    if (!IsValid(this->SkipAction) || !IsValid(this->SkipMappingContext))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[ATutorialSequenceTrigger::BeginSkipInput()] %s : SkipAction 또는 SkipMappingContext가 비어 있어 건너뛸 수 없습니다."), *GetActorNameOrLabel());
         return;
     }
 
-    // 처음 보는 컷신은 건너뛸 수 없다
+    // 처음 보는 컷신은 건너뛸 수 없다. 이때는 건너뛰기 위젯도 뜨지 않고 ESC는 일시정지 메뉴가 받는다
     const UGameSaveSubsystem* SaveSubsystem = UGameSaveSubsystem::Get(this);
     if (!SaveSubsystem || !SaveSubsystem->HasSeenSequence(GetSeenSequenceKey()))
     {
         return;
     }
 
-    ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer();
-    UEnhancedInputLocalPlayerSubsystem* InputSubsystem = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
-    if (!InputSubsystem)
-    {
-        return;
-    }
-
-    // 트리거가 없는 매핑은 키가 눌려 있는 동안 매 프레임 Triggered가 온다. 누른 시간은 FInputActionInstance가 잰다
-    // 게임플레이 IMC의 같은 키(IA_Pause)보다 먼저 처리되도록 높은 우선순위로 넣는다
-    InputSubsystem->AddMappingContext(this->SkipMappingContext, 1000);
-
-    // ESC는 일시정지 메뉴도 여는 키라서, 건너뛰기를 받는 동안에는 메뉴를 막는다
-    if (APlayerCharacterController* CharacterController = Cast<APlayerCharacterController>(PlayerController))
-    {
-        CharacterController->PushPauseMenuBlock();
-    }
-
+    // 입력·누른 시간·표시는 HUD의 건너뛰기 위젯이 맡는다. 여기서는 켜고, 끝까지 눌렀다는 요청만 받는다
     this->bSkipEnabled = true;
-    RefreshTriggerInput();
+    this->SkipRequestHandle = CharacterController->OnCinematicSkipRequested.AddUObject(this, &ATutorialSequenceTrigger::SkipSequence);
+    CharacterController->SetCinematicSkipAvailable(true);
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialSequenceTrigger::BeginSkipInput()] %s : 이미 본 시퀀스, 건너뛰기 허용"), *GetActorNameOrLabel());
 }
@@ -753,32 +876,12 @@ void ATutorialSequenceTrigger::EndSkipInput()
     }
     this->bSkipEnabled = false;
 
-    if (IsValid(this->SkipPrompt))
+    if (APlayerCharacterController* CharacterController = Cast<APlayerCharacterController>(this->BlockedController.Get()))
     {
-        this->SkipPrompt->RemoveFromParent();
+        CharacterController->OnCinematicSkipRequested.Remove(this->SkipRequestHandle);
+        CharacterController->SetCinematicSkipAvailable(false);
     }
-    this->SkipPrompt = nullptr;
-
-    APlayerController* PlayerController = this->BlockedController.Get();
-    if (!IsValid(PlayerController))
-    {
-        return;
-    }
-
-    if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
-    {
-        if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
-        {
-            InputSubsystem->RemoveMappingContext(this->SkipMappingContext);
-        }
-    }
-
-    if (APlayerCharacterController* CharacterController = Cast<APlayerCharacterController>(PlayerController))
-    {
-        CharacterController->PopPauseMenuBlock();
-    }
-
-    RefreshTriggerInput();
+    this->SkipRequestHandle.Reset();
 }
 
 void ATutorialSequenceTrigger::RefreshTriggerInput()
@@ -789,15 +892,13 @@ void ATutorialSequenceTrigger::RefreshTriggerInput()
         return;
     }
 
-    const bool bNeedQTE = this->bWaitingForQTE && IsValid(this->QTEAction);
-    const bool bNeedSkip = this->bSkipEnabled && IsValid(this->SkipAction);
-    if (!bNeedQTE && !bNeedSkip)
+    if (!this->bWaitingForQTE || !IsValid(this->QTEAction))
     {
         DisableInput(PlayerController);
         return;
     }
 
-    // 폰 입력은 막혀 있으므로 이 액터의 입력 컴포넌트를 컨트롤러 입력 스택에 올려 필요한 키만 받는다
+    // 폰 입력은 막혀 있으므로 이 액터의 입력 컴포넌트를 컨트롤러 입력 스택에 올려 QTE 키만 받는다
     EnableInput(PlayerController);
     UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(this->InputComponent);
     if (!EnhancedInput)
@@ -809,61 +910,7 @@ void ATutorialSequenceTrigger::RefreshTriggerInput()
 
     // 입력 처리 중에 불려도 엔진이 실행할 바인딩을 복사해 두므로 여기서 지워도 안전하다
     EnhancedInput->ClearActionBindings();
-    if (bNeedQTE)
-    {
-        EnhancedInput->BindAction(this->QTEAction, ETriggerEvent::Started, this, &ATutorialSequenceTrigger::OnQTEInput);
-    }
-    if (bNeedSkip)
-    {
-        EnhancedInput->BindAction(this->SkipAction, ETriggerEvent::Triggered, this, &ATutorialSequenceTrigger::OnSkipHeld);
-        EnhancedInput->BindAction(this->SkipAction, ETriggerEvent::Completed, this, &ATutorialSequenceTrigger::OnSkipReleased);
-        EnhancedInput->BindAction(this->SkipAction, ETriggerEvent::Canceled, this, &ATutorialSequenceTrigger::OnSkipReleased);
-    }
-}
-
-void ATutorialSequenceTrigger::OnSkipHeld(const FInputActionInstance& Instance)
-{
-    if (!this->bSkipEnabled || this->bSkipped)
-    {
-        return;
-    }
-
-    const float Ratio = Instance.GetElapsedTime() / FMath::Max(this->SkipHoldTime, KINDA_SMALL_NUMBER);
-
-    if (!IsValid(this->SkipPrompt) && this->SkipPromptClass)
-    {
-        APlayerController* PlayerController = this->BlockedController.Get();
-        this->SkipPrompt = PlayerController ? CreateWidget<USkipPromptWidget>(PlayerController, this->SkipPromptClass) : nullptr;
-        if (IsValid(this->SkipPrompt) && this->SkipPrompt->AddToPlayerScreen(50))
-        {
-            // 화면 우측 상단 모서리에 붙인다
-            const FVector2D Margin = this->SkipPrompt->GetScreenMargin();
-            this->SkipPrompt->SetAnchorsInViewport(FAnchors(1.0f, 0.0f));
-            this->SkipPrompt->SetAlignmentInViewport(FVector2D(1.0f, 0.0f));
-            this->SkipPrompt->SetPositionInViewport(FVector2D(-Margin.X, Margin.Y), false);
-            this->SkipPrompt->SetDesiredSizeInViewport(this->SkipPrompt->GetBoxSize());
-        }
-    }
-
-    if (IsValid(this->SkipPrompt))
-    {
-        this->SkipPrompt->SetVisibility(ESlateVisibility::HitTestInvisible);
-        this->SkipPrompt->SetProgress(Ratio);
-    }
-
-    if (Ratio >= 1.0f)
-    {
-        SkipSequence();
-    }
-}
-
-void ATutorialSequenceTrigger::OnSkipReleased()
-{
-    if (IsValid(this->SkipPrompt))
-    {
-        this->SkipPrompt->SetProgress(0.0f);
-        this->SkipPrompt->SetVisibility(ESlateVisibility::Collapsed);
-    }
+    EnhancedInput->BindAction(this->QTEAction, ETriggerEvent::Started, this, &ATutorialSequenceTrigger::OnQTEInput);
 }
 
 void ATutorialSequenceTrigger::SkipSequence()
@@ -883,7 +930,7 @@ void ATutorialSequenceTrigger::SkipSequence()
     if (this->bWaitingForQTE)
     {
         this->bWaitingForQTE = false;
-        this->QTEPrompt->SetHiddenInGame(true);
+        SetQTEPromptVisible(false);
         SetQTEOutlineVisible(false);
     }
 

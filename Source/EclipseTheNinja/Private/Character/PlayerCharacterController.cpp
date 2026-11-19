@@ -19,11 +19,13 @@
 #include "Level/EclipseWorldSettings.h"
 #include "Save/GameSaveSubsystem.h"
 #include "Components/InputComponent.h"
+#include "Widgets/HUDWidget.h"
 #include "Widgets/PauseMenuWidget.h"
 #include "Widgets/SettingsWidget.h"
 #include "Misc/App.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "InputKeyEventArgs.h"
+#include "Framework/Application/SlateApplication.h"
 
 bool APlayerCharacterController::InputKey(const FInputKeyEventArgs& Params)
 {
@@ -147,6 +149,13 @@ void APlayerCharacterController::BeginPlay()
     SetShowMouseCursor(true);
     bEnableClickEvents = true;
     bEnableMouseOverEvents = true;
+
+    // 메인 메뉴의 GameAndUI 전환은 포커스 위젯을 주지 않아 키보드 포커스가 메뉴 버튼에 남는다.
+    // 레벨이 바뀌어 그 버튼이 사라지면 키 입력이 게임에 오지 않으므로(레벨 BP 치트키 등) 게임 화면으로 돌린다.
+    if (IsLocalPlayerController() && FSlateApplication::IsInitialized())
+    {
+        FSlateApplication::Get().SetAllUserFocusToGameViewport();
+    }
 }
 
 void APlayerCharacterController::SetupInputComponent()
@@ -188,6 +197,37 @@ void APlayerCharacterController::SetupInputComponent()
     }
 }
 
+void APlayerCharacterController::SetCinematicSkipAvailable(bool bAvailable)
+{
+    bCinematicSkipAvailable = bAvailable;
+    if (UHUDWidget* HUD = HUDWidget.Get())
+    {
+        HUD->SetCinematicSkipAvailable(bAvailable);
+    }
+}
+
+void APlayerCharacterController::RequestCinematicSkip()
+{
+    OnCinematicSkipRequested.Broadcast();
+}
+
+void APlayerCharacterController::RegisterHUDWidget(UHUDWidget* InHUDWidget)
+{
+    HUDWidget = InHUDWidget;
+    if (IsValid(InHUDWidget) && bCinematicSkipAvailable)
+    {
+        InHUDWidget->SetCinematicSkipAvailable(true);
+    }
+}
+
+void APlayerCharacterController::UnregisterHUDWidget(UHUDWidget* InHUDWidget)
+{
+    if (HUDWidget.Get() == InHUDWidget)
+    {
+        HUDWidget.Reset();
+    }
+}
+
 void APlayerCharacterController::OpenPauseMenu()
 {
     if (!IsLocalPlayerController()) return;
@@ -195,7 +235,8 @@ void APlayerCharacterController::OpenPauseMenu()
     if (IsPaused()) return;
     if (PauseMenuBlockCount > 0) return;
 
-    UPauseMenuWidget* Menu = CreateWidget<UPauseMenuWidget>(this);
+    const TSubclassOf<UPauseMenuWidget> MenuClass = PauseMenuWidgetClass ? PauseMenuWidgetClass : TSubclassOf<UPauseMenuWidget>(UPauseMenuWidget::StaticClass());
+    UPauseMenuWidget* Menu = CreateWidget<UPauseMenuWidget>(this, MenuClass);
     if (!Menu) return;
     if (!SetPause(true)) return;
 
@@ -243,7 +284,8 @@ void APlayerCharacterController::OpenPauseSettings()
     if (!PauseMenuWidget) return;
     if (PauseSettingsWidget) return;
 
-    USettingsWidget* Settings = CreateWidget<USettingsWidget>(this);
+    const TSubclassOf<USettingsWidget> SettingsClass = SettingsWidgetClass ? SettingsWidgetClass : TSubclassOf<USettingsWidget>(USettingsWidget::StaticClass());
+    USettingsWidget* Settings = CreateWidget<USettingsWidget>(this, SettingsClass);
     if (!Settings) return;
     if (!Settings->AddToPlayerScreen(11)) return;
 

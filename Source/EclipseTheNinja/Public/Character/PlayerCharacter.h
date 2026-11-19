@@ -23,16 +23,24 @@ class UAssassinationTargetingComponent;
 class UNoiseComponent;
 class UHidingComponent;
 class UMinimapComponent;
+class UPointLightComponent;
 class UGAAssassinate;
 class AEnemy;
 class UUserWidget;
 class USoundBase;
+class UNiagaraSystem;
 struct FInputActionValue;
 
 UENUM()
 enum class EPlayerActionSound : uint8
 {
-	Kunai, SwiftStrike, Parry, Clone, BelowAssassination, Jump, Land, Hit, AssassinationStab, ParrySuccess, LedgeClimb
+	Kunai, SwiftStrike, Parry, Clone, BelowAssassination, Jump, Land, Hit, AssassinationStab, ParrySuccess, LedgeClimb,
+	// 분신 회수
+	CloneRecall,
+	// 분신과 위치 교환
+	CloneSwap,
+	// 분신 협동 점프로 날아오를 때
+	CloneCoopJump
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FPlayerConditionChanged, EPlayerCondition);
@@ -71,6 +79,30 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Audio")
 	TArray<TObjectPtr<USoundBase>> WallClimbSounds;
 
+	/** 걸을 때 발소리 한 번을 내는 이동 거리(cm) */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio", meta = (ClampMin = "1.0", Units = "cm"))
+	float WalkStepDistance = 130.0f;
+
+	/** 웅크리고 걸을 때 발소리 한 번을 내는 이동 거리(cm) */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio", meta = (ClampMin = "1.0", Units = "cm"))
+	float CrouchWalkStepDistance = 80.0f;
+
+	/** 벽을 탈 때 소리 한 번을 내는 세로 이동 거리(cm) */
+	UPROPERTY(EditDefaultsOnly, Category = "Audio", meta = (ClampMin = "1.0", Units = "cm"))
+	float WallClimbStepDistance = 75.0f;
+
+	/** 분신과 위치를 교환할 때 두 자리(플레이어·분신)에서 각각 재생할 연기 이펙트. 비우면 재생하지 않는다 */
+	UPROPERTY(EditDefaultsOnly, Category = "Effect|Clone")
+	TObjectPtr<UNiagaraSystem> CloneSwapSmokeSystem;
+
+	/** 교환 연기 이펙트를 액터 위치에서 얼마나 옮겨 재생할지(월드 기준) */
+	UPROPERTY(EditDefaultsOnly, Category = "Effect|Clone")
+	FVector CloneSwapSmokeOffset = FVector::ZeroVector;
+
+	/** 0보다 크면 이 시간(초) 뒤 새 파티클 생성을 멈춘다. 루프 이펙트를 쓸 때 지정한다. 0이면 이펙트가 스스로 끝날 때까지 둔다 */
+	UPROPERTY(EditDefaultsOnly, Category = "Effect|Clone", meta = (ClampMin = "0.0", Units = "s"))
+	float CloneSwapSmokeDuration = 0.0f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision|Interact")
 	TObjectPtr<UInteractBoxComponent> InteractComponent;
 
@@ -83,6 +115,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Noise")
 	TObjectPtr<UNoiseComponent> NoiseComponent;
 
+	// 켜면 칼 메시의 소켓(AttackNoiseSocketName)에서, 끄면 캐릭터 스켈레탈 메시의 중심에서 공격 소음이 난다.
+	// 소켓을 가진 메시를 찾지 못하면 캐릭터 메시 중심을 쓴다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Noise|Attack", meta = (DisplayName = "Attack Noise From Sword Socket"))
+	bool bAttackNoiseFromSwordSocket = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Noise|Attack", meta = (EditCondition = "bAttackNoiseFromSwordSocket"))
+	FName AttackNoiseSocketName = TEXT("b_TrailSocket");
+
 	// 은신구역에 들어가고 나오는 연출을 맡는다. 숨기 몽타주는 여기에 지정한다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hiding")
 	TObjectPtr<UHidingComponent> HidingComponent;
@@ -90,6 +130,20 @@ protected:
 	// 미니맵 시야 밝히기와 Tab 입력, 미니맵 위젯 표시를 맡는다
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
 	TObjectPtr<UMinimapComponent> MinimapComponent;
+
+	// 플레이어 주변을 은은하게 밝히는 빛. 밝기·색·반경은 BP에서 조절한다. 숨어 있는 동안에는 꺼진다.
+	// 그림자는 항상 만들지 않는다(BeginPlay에서 다시 끈다).
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Light")
+	TObjectPtr<UPointLightComponent> AuraLight;
+
+	// 숨기 시작하거나 나올 때 빛이 꺼지고 켜지는 데 걸리는 시간. 0이면 바로 바뀐다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light", meta = (ClampMin = "0", Units = "s"))
+	float AuraLightFadeTime = 0.3f;
+
+	// 플레이어 위치에서 AuraLight까지의 월드 기준 거리. 플레이어가 좌우로 돌아도 이 위치를 유지한다.
+	// Y +는 카메라 쪽이라 정면에서 고르게 비춰 몸의 명암을 줄인다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Light")
+	FVector AuraLightOffset = FVector(0.0f, 100.0f, 40.0f);
 
 	// 예전 BP에 저장된 암살 클래스. PostLoad에서 어빌리티 배열로 옮긴다.
 	UPROPERTY()
@@ -104,6 +158,17 @@ protected:
 	/** Minimum downward movement value required to start hanging from a ledge. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Gamepad", meta = (ClampMin = "0.1", ClampMax = "1"))
 	float LedgeHangDownInputThreshold = 0.65f;
+
+	/** 좌우 이동 입력이 이 값 이하이면 입력이 없는 것으로 본다. 스틱을 살짝 건드려도 움직이지 않게 한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Gamepad", meta = (ClampMin = "0", ClampMax = "0.9"))
+	float MoveInputDeadZone = 0.2f;
+
+	/**
+	 * 데드존을 넘은 이동 입력의 최소 배율. 이동 속도는 (배율 x 최대 속도)이므로 서 있을 때와 앉았을 때 모두 같은 비율이 적용된다.
+	 * 걷기 애니메이션이 제대로 재생되어 발소리 노티파이가 나는 속도 이상이 되도록 맞춘다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Gamepad", meta = (ClampMin = "0", ClampMax = "1"))
+	float MinMoveInputScale = 0.5f;
 
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -193,6 +258,12 @@ protected:
 	/** Last captured horizontal movement input value */
 	float ActionValueY = 0.0f;
 
+	// 지금 누르고 있는 좌우 이동 입력 방향(-1, 0, 1). 키를 떼면 0이 된다
+	float HeldMoveInputSign = 0.0f;
+
+	// 첫 공격을 시작할 때 이미 누르고 있던 이동 방향. 이 방향을 계속 누르는 것으로는 공격이 끊기지 않는다
+	float AttackStartMoveInputSign = 0.0f;
+
 	/** If true, this character has already wall jumped */
 	bool bHasWallJumped = false;
 
@@ -208,7 +279,14 @@ protected:
 
 public:
 	void PlayActionSound(EPlayerActionSound Action, float Volume = 1.0f) const;
+	// ActionSounds에 지정한 사운드를 돌려준다. 없으면 nullptr
+	USoundBase* GetActionSound(EPlayerActionSound Action) const;
+	// 분신 위치 교환 연기 이펙트를 InLocation(+CloneSwapSmokeOffset)에서 재생한다
+	void PlayCloneSwapSmoke(const FVector& InLocation) const;
 	void PlaySwordAttackSound(int32 ComboIndex, bool bFire) const;
+	// 공격 SFX와 같은 타이밍에 부른다. 발생 위치는 bAttackNoiseFromSwordSocket으로 고른다.
+	void EmitAttackNoise();
+	FVector GetAttackNoiseLocation() const;
 	void PlayAssassinationWithdrawalSound() const;
 
     const UInputAction* GetAbilityInputAction(EAbilityInputID InputID) const;
@@ -296,6 +374,7 @@ public:
 	// 지금 상호작용 키를 누르면 암살이 실행되는지. 상호작용보다 우선한다.
 	bool CanAssassinateCurrentTarget() const;
 	bool IsWallAttached() const;
+
 	// 은신구역에 들어가는 중, 숨어 있는 중, 나오는 중 모두 true.
 	// 이 동안의 입력은 HidingComponent가 컨트롤러 IMC를 바꿔서 제한한다.
 	bool IsHiding() const;
@@ -351,6 +430,15 @@ private:
 	void UpdateMovementSound(float DeltaSeconds);
 	float DistanceSinceMovementSound = 0.0f;
 	const TArray<TObjectPtr<USoundBase>>* PreviousMovementSounds = nullptr;
+
+	// 숨기 상태에 맞춰 AuraLight 밝기를 서서히 0 또는 원래 값으로 맞춘다.
+	void UpdateAuraLight(float DeltaSeconds);
+	// 플레이어가 바라보는 방향과 관계없이 AuraLight를 플레이어 위치 + AuraLightOffset(월드 기준)에 둔다.
+	void UpdateAuraLightLocation();
+	// BeginPlay 시점에 BP에서 정한 AuraLight 밝기
+	float AuraLightBaseIntensity = 0.0f;
+	// 0이면 꺼짐, 1이면 원래 밝기
+	float AuraLightAlpha = 1.0f;
 
 	FTransform SafePointTransform;
 	bool bHasSafePoint = false;
@@ -441,6 +529,9 @@ protected:
 	/** Called for movement input */
 	void Move(const FInputActionValue& Value);
 
+	// 이동 키를 뗐을 때 누르고 있던 방향 기록을 지운다
+	void MoveReleased(const FInputActionValue& Value);
+
 	// BP 컴파일에러 제거용 임시 함수
 	void Drop(const FInputActionValue& Value) {}
 
@@ -472,6 +563,9 @@ protected:
 	// ReceiveAssassination 안에서만 유효하다. Die가 사망 몽타주 대신 재생한다.
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> PendingAssassinationMontage;
+
+	/** 좌우 이동 입력에 데드존과 최소 배율을 적용한다. 데드존 안이면 0을 반환한다. */
+	float ApplyMoveInputDeadZone(float RawInput) const;
 
 public:
 
@@ -522,6 +616,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoSwiftStrike();
 
+	/**
+	 * DisableInput으로 입력을 끊었다가 되살린 뒤 호출한다.
+	 * 끊긴 동안 뗀 키는 Completed가 오지 않으므로, 실제로 떼어진 키의 해제 처리(앉기·조준·점프·이동)를 대신 실행한다.
+	 */
+	void SyncHeldInputsAfterInputLock();
+
 	/** 분신술 타게팅 상태 설정. 타게팅 중에는 카메라 시점을 유지하고, 종료되면 중앙으로 복귀한다. */
 	void SetCloneTargeting(bool bTargeting);
 	bool IsCloneTargeting() const { return bIsCloneTargeting; }
@@ -536,6 +636,21 @@ protected:
 
 	/** 앉기 키를 누르고 있는지 여부. 공중에서 누르면 착지할 때 앉는다. */
 	bool bCrouchInputHeld = false;
+
+	/** 앉은 채 모서리에서 떨어지는 중인지. 앉기 키를 떼거나 착지·안전 지점 복귀·벽 붙기 때 꺼진다 */
+	bool bCrouchFalling = false;
+
+	/** 안전 지점 복귀처럼 강제로 떨어뜨릴 때 앉은 낙하로 치지 않게 막는다 */
+	bool bSuppressCrouchFall = false;
+
+	/** 앉은 낙하 동안 앉은 걷기 속도로 바꾸기 전의 MaxWalkSpeed */
+	float CrouchFallSavedMaxWalkSpeed = 0.0f;
+
+	/** 앉은 낙하를 시작한다. 일어선 캡슐로 바꾸고 공중 이동 속도를 앉은 걷기 속도로 맞춘다 */
+	void BeginCrouchFall();
+
+	/** 앉은 낙하를 끝내고 공중 이동 속도를 되돌린다. 앉은 낙하 중이 아니면 아무것도 하지 않는다 */
+	void EndCrouchFall();
 
 	/** 발판 내려가기, 지상 점프, 벽 점프, 코요테 점프를 처리한다. */
 	void MultiJump();

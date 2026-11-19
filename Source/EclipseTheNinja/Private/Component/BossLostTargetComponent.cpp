@@ -242,6 +242,7 @@ void UBossLostTargetComponent::StartRampage()
 	bWaitingPatternEnd = false;
 	bHasDestination = false;
 	bFacingChosen = false;
+	bAimAtTarget = false;
 
 	UE_LOG(LogTemp, Log, TEXT("%s: 마지막 목격 위치 주변 난사 시작 (%.1f초)"), *GetOwner()->GetName(), RampageDuration);
 }
@@ -301,10 +302,23 @@ void UBossLostTargetComponent::UpdateRampage(float DeltaTime)
 		return;
 	}
 
-	// 대상이 어디 있는지 모르므로 좌우 중 아무 쪽이나 보고 쓴다.
+	// 대상이 어디 있는지 모르므로 보통은 좌우 중 아무 쪽이나 보고 쓴다.
+	// RampageAimAtTargetChance 확률로 대상 쪽을 보고, 원거리 패턴은 대상 위치로 조준해 쏜다.
 	if (!bFacingChosen)
 	{
-		Owner->FaceDirection(FMath::RandBool() ? 1.0f : -1.0f);
+		const APawn* Target = GetRampageTarget();
+		bAimAtTarget = Target && FMath::FRand() < RampageAimAtTargetChance;
+
+		float DirectionX = FMath::RandBool() ? 1.0f : -1.0f;
+
+		if (bAimAtTarget)
+		{
+			DirectionX = Target->GetActorLocation().X >= Owner->GetActorLocation().X
+				? 1.0f
+				: -1.0f;
+		}
+
+		Owner->FaceDirection(DirectionX);
 		bFacingChosen = true;
 		return;
 	}
@@ -365,13 +379,13 @@ bool UBossLostTargetComponent::ActivateRampagePattern()
 		return false;
 	}
 
-	// 난사 가중치가 있고 GAS 쿨타임이 아닌 모든 행이 후보다.
+	// 난사 가중치가 있는 모든 행이 후보다. 행 쿨타임과 GAS 쿨타임은 보지 않는다(GAS 쿨타임은 UGABossPatternBase가 무시한다).
 	TArray<TPair<FName, const FBossPatternRow*>> Candidates;
 	float TotalWeight = 0.0f;
 	for (const TPair<FName, uint8*>& Pair : PatternTable->GetRowMap())
 	{
 		const FBossPatternRow* Row = reinterpret_cast<const FBossPatternRow*>(Pair.Value);
-		if (!Row || !Row->AbilityClass || Owner->IsPatternAbilityOnCooldown(*Row))
+		if (!Row || !Row->AbilityClass)
 		{
 			continue;
 		}
@@ -404,14 +418,8 @@ bool UBossLostTargetComponent::ActivateRampagePattern()
 		}
 	}
 
-	// 근접 판정은 놓친 대상에게만 들어간다. 놓친 대상이 사라졌으면(회수된 분신 등) 플레이어를 대상으로 둔다.
-	APawn* Target = LostTarget.Get();
-	if (!Owner->IsValidAITarget(Target))
-	{
-		Target = UGameplayStatics::GetPlayerPawn(this, 0);
-	}
-
-	if (!Owner->ActivatePatternAgainst(*Picked->Value, Target))
+	// 근접 판정은 놓친 대상에게만 들어간다.
+	if (!Owner->ActivatePatternAgainst(*Picked->Value, GetRampageTarget()))
 	{
 		return false;
 	}
@@ -436,6 +444,20 @@ bool UBossLostTargetComponent::ActivateRampagePattern()
 	return true;
 }
 
+APawn* UBossLostTargetComponent::GetRampageTarget() const
+{
+	// 놓친 대상이 사라졌으면(회수된 분신 등) 플레이어를 대상으로 둔다.
+	const ABossEnemy* Owner = Boss.Get();
+	APawn* Target = LostTarget.Get();
+
+	if (Owner && Owner->IsValidAITarget(Target))
+	{
+		return Target;
+	}
+
+	return UGameplayStatics::GetPlayerPawn(this, 0);
+}
+
 float UBossLostTargetComponent::GetRampagePatternWeight(FName RowName) const
 {
 	const float* Weight = RampagePatternWeights.Find(RowName);
@@ -449,6 +471,7 @@ void UBossLostTargetComponent::EndLostTarget(bool bForgetTarget)
 	bWaitingPatternEnd = false;
 	bHasDestination = false;
 	bFacingChosen = false;
+	bAimAtTarget = false;
 
 	ABossEnemy* Owner = Boss.Get();
 	if (!bForgetTarget || !Owner)

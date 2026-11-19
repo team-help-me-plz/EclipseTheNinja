@@ -12,6 +12,7 @@
 #include "Component/EnemyDetectionComponent.h"
 #include "Component/EnemySpacingComponent.h"
 #include "Component/MovementLoopSoundComponent.h"
+#include "Component/FootstepSoundComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -51,8 +52,12 @@ ABossEnemy::ABossEnemy()
     // 보스는 암살로 처치되어도 회복 아이템을 떨어뜨리지 않는다.
     AssassinationDropComp->SetDropActorClass(nullptr);
 
+    // 보스 암살은 몇 번 없는 큰 순간이라 카메라 클로즈업을 켠다.
+    bPlayAssassinateCloseUp = true;
+
     // 보스 발소리는 걷기 애니메이션 노티파이가 내므로 일반 몬스터 발소리 루프는 끈다.
     WalkSoundComp->SetLoopSound(nullptr);
+    FootstepSoundComp->SetFootstepSounds({});
 
     // 대상을 놓치면 일반 적의 수색 대신 포효와 난사를 한다.
     LostTargetComp = CreateDefaultSubobject<UBossLostTargetComponent>(TEXT("LostTargetComp"));
@@ -342,6 +347,25 @@ float ABossEnemy::GetEnergyLinkTimeRemaining() const
     }
 
     return FMath::Max(0.0f, GetWorldTimerManager().GetTimerRemaining(EnergyLinkTimer));
+}
+
+void ABossEnemy::SetEnergyLinkTimerPaused(bool bPaused)
+{
+    // 멈춘 타이머도 남은 시간을 그대로 들고 있어 체력바의 남은 시간 표시도 함께 멈춘다
+    FTimerManager& TimerManager = GetWorldTimerManager();
+    if (!TimerManager.TimerExists(EnergyLinkTimer))
+    {
+        return;
+    }
+
+    if (bPaused)
+    {
+        TimerManager.PauseTimer(EnergyLinkTimer);
+    }
+    else
+    {
+        TimerManager.UnPauseTimer(EnergyLinkTimer);
+    }
 }
 
 void ABossEnemy::OnHealthChanged(const FOnAttributeChangeData& Data)

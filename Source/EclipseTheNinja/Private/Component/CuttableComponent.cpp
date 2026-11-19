@@ -37,15 +37,15 @@ void UCuttableComponent::OnRopeHit(UPrimitiveComponent* HitComponent, AActor* Ot
 		return ;
 	}
 	// 플레이어나 분신(IInteractor)이 던진 것만 줄을 끊는다. 적이 던진 표창은 무시
-	const APawn*	ThrowerPawn = OtherActor->GetInstigator();
+	APawn*	ThrowerPawn = OtherActor->GetInstigator();
 	if (!ThrowerPawn || !ThrowerPawn->Implements<UInteractor>())
 	{
 		return ;
 	}
-	this->CutRope();
+	this->CutRope(ThrowerPawn);
 }
 
-void UCuttableComponent::CutRope()
+void UCuttableComponent::CutRope(APawn* InCutter)
 {
 	if (this->bIsCutted)
 	{
@@ -55,7 +55,7 @@ void UCuttableComponent::CutRope()
 	this->SetVisibility(false);
 	this->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	this->ReleaseAttachedActors();
-	this->OnRopeCut.Broadcast();
+	this->OnRopeCut.Broadcast(InCutter);
 }
 
 void UCuttableComponent::ReleaseAttachedActors()

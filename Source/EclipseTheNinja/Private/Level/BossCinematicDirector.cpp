@@ -2,6 +2,7 @@
 
 #include "Level/BossCinematicDirector.h"
 
+#include "AssetManagement/EclipseStageManagerSubsystem.h"
 #include "Character/BossEnemy.h"
 #include "Level/BossGimmickPortal.h"
 #include "Level/TutorialSequenceTrigger.h"
@@ -15,6 +16,7 @@
 #include "Animation/AnimSequenceBase.h"
 #include "BrainComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -74,13 +76,29 @@ void ABossCinematicDirector::BeginPlay()
         this->Boss->SetActorHiddenInGame(true);
         this->bHidBoss = true;
 
-        // 보스 AI(비헤이비어 트리)가 시작된 뒤에 멈추도록 한 프레임 뒤에 재생한다
+        // 보스 AI(비헤이비어 트리)는 BeginPlay 뒤에 시작되므로 멈추는 것만 한 프레임 뒤에 한다.
+        // 스테이지 로딩 화면이 떠 있는 동안에도 보스가 움직이지 않도록 로드 완료를 기다리지 않고 바로 멈춘다
         GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
         {
             PauseBoss();
-            this->Boss->StartBattleMusic();
-            this->IntroSequence->PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
         }));
+
+        // 컷신과 전투 음악은 스테이지 로딩 화면이 사라질 때(로드 완료) 시작한다. 이미 끝났으면 바로 시작한다.
+        // 그 전까지는 로딩 화면이 화면을 가리므로, 컷신 전에 플레이어 카메라가 보이는 일은 없다
+        auto StartIntro = [this]()
+        {
+            this->IntroSequence->PlaySequence(UGameplayStatics::GetPlayerController(this, 0));
+            this->Boss->StartBattleMusic();
+        };
+        if (UEclipseStageManagerSubsystem* Stage = GetWorld()->GetSubsystem<UEclipseStageManagerSubsystem>())
+        {
+            Stage->CallOrRegister_OnStageLoaded(FOnEclipseStageLoaded::FDelegate::CreateWeakLambda(this,
+                [StartIntro](const UEclipseStageDefinition*) { StartIntro(); }));
+        }
+        else
+        {
+            StartIntro();
+        }
     }
 }
 

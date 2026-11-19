@@ -8,7 +8,6 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
 
 UAnimNotifyState_SwordTrail::UAnimNotifyState_SwordTrail()
 {
@@ -16,29 +15,7 @@ UAnimNotifyState_SwordTrail::UAnimNotifyState_SwordTrail()
 	NotifyColor = FColor(220, 40, 60);
 #endif
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> TrailAsset(
-		TEXT("/Game/VFX/SwordEffects/Particles/NS_SwordTrail_Simple.NS_SwordTrail_Simple"));
-
-	if (TrailAsset.Succeeded())
-	{
-		TrailSystem = TrailAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> TrailMaterialAsset(
-		TEXT("/Game/VFX/SwordEffects/Materials/MI_SwordTrail_Simple.MI_SwordTrail_Simple"));
-
-	if (TrailMaterialAsset.Succeeded())
-	{
-		TrailMaterial = TrailMaterialAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> FireTrailMaterialAsset(
-		TEXT("/Game/VFX/SwordEffects/Materials/MI_SwordTrail_Fire.MI_SwordTrail_Fire"));
-
-	if (FireTrailMaterialAsset.Succeeded())
-	{
-		FireTrailMaterial = FireTrailMaterialAsset.Object;
-	}
+	// 트레일 이펙트·머티리얼(TrailSystem, FireTrailSystem, TrailMaterial, FireTrailMaterial)은 몽타주의 노티파이에서 등록한다
 }
 
 void UAnimNotifyState_SwordTrail::NotifyBegin(

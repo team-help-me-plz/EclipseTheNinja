@@ -9,6 +9,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 
 namespace HealPickup
@@ -329,6 +331,12 @@ void AHealPickup::CompleteAbsorb()
 				true,
 				ENCPoolMethod::AutoRelease
 			);
+		}
+
+		// 획득 사운드는 아이템이 아닌 플레이어 위치에서 재생한다
+		if (HealCompleteSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, HealCompleteSound, Player->GetActorLocation());
 		}
 	}
 

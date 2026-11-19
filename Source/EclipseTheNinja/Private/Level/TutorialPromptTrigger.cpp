@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "PuzzelObject/BaseDoor.h"
 #include "Subsystem/UIMessageSubsystem.h"
 #include "TimerManager.h"
 
@@ -48,12 +49,25 @@ void ATutorialPromptTrigger::OnTriggerBeginOverlap(
         return;
     }
 
+    // 플레이어는 캡슐과 상호작용 박스가 함께 겹쳐 한 번 들어와도 오버랩이 여러 번 온다. 몸체(루트 캡슐)만 받는다
+    // 메시는 이 트리거의 오브젝트 타입(WorldDynamic)을 무시하도록 설정돼 있어 오버랩이 오지 않는다
+    if (OtherComp != Pawn->GetRootComponent())
+    {
+        return;
+    }
+
     ShowPrompt(Cast<APlayerController>(Pawn->GetController()));
 }
 
 void ATutorialPromptTrigger::ShowPrompt(APlayerController* PlayerController)
 {
     if (!PlayerController || (this->bShowOnce && this->bHasShown))
+    {
+        return;
+    }
+
+    // 조건 문이 이미 열려 있으면 띄우지 않는다. 미뤄 둔 표시도 그사이 문이 열렸으면 취소된다
+    if (IsValid(this->ShowOnlyWhileDoorClosed) && this->ShowOnlyWhileDoorClosed->IsOpen())
     {
         return;
     }
@@ -66,6 +80,14 @@ void ATutorialPromptTrigger::ShowPrompt(APlayerController* PlayerController)
         GetWorldTimerManager().SetTimer(this->DeferredPromptTimer, RetryDelegate, 0.25f, false);
         return;
     }
+
+    // 문구가 떠 있는 동안(MessageHoldDuration) 다시 들어와도 같은 문구를 겹쳐 띄우지 않는다
+    const double Now = GetWorld()->GetTimeSeconds();
+    if (Now < this->NextShowTime)
+    {
+        return;
+    }
+    this->NextShowTime = Now + this->MessageHoldDuration;
     this->bHasShown = true;
 
     UE_LOG(LogTemp, Log, TEXT("[ATutorialPromptTrigger::ShowPrompt()] %s : 안내 문구 %d개 표시"),

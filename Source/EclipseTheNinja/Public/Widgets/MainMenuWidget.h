@@ -2,7 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Widgets/EclipseMenuWidget.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/MenuInputFeedback.h"
 #include "MainMenuWidget.generated.h"
@@ -19,7 +19,7 @@ class USettingsWidget;
  * - 이 클래스를 부모로 하는 WBP에 같은 이름의 위젯을 배치하면 C++ 레이아웃 대신 WBP 레이아웃을 사용한다.
  */
 UCLASS()
-class ECLIPSETHENINJA_API UMainMenuWidget : public UUserWidget
+class ECLIPSETHENINJA_API UMainMenuWidget : public UEclipseMenuWidget
 {
 	GENERATED_BODY()
 

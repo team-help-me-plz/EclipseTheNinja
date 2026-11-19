@@ -13,7 +13,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "TimerManager.h"
-#include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
 // Sets default values
@@ -39,22 +38,7 @@ ABreakablePlatform::ABreakablePlatform()
 	this->BreakEffect->SetupAttachment(GetRootComponent());
 	this->BreakEffect->bAutoActivate = false;
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> BreakSystem(
-		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/SandFalling/Looped/NS_Sand_Ceiling_04_Looped_Platform.NS_Sand_Ceiling_04_Looped_Platform"));
-
-	if (BreakSystem.Succeeded())
-	{
-		this->BreakEffect->SetAsset(BreakSystem.Object);
-	}
-
-	// 무너지는 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
-	static ConstructorHelpers::FObjectFinder<USoundBase> BreakSoundFinder(
-		TEXT("/Game/Audio/wood_crate_destroy_v4.wood_crate_destroy_v4"));
-
-	if (BreakSoundFinder.Succeeded())
-	{
-		this->BreakSound = BreakSoundFinder.Object;
-	}
+	// 무너지는 이펙트(BreakEffect의 Niagara System)와 사운드(BreakSound)는 BP에서 등록한다
 }
 
 void ABreakablePlatform::ResetToInitial_Implementation()

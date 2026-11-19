@@ -714,6 +714,22 @@ void UMinimapSubsystem::CollectMarkers()
 		{
 			Entry.Bounds = Actor->GetComponentsBoundingBox(false, true);
 		}
+
+		// 체크포인트처럼 기준점이 바닥에 붙은 액터도 확실히 발견되도록 보이는 메시 범위를 기억한다
+		TArray<AActor*> Owners;
+		Owners.Add(Actor);
+		Actor->GetAllChildActors(Owners, true);
+		for (const AActor* Owner : Owners)
+		{
+			TInlineComponentArray<UMeshComponent*> Meshes(Owner);
+			for (const UMeshComponent* Mesh : Meshes)
+			{
+				if (Mesh && Mesh->IsVisible() && !Mesh->bHiddenInGame)
+				{
+					Entry.DiscoverBounds += Mesh->Bounds.GetBox();
+				}
+			}
+		}
 	}
 
 	UE_LOG(LogEclipseTheNinja, Log, TEXT("[Minimap] 마커 %d개 등록"), this->Markers.Num());
@@ -767,7 +783,9 @@ void UMinimapSubsystem::UpdateMarkerDiscovery()
 		}
 		// 문처럼 범위로 그리는 마커는 범위의 어느 칸이든 보이면 발견한다.
 		// 닫힌 문은 시야를 막아서 문의 앞면 칸만 밝혀지므로 중심 칸으로 판정하면 영영 발견되지 않는다
-		const bool bVisible = Entry.Bounds.IsValid ? IsBoxVisibleOnMap(Entry.Bounds) : IsLocationVisibleOnMap(Actor->GetActorLocation());
+		const bool bVisible = Entry.Bounds.IsValid
+			? IsBoxVisibleOnMap(Entry.Bounds)
+			: (IsLocationVisibleOnMap(Actor->GetActorLocation()) || (Entry.DiscoverBounds.IsValid && IsBoxVisibleOnMap(Entry.DiscoverBounds)));
 		if (bVisible)
 		{
 			Entry.bDiscovered = true;

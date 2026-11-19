@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 // 앉으면 캡슐 중심이 내려가므로, 높이 비교는 서 있을 때의 캡슐 중심 기준으로 한다.
 static FVector GetStandingLocation(const ACharacter* Character)
@@ -418,7 +419,7 @@ void UAssassinateTargetComponent::InitializeOutlineMesh()
 	if (!IsValid(SourceMesh)) return;
 	if (!IsValid(SourceMesh->GetSkeletalMeshAsset())) return;
 
-	UMaterialInterface* Material = OutlineMaterial.LoadSynchronous();
+	UMaterialInterface* Material = UEclipseAssetManager::GetAsset(OutlineMaterial);
 	if (!IsValid(Material))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Assassination outline material missing: %s"), *GetNameSafe(Character));

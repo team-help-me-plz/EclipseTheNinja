@@ -14,7 +14,6 @@
 #include "AbilitySystemComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
-#include "UObject/ConstructorHelpers.h"
 
 // Sets default values
 ATrapArrowActor::ATrapArrowActor()
@@ -53,13 +52,7 @@ ATrapArrowActor::ATrapArrowActor()
 	this->FlyEffect->SetupAttachment(GetRootComponent());
 	this->FlyEffect->bAutoActivate = false;
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> FlySystem(
-		TEXT("/Game/VFX/KYstabFX01/Particles/Niagara/NS_ky_stab13.NS_ky_stab13"));
-
-	if (FlySystem.Succeeded())
-	{
-		this->FlyEffect->SetAsset(FlySystem.Object);
-	}
+	// 비행 이펙트(FlyEffect의 Niagara System)는 BP에서 등록한다
 }
 
 // Called when the game starts or when spawned
@@ -228,6 +221,9 @@ bool ATrapArrowActor::Deflect(AActor* Deflector)
 
 void ATrapArrowActor::OnReturnToPool_Implementation()
 {
+	// 풀에서 꺼낼 때 OnSpawnFromPool보다 충돌이 먼저 켜지므로, 그 사이 발사 위치의 볼륨과 겹쳐도
+	// 맞은 것으로 처리되어 바로 반환되지 않게 막아 둔다. 새로 만든 화살도 이 함수를 거친다
+	this->bHasHit = true;
 	this->ProjectileMovement->StopMovementImmediately();
 	// 벽에 박혀 붙어 있던 경우 떼어낸다
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);

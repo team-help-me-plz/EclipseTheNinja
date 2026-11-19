@@ -13,7 +13,6 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
-#include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
 namespace
@@ -62,14 +61,7 @@ APressureSwitch::APressureSwitch(const FObjectInitializer& ObjectInitializer)
 	// 플레이어 감지 함정처럼 테두리가 필요 없는 자식이 DoNotCreateDefaultSubobject로 뺄 수 있게 선택 컴포넌트로 만든다
 	this->InteractHighlight = CreateOptionalDefaultSubobject<UInteractHighlightComponent>(TEXT("InteractHighlight"));
 
-	// 발판 동작 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
-	static ConstructorHelpers::FObjectFinder<USoundBase> PressSoundFinder(
-		TEXT("/Game/Audio/footstep_on_wooden_floor_38.footstep_on_wooden_floor_38"));
-
-	if (PressSoundFinder.Succeeded())
-	{
-		this->PressSound = PressSoundFinder.Object;
-	}
+	// 발판 동작 사운드(PressSound)는 BP에서 등록한다
 }
 
 void APressureSwitch::ResetToInitial_Implementation()
@@ -139,12 +131,18 @@ bool APressureSwitch::HasActivatableTarget() const
 	return (false);
 }
 
-void APressureSwitch::ToggleTargets()
+void APressureSwitch::ToggleTargets(AActor* InActivator)
 {
+	APawn*	Activator = Cast<APawn>(InActivator);
 	for (AActor* Target : this->TargetActors)
 	{
 		if (IsValid(Target) && Target->Implements<UActivatable>())
 		{
+			// ToggleActivate는 인자가 없으므로, 대상이 누가 작동시켰는지 알 수 있게 Instigator로 넘긴다
+			if (Activator)
+			{
+				Target->SetInstigator(Activator);
+			}
 			IActivatable::Execute_ToggleActivate(Target);
 		}
 	}
@@ -215,7 +213,7 @@ void APressureSwitch::OnPressureEndOverlap(UPrimitiveComponent* OverlappedCompon
 		return;
 	}
 	// 처음 누른 쪽이 먼저 내려가고 다른 캐릭터가 마지막으로 내려가도, 모두 내려간 순간 대상을 되돌린다
-	this->ToggleTargets();
+	this->ToggleTargets(OtherActor);
 	this->RefreshInteractState();
 }
 
@@ -243,7 +241,7 @@ void APressureSwitch::Interact_Implementation(AActor* InActor)
 	{
 		return;
 	}
-	this->ToggleTargets();
+	this->ToggleTargets(InActor);
 	this->bIsInteracted = true;
 	this->RefreshInteractState();
 	if (this->PressSound)

@@ -11,11 +11,13 @@
 #include "GAS/Ability/GAWallAttach.h"
 #include "GAS/StatAttributeSet.h"
 #include "GameFramework/Character.h"
+#include "Character/BossEnemy.h"
 #include "NativeGameplayTags.h"
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_WallSlide, "Ability.Movement.WallSlide");
 
@@ -109,7 +111,8 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
 
     // 스윕에 걸리는게 없으면 (땅이 없으면) 종료
-    FCollisionResponseParams ResponseParams;
+    // 캡슐의 실제 충돌 응답을 써서, 플레이어가 통과하는 몬스터 위에서 멈추지 않게 한다.
+    FCollisionResponseParams ResponseParams(Capsule->GetCollisionResponseToChannels());
     if (!GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, PawnChannel, Shape, Params, ResponseParams))
     {
         OnSlideInterrupted();
@@ -125,16 +128,30 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
     FVector LandLocation = Hit.Location;
 
-    // 밑에 Pawn(적, 분신이 있는 경우) 종료
+    // 밑에 보스가 있으면 종료한다. 플레이어는 보스와만 충돌하므로 분신·일반 몬스터는 막지 않는다.
     FCollisionObjectQueryParams CharacterObjects;
     CharacterObjects.AddObjectTypesToQuery(ECC_Pawn);
     SweepRadius = FMath::Max(1.f, Capsule->GetScaledCapsuleRadius() + 2.f);
     Shape = FCollisionShape::MakeCapsule(SweepRadius, Capsule->GetScaledCapsuleHalfHeight());
 
-    if (GetWorld()->SweepSingleByObjectType(Hit, Start, End, FQuat::Identity, CharacterObjects, Shape, Params))
+    TArray<FHitResult> PawnHits;
+    GetWorld()->SweepMultiByObjectType(
+        PawnHits,
+        Start,
+        End,
+        FQuat::Identity,
+        CharacterObjects,
+        Shape,
+        Params
+    );
+
+    for (const FHitResult& PawnHit : PawnHits)
     {
-        OnSlideInterrupted();
-        return;
+        if (Cast<ABossEnemy>(PawnHit.GetActor()))
+        {
+            OnSlideInterrupted();
+            return;
+        }
     }
 
 
@@ -189,7 +206,7 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
     GetWorld()->GetTimerManager().SetTimer(WallCheckTimer, this, &UGAWallSlide::CheckSlideWall, 0.016f, true);
 
     // 몽타주 재생
-    LodaedSlideMontage = SlideMontage.LoadSynchronous();
+    LodaedSlideMontage = UEclipseAssetManager::GetAsset(SlideMontage);
     if (IsValid(LodaedSlideMontage))
     {
         UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
@@ -207,9 +224,14 @@ void UGAWallSlide::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
 void UGAWallSlide::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+    // 착지 순간 소리가 툭 끊기지 않게 짧게 페이드아웃한다. 끝나면 컴포넌트는 자동으로 정리된다.
     if (IsValid(SlideAudioComponent))
     {
-        SlideAudioComponent->Stop();
+        SlideAudioComponent->FadeOut(
+            0.12f,
+            0.0f,
+            EAudioFaderCurve::Linear
+        );
     }
     SlideAudioComponent = nullptr;
 

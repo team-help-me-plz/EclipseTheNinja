@@ -13,6 +13,7 @@ class UWidgetComponent;
 class UTexture2D;
 class UAbilityUnlockNoticeWidget;
 class APlayerCharacter;
+class USoundBase;
 
 /**
  * 상호작용하면 지정한 어빌리티를 해금하는 액터. 한 번 해금하면 다시 상호작용할 수 없다.
@@ -104,6 +105,10 @@ private:
 	// 같은 능력을 주는 이 레벨의 다른 픽업을 모두 없앤다
 	void	RemoveOtherPickups();
 	void	OpenNotice();
+	// 해금한 능력을 사용할 때 나는 사운드를 찾는다. 사운드가 없는 능력이면 nullptr
+	USoundBase*	FindAbilityUseSound(const APlayerCharacter* InPlayer) const;
+	// 획득 사운드를 재생한다. 안내 위젯이 게임을 멈춰도 끊기지 않도록 UI 사운드로 재생한다
+	void	PlayUnlockSound(const APlayerCharacter* InPlayer) const;
 	void	RefreshHighlight();
 	// 메시 머티리얼을 다이내믹 인스턴스로 바꾸고 SkillTexture를 넣는다
 	void	ApplySkillTexture();

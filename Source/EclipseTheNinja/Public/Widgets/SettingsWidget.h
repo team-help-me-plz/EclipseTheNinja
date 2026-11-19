@@ -2,7 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
+#include "Widgets/EclipseMenuWidget.h"
 #include "Widgets/MenuInputFeedback.h"
 #include "SettingsWidget.generated.h"
 
@@ -37,7 +37,7 @@ enum class ESettingsTab : uint8
  * 디스플레이 / 오디오 / 그래픽 / 조작키 탭으로 구성되며, WBP 없이 C++ 레이아웃을 구성한다.
  */
 UCLASS()
-class ECLIPSETHENINJA_API USettingsWidget : public UUserWidget
+class ECLIPSETHENINJA_API USettingsWidget : public UEclipseMenuWidget
 {
 	GENERATED_BODY()
 
@@ -105,6 +105,9 @@ protected:
 	UFUNCTION()
 	void	HandleSFXVolumeChanged(float InValue);
 
+	UFUNCTION()
+	void	HandleAmbientVolumeChanged(float InValue);
+
 	// 현재 GameUserSettings 값을 UI에 반영
 	void	LoadCurrentSettings();
 
@@ -146,6 +149,9 @@ protected:
 	TObjectPtr<USlider>		SFXVolumeSlider = nullptr;
 
 	UPROPERTY(Transient, meta=(BindWidgetOptional))
+	TObjectPtr<USlider>		AmbientVolumeSlider = nullptr;
+
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UTextBlock>	MasterVolumeText = nullptr;
 
 	UPROPERTY(Transient, meta=(BindWidgetOptional))
@@ -153,6 +159,9 @@ protected:
 
 	UPROPERTY(Transient, meta=(BindWidgetOptional))
 	TObjectPtr<UTextBlock>	SFXVolumeText = nullptr;
+
+	UPROPERTY(Transient, meta=(BindWidgetOptional))
+	TObjectPtr<UTextBlock>	AmbientVolumeText = nullptr;
 
 	// 그래픽
 	UPROPERTY(Transient, meta=(BindWidgetOptional))

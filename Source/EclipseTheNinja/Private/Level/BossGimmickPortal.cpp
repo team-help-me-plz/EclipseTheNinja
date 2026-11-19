@@ -15,6 +15,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "TimerManager.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 ABossGimmickPortal::ABossGimmickPortal()
 {
@@ -43,9 +44,7 @@ ABossGimmickPortal::ABossGimmickPortal()
 	PortalVFX->SetRelativeScale3D(FVector(0.3f));
 	PortalVFX->SetAutoActivate(false);
 
-	// 입구와 레버 사이에도 보스와 같은 링크 이펙트를 사용한다.
-	LaserSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
-		TEXT("/Game/VFX/LaserFX_BP/Niagara/NormalType/NS_Laser_Twist_2.NS_Laser_Twist_2")));
+	// 입구와 레버를 잇는 링크 이펙트(LaserSystem)는 레벨에 배치한 액터에서 등록한다 (보스와 같은 NS_Boss_EnergyLink_Beam)
 }
 
 void ABossGimmickPortal::BeginPlay()
@@ -57,7 +56,7 @@ void ABossGimmickPortal::BeginPlay()
 
 	Trigger->OnComponentBeginOverlap.AddDynamic(this, &ABossGimmickPortal::OnTriggerBeginOverlap);
 
-	if (UNiagaraSystem* System = PortalSystem.LoadSynchronous())
+	if (UNiagaraSystem* System = UEclipseAssetManager::GetAsset(PortalSystem))
 	{
 		PortalVFX->SetAsset(System);
 	}
@@ -392,7 +391,7 @@ void ABossGimmickPortal::RefreshStageLaser()
 
 	if (!LaserComp)
 	{
-		UNiagaraSystem* System = LaserSystem.LoadSynchronous();
+		UNiagaraSystem* System = UEclipseAssetManager::GetAsset(LaserSystem);
 		if (!System)
 		{
 			return;

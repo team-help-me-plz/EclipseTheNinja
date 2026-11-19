@@ -30,6 +30,9 @@ public class EclipseTheNinja : ModuleRules
 		// 배경 산맥 액터(능선 메시 생성)
 		PrivateDependencyModuleNames.AddRange(new string[] { "GeometryCore", "GeometryFramework" });
 
+		// 안내 표지판 팝업의 반복 동영상(MediaPlayer, MediaTexture)
+		PrivateDependencyModuleNames.Add("MediaAssets");
+
 		// PCG 볼륨 크기 조절(브러시 재생성)에 에디터 모듈이 필요하다
 		if (Target.bBuildEditor)
 		{

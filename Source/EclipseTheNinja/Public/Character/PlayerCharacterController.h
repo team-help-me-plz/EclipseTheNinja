@@ -11,6 +11,7 @@ class UInputAction;
 class UInputMappingContext;
 class UPauseMenuWidget;
 class USettingsWidget;
+class UHUDWidget;
 
 /**
  * 
@@ -62,6 +63,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Input|Input Actions")
 	TObjectPtr<UInputAction> PauseAction;
 
+	/** 일시정지 메뉴 WBP. 메뉴 버튼 사운드는 이 WBP 기본값에서 등록한다 (비워두면 C++ 기본 레이아웃, 사운드 없음) */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UPauseMenuWidget> PauseMenuWidgetClass;
+
+	/** 일시정지 메뉴에서 여는 설정 WBP (비워두면 C++ 기본 레이아웃, 사운드 없음) */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<USettingsWidget> SettingsWidgetClass;
+
 	/** Mobile controls widget to spawn */
 	UPROPERTY(EditAnywhere, Category = "Input|Touch Controls")
 	TSubclassOf<UUserWidget> MobileControlsWidgetClass;
@@ -103,6 +112,20 @@ public:
 	// 컷신 건너뛰기처럼 ESC를 다른 용도로 쓰는 동안 일시정지 메뉴를 열지 않게 한다. 막은 횟수만큼 풀어야 다시 열린다
 	void PushPauseMenuBlock() { ++PauseMenuBlockCount; }
 	void PopPauseMenuBlock() { PauseMenuBlockCount = FMath::Max(0, PauseMenuBlockCount - 1); }
+
+	// 건너뛸 수 있는 컷신이 시작·끝날 때 부른다. HUD의 건너뛰기 위젯을 켜고 끈다
+	// HUD가 아직 만들어지기 전이면 상태만 기억했다가 HUD가 등록될 때 적용한다
+	void SetCinematicSkipAvailable(bool bAvailable);
+
+	// 건너뛰기 위젯이 키를 끝까지 눌렀을 때 부른다. 재생 중인 컷신 트리거가 OnCinematicSkipRequested를 받아 건너뛴다
+	void RequestCinematicSkip();
+
+	DECLARE_MULTICAST_DELEGATE(FOnCinematicSkipRequested);
+	FOnCinematicSkipRequested OnCinematicSkipRequested;
+
+	// HUD 위젯이 만들어지고 사라질 때 스스로 등록·해제한다
+	void RegisterHUDWidget(UHUDWidget* InHUDWidget);
+	void UnregisterHUDWidget(UHUDWidget* InHUDWidget);
 
 	// 사망 연출이 화면을 어둡게 한 채 리스폰했으면 RespawnFadeInTime 동안 다시 밝힌다. 어둡지 않으면 아무것도 하지 않는다
 	void FadeInAfterRespawn();
@@ -147,6 +170,9 @@ private:
 
 	bool bShowCursorBeforePause = false;
 	int32 PauseMenuBlockCount = 0;
+
+	TWeakObjectPtr<UHUDWidget> HUDWidget;
+	bool bCinematicSkipAvailable = false;
 	bool bUsingGamepad = false;
 	double IgnoreCursorWarpUntil = 0.0;
 	FVector2D LastObservedMousePosition = FVector2D::ZeroVector;

@@ -110,6 +110,13 @@ public:
 	UPROPERTY(SaveGame)
 	bool bHasReturnRespawnTransform = false;
 
+	/**
+	 * 죽으면 이전 맵으로 돌아가는 맵(보스 아레나)에 있는 동안 true.
+	 * 이어하기도 사망과 같게 이 맵이 아니라 ReturnLevel의 마지막 체크포인트에서 시작한다.
+	 */
+	UPROPERTY(SaveGame)
+	bool bContinueAtReturnLevel = false;
+
 	/** 마지막으로 저장한 살아 있는 플레이어의 현재 체력. */
 	UPROPERTY(SaveGame)
 	float Health = 0.f;

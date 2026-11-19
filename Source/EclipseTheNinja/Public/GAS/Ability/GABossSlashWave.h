@@ -51,7 +51,7 @@ protected:
 	// 보스 정면 기준 발사 위치. 횡스크롤 평면(Y)은 보스와 같게 맞춘다.
 	FVector GetSpawnLocation(const AEnemy* Enemy) const;
 
-	// 발사 위치에서 대상까지의 방향. 대상이 없으면 보스 정면으로 날린다.
+	// 발사 위치에서 대상까지의 방향. 대상이 없으면 보스 정면으로, 난사 중이면 정면 기준 랜덤 각도로 날린다.
 	FVector GetLaunchDirection(const AActor* Avatar, const FVector& SpawnLocation) const;
 
 	// 발사 위치, 실제 비행 방향, 조준 대상까지의 선을 그린다.
@@ -80,6 +80,13 @@ protected:
 	/** 수평선에서 위아래로 조준할 수 있는 최대 각도. 0이면 항상 수평으로 날린다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Projectile", meta = (ClampMin = "0.0", ClampMax = "89.0", Units = "deg"))
 	float MaxAimPitch = 30.0f;
+
+	/**
+	 * 놓친 대상 난사 중 위아래로 랜덤하게 날릴 최대 각도. 시전마다 -값~+값 사이에서 하나를 골라 그 시전의 모든 검기에 쓴다.
+	 * 난사 컴포넌트가 대상 쪽으로 돌아서 쓰기로 정한 시전은 랜덤 대신 대상 위치로 조준한다(MaxAimPitch 제한).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Projectile", meta = (ClampMin = "0.0", ClampMax = "89.0", Units = "deg"))
+	float RampageRandomPitch = 60.0f;
 
 	/** 피격 범위 표시 띠의 길이(cm). 검기가 날아가는 거리에 맞춘다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern|Telegraph", meta = (ClampMin = "1.0", Units = "cm"))

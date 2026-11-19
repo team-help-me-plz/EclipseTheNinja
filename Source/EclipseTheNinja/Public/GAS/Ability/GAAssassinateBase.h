@@ -250,6 +250,10 @@ private:
 	// 아래 암살 소리를 BelowAssassinationSoundDelay만큼 실제 시간으로 늦춰 낸다.
 	void PlayBelowAssassinationSound();
 	void PlayImpactVFX();
+
+	// 플레이어 카메라 매니저의 클로즈업을 켜고 끈다. 켠 적이 없으면 끌 때 아무것도 하지 않는다.
+	void SetCloseUpActive(bool bActive);
+	bool bCloseUpStarted = false;
 	UFUNCTION()
 	void OnVFXEvent(FGameplayEventData Payload);
 

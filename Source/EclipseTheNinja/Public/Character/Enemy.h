@@ -22,6 +22,7 @@ class UAssassinateTargetComponent;
 class UAssassinationDropComponent;
 class USphereComponent;
 class UMovementLoopSoundComponent;
+class UFootstepSoundComponent;
 class UEnemyFloorActivationComponent;
 struct FOnAttributeChangeData;
 struct FGameplayEffectContextHandle;
@@ -105,6 +106,14 @@ public:
 	/** 지금 암살 대상으로 지정될 수 있는지. 경계 단계 검사와 별도로 적 종류별 조건(보스 실드 등)을 추가한다. */
 	virtual bool CanBeAssassinated() const { return true; }
 
+	/**
+	 * 이 적을 암살할 때 카메라 클로즈업 연출을 재생할지.
+	 * 일반 적은 암살이 잦아 매번 줌인하면 흐름이 끊기므로 끄고, 보스처럼 특별한 대상만 켠다.
+	 * BP 기본값·레벨에 놓은 개별 적·코드(bPlayAssassinateCloseUp 직접 대입)에서 바꿀 수 있다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Assassinate|Camera")
+	bool bPlayAssassinateCloseUp = false;
+
 	/** 암살 연출 동안 MeshYOffset을 빼서 메시를 캡슐(암살자와 같은 Y)에 맞춘다. 리스폰 때 다시 켜진다. */
 	void SetMeshYOffsetSuppressed(bool bSuppressed);
 
@@ -125,6 +134,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Patrol")
 	FVector ChooseNextPatrolLocation();
+
+	// 다음 순찰 방향을 확정하고 그 목적지가 있는 X 방향(목적지 X - 현재 X)을 돌려준다.
+	// 회전하며 순찰 끝에서 조금 밀려나도 다음 목적지 선택이 이 방향을 따른다.
+	float CommitNextPatrolDirectionX();
+
+	// 순찰 끝 대기·회전 몽타주. 비어 있으면 nullptr이다.
+	UAnimMontage* GetPatrolEndIdleMontage() const { return PatrolEndIdleMontage; }
+	UAnimMontage* GetPatrolTurnMontage() const { return PatrolTurnMontage; }
 
 	UFUNCTION(BlueprintPure, Category = "AI")
 	bool IsReadyForAI() const;
@@ -366,6 +383,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Patrol")
 	float PatrolMaxOffset = 300.0f;
 
+	/** 순찰 끝에 도착하면 한 번 재생할 대기 몽타주. 비우면 순찰 끝 태스크의 대기 시간만큼 서 있는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI|Patrol")
+	TObjectPtr<UAnimMontage> PatrolEndIdleMontage;
+
+	/** 순찰 끝에서 반대편으로 뒤돌 때 재생할 180도 회전 몽타주. 루트 모션으로 액터를 돌린다. 비우면 즉시 돈다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI|Patrol")
+	TObjectPtr<UAnimMontage> PatrolTurnMontage;
+
 	/** 시작 위치 중심의 활동 영역. 순찰 구간과 경계 수색 지점을 제한한다. 추적/공격은 제한하지 않는다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Detection", meta = (ClampMin = "1.0"))
 	float CombatAreaRadius = 1000.0f;
@@ -412,6 +437,10 @@ protected:
 	float PatrolMinX = 0.0f;
 	float PatrolMaxX = 0.0f;
 	bool bPatrolTowardsMax = true;
+
+	// 현재 위치에서 다음 순찰 목적지가 최대 X 쪽인지. 목적지 선택과 회전 판정이 같은 기준을 쓴다.
+	bool ResolvePatrolTowardsMax() const;
+
 	double NextAttackTime = 0.0;
 
 	/** 사망 몽타주 종료 후 시체를 유지하는 시간(초). */
@@ -438,6 +467,10 @@ protected:
 	// 땅 위를 걷는 동안 발소리 루프를 재생한다. 보스처럼 애니메이션 노티파이로 발소리를 내는 적은 사운드를 비운다
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UMovementLoopSoundComponent> WalkSoundComp;
+
+	// 땅 위를 일정 거리 걸을 때마다 발소리 한 번을 낸다. 보스처럼 노티파이로 발소리를 내는 적은 사운드를 비운다
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UFootstepSoundComponent> FootstepSoundComp;
 
 	// 플레이어와 먼 층에 있으면 틱·애니메이션·AI·감지를 멈춘다. 레벨에 층 볼륨이 없으면 아무 일도 하지 않는다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

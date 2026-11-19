@@ -6,6 +6,8 @@
 #include "GameFramework/WorldSettings.h"
 #include "EclipseWorldSettings.generated.h"
 
+class UEclipseStageDefinition;
+
 /**
  * 프로젝트 전용 WorldSettings.
  *  - 레벨마다 World Settings 패널에서 입장 시 표시할 맵 이름을 지정한다.
@@ -25,6 +27,14 @@ public:
     /** false면 이름이 있어도 입장 시 표시하지 않는다(메인메뉴, 테스트 맵 등). */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Map Name")
     bool bShowMapNameOnEnter = true;
+
+    /**
+    * 이 맵에 들어올 때 불러올 스테이지 정의 (라이라 DefaultGameplayExperience).
+    * 비어 있으면 프리로드 없이 시작한다 (메인 메뉴, 테스트 맵).
+    * 소프트 참조라 정의 에셋의 이름을 바꾸거나 옮겨도 따라간다.
+    */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stage")
+    TSoftObjectPtr<UEclipseStageDefinition> StageDefinition;
 
     /**
      * 현재 월드의 표시할 맵 이름을 가져온다.

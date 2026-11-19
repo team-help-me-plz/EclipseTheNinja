@@ -28,7 +28,7 @@ enum class EBossLostTargetState : uint8
  * 보스가 전투 중 대상을 놓쳤을 때의 행동을 맡는다. 일반 적처럼 마지막 목격 위치 주변을 수색하는 대신 아래 순서로 진행한다.
  * 1. 접근: 마지막 목격 위치까지 간다. 가는 도중 대상을 다시 보면 일반 전투로 돌아간다.
  * 2. 포효: 도착해도(또는 길이 막혀도) 못 찾으면 RoarMontage와 RoarSound를 재생한다. 대상을 다시 봐도 끝까지 재생한다.
- * 3. 난사: 마지막 목격 위치 좌우 RampageRadius 안을 오가며, 페이즈와 무관하게 모든 패턴을 RampagePatternWeights로 골라 쓴다.
+ * 3. 난사: 마지막 목격 위치 좌우 RampageRadius 안을 오가며, 페이즈와 무관하게 모든 패턴을 RampagePatternWeights로 골라 쓴다. 쿨타임은 무시한다.
  * 4. 복귀: RampageDuration이 지나면 대상을 잊고 순찰로 돌아간다. 그 전에 대상을 다시 보면 일반 전투로 돌아간다.
  * 포효·난사 중 숨은 대상에게 공격받아 마지막 목격 위치가 바뀌면, 난사를 멈추고 1번(접근)부터 다시 한다.
  *
@@ -69,9 +69,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Lost Target")
 	bool IsRoaring() const;
 
-	/** 난사 중인지. 원거리 패턴은 이때 대상 대신 바라보는 방향으로 쏜다. */
+	/** 난사 중인지. 원거리 패턴은 이때 대상 대신 바라보는 방향으로 각도를 랜덤하게 쏜다. 패턴 쿨타임도 무시한다. */
 	UFUNCTION(BlueprintPure, Category = "Lost Target")
 	bool IsRampaging() const { return LostTargetState == EBossLostTargetState::Rampaging; }
+
+	/** 이번 난사 패턴을 대상 쪽으로 돌아서 쓰는지. true면 원거리 패턴은 랜덤 각도 대신 대상 위치로 조준한다. */
+	UFUNCTION(BlueprintPure, Category = "Lost Target")
+	bool ShouldAimAtTarget() const { return IsRampaging() && bAimAtTarget; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -98,8 +102,11 @@ private:
 	/** 난사 중 이동·방향 전환·패턴 시전을 진행한다. */
 	void UpdateRampage(float DeltaTime);
 
-	/** 난사 패턴 하나를 가중치 랜덤으로 골라 시전한다. 페이즈·사용 거리·행 쿨타임은 보지 않는다. */
+	/** 난사 패턴 하나를 가중치 랜덤으로 골라 시전한다. 페이즈·사용 거리·쿨타임(행·GAS)은 보지 않는다. */
 	bool ActivateRampagePattern();
+
+	/** 난사 패턴의 대상. 놓친 대상이 사라졌으면 플레이어. */
+	APawn* GetRampageTarget() const;
 
 	/** 난사용 패턴 가중치. RampagePatternWeights에 없는 행은 RampageDefaultPatternWeight를 쓴다. */
 	float GetRampagePatternWeight(FName RowName) const;
@@ -139,7 +146,7 @@ protected:
 	/**
 	 * 난사할 때 패턴 행별 선택 가중치. 키는 보스 패턴 테이블의 행 이름이다.
 	 * 여기에 없는 행은 RampageDefaultPatternWeight를 쓰고, 0이면 난사에서 쓰지 않는다.
-	 * 난사는 페이즈 가중치(PhaseWeights)·사용 거리·행 쿨타임을 보지 않는다.
+	 * 난사는 페이즈 가중치(PhaseWeights)·사용 거리·쿨타임(행·GAS)을 보지 않는다.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lost Target|Rampage", meta = (GetKeyOptions = "GetPatternRowNameOptions", ClampMin = "0.0"))
 	TMap<FName, float> RampagePatternWeights = { { FName(TEXT("QuickDrawProjectile")), 3.0f } };
@@ -147,6 +154,13 @@ protected:
 	/** RampagePatternWeights에 없는 패턴 행의 난사 가중치. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lost Target|Rampage", meta = (ClampMin = "0.0"))
 	float RampageDefaultPatternWeight = 1.0f;
+
+	/**
+	 * 난사 패턴마다 놓친 대상 쪽으로 돌아서 쓸 확률(0~1). 나머지는 좌우 중 아무 쪽이나 본다.
+	 * 대상 쪽으로 돌았을 때 원거리 패턴(발도 투사체 등)은 대상 위치로 조준해 쏜다.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lost Target|Rampage", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float RampageAimAtTargetChance = 0.25f;
 
 	/** 고른 난사 패턴을 화면에 표시할지. 출력 로그에는 항상 남긴다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Lost Target|Rampage")
@@ -179,6 +193,9 @@ private:
 	float DestinationX = 0.0f;
 	bool bHasDestination = false;
 	bool bFacingChosen = false;
+
+	/** 이번 난사 패턴을 대상 쪽으로 돌아서 쓰는지 */
+	bool bAimAtTarget = false;
 
 	/** 이동이 막혔는지 판단하는 이전 X 좌표와 거의 움직이지 못한 누적 시간 */
 	float PreviousX = 0.0f;

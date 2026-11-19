@@ -2,6 +2,7 @@
 
 #include "Character/PlayerCharacter.h"
 #include "Component/InteractHighlightComponent.h"
+#include "GAS/Ability/GAElementalFire.h"
 #include "Interface/Interactor.h"
 #include "Save/GameSaveSubsystem.h"
 #include "Widgets/AbilityUnlockNoticeWidget.h"
@@ -15,6 +16,8 @@
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 
 AAbilityUnlockPickup::AAbilityUnlockPickup()
@@ -128,6 +131,7 @@ void AAbilityUnlockPickup::Interact_Implementation(AActor* InActor)
 	IInteractor::Execute_PlayInteractMontage(InActor, this, nullptr);
 	this->Consume();
 	this->RemoveOtherPickups();
+	this->PlayUnlockSound(Player);
 	this->BP_OnUnlocked(Player);
 
 	if (!this->NoticeWidgetClass)
@@ -198,6 +202,47 @@ void AAbilityUnlockPickup::OpenNotice()
 	UTexture2D* Icon = IsValid(this->NoticeIcon) ? this->NoticeIcon.Get() : this->SkillTexture.Get();
 	Notice->SetupNotice(this->NoticeTitle, this->NoticeDescription, Icon);
 	Notice->OpenNotice(Controller);
+}
+
+USoundBase* AAbilityUnlockPickup::FindAbilityUseSound(const APlayerCharacter* InPlayer) const
+{
+	// 불 부여는 어빌리티가 사운드를 직접 들고 있다
+	if (this->AbilityToUnlock == EAbilityInputID::ElementalFire)
+	{
+		const FGameplayAbilitySpec* Spec = InPlayer->FindAbilitySpecByInputID(this->AbilityToUnlock);
+		const UGAElementalFire* FireAbility = Spec ? Cast<UGAElementalFire>(Spec->Ability) : nullptr;
+		return FireAbility ? FireAbility->GetFireImbueSound() : nullptr;
+	}
+
+	// 나머지 능력은 플레이어 BP의 ActionSounds에서 같은 사운드를 찾는다
+	switch (this->AbilityToUnlock)
+	{
+	case EAbilityInputID::ThrowKunai:
+		return InPlayer->GetActionSound(EPlayerActionSound::Kunai);
+	case EAbilityInputID::SwiftStrike:
+		return InPlayer->GetActionSound(EPlayerActionSound::SwiftStrike);
+	case EAbilityInputID::Parry:
+		return InPlayer->GetActionSound(EPlayerActionSound::Parry);
+	case EAbilityInputID::CloneTech:
+		return InPlayer->GetActionSound(EPlayerActionSound::Clone);
+	case EAbilityInputID::BelowAssassinate:
+		return InPlayer->GetActionSound(EPlayerActionSound::BelowAssassination);
+	case EAbilityInputID::LedgeClimb:
+		return InPlayer->GetActionSound(EPlayerActionSound::LedgeClimb);
+	default:
+		return nullptr;
+	}
+}
+
+void AAbilityUnlockPickup::PlayUnlockSound(const APlayerCharacter* InPlayer) const
+{
+	USoundBase* Sound = this->FindAbilityUseSound(InPlayer);
+	if (!Sound)
+	{
+		return;
+	}
+
+	UGameplayStatics::PlaySound2D(this, Sound);
 }
 
 void AAbilityUnlockPickup::ShowInteractionIndicator_Implementation()

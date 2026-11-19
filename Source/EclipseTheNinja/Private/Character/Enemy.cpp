@@ -39,6 +39,7 @@
 #include "Util/NiagaraWarmup.h"
 #include "Component/EnemySpacingComponent.h"
 #include "Component/MovementLoopSoundComponent.h"
+#include "Component/FootstepSoundComponent.h"
 #include "Component/EnemyFloorActivationComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
@@ -67,6 +68,9 @@ AEnemy::AEnemy()
 	OverHeadWidgetComponent->SetupAttachment(RootComponent);
 	OverHeadWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	// 회전은 카메라를 향하도록 따로 맞추므로 액터 회전을 따라가지 않게 한다. 적이 돌 때 위젯이 떨리지 않는다.
+	OverHeadWidgetComponent->SetUsingAbsoluteRotation(true);
+
 	CheckpointBound = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBound"));
 	AssassinateTargetComt = CreateDefaultSubobject<UAssassinateTargetComponent>(TEXT("AssassinateTargetComp"));
 
@@ -81,9 +85,13 @@ AEnemy::AEnemy()
 	// 시체가 사라질 때까지 기다리지 않고 암살 시작 4초 뒤에 떨어뜨린다.
 	AssassinationDropComp->SetDropDelay(true, 4.0f);
 
-	// 몬스터 걷기 발소리. 지금은 기본 사운드를 비워 꺼 둔다.
-	// 다시 켜려면 BP의 WalkSoundComp에서 Loop Sound를 지정한다 (예: /Game/Audio/A_army_walk_loop)
+	// 몬스터 걷기 발소리 루프. 지금은 FootstepSoundComp의 걸음 발소리를 쓰므로 기본 사운드를 비워 꺼 둔다.
+	// 다시 켜려면 BP의 WalkSoundComp에서 Loop Sound를 지정한다 (예: /Game/Audio/SW_Enemy_Walk_Loop)
 	WalkSoundComp = CreateDefaultSubobject<UMovementLoopSoundComponent>(TEXT("WalkSoundComp"));
+
+	// 몬스터 걸음 발소리. 이동 거리마다 한 번 낸다.
+	// 사운드와 감쇠 설정은 BP의 FootstepSoundComp에서 지정한다 (비우면 소리를 내지 않는다)
+	FootstepSoundComp = CreateDefaultSubobject<UFootstepSoundComponent>(TEXT("FootstepSoundComp"));
 
 	NoiseDetectComponent = CreateDefaultSubobject<USphereComponent>(TEXT("NoiseDetectComponent"));
 	NoiseDetectComponent->SetupAttachment(RootComponent);
@@ -988,15 +996,40 @@ FVector AEnemy::ChooseNextPatrolLocation()
 		return GetActorLocation();
 
 	StartPatrol();
-	const float X = GetActorLocation().X;
-	if (bPatrolTowardsMax && X >= PatrolMaxX - 10.0f) 
-		bPatrolTowardsMax = false;
-	else if (!bPatrolTowardsMax && X <= PatrolMinX + 10.0f) 
-		bPatrolTowardsMax = true;
+	bPatrolTowardsMax = ResolvePatrolTowardsMax();
 
 	FVector Location = BehaviorOrigin;
 	Location.X = bPatrolTowardsMax ? PatrolMaxX : PatrolMinX;
 	return Location;
+}
+
+bool AEnemy::ResolvePatrolTowardsMax() const
+{
+	// 가던 쪽 끝에 닿았으면 반대편으로 방향을 바꾼다.
+	const float X = GetActorLocation().X;
+
+	if (bPatrolTowardsMax && X >= PatrolMaxX - 10.0f)
+	{
+		return false;
+	}
+
+	if (!bPatrolTowardsMax && X <= PatrolMinX + 10.0f)
+	{
+		return true;
+	}
+
+	return bPatrolTowardsMax;
+}
+
+float AEnemy::CommitNextPatrolDirectionX()
+{
+	bPatrolTowardsMax = ResolvePatrolTowardsMax();
+
+	const float TargetX = bPatrolTowardsMax
+		? PatrolMaxX
+		: PatrolMinX;
+
+	return TargetX - GetActorLocation().X;
 }
 
 bool AEnemy::IsValidAITarget(AActor* Target) const

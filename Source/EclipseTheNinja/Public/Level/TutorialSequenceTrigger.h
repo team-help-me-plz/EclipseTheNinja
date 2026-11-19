@@ -20,8 +20,6 @@ class ACloneCharacter;
 class UMaterialInterface;
 class USkeletalMeshComponent;
 class UInputMappingContext;
-class USkipPromptWidget;
-struct FInputActionInstance;
 
 /**
  * 튜토리얼 컷신 재생 트리거 액터.
@@ -38,9 +36,10 @@ struct FInputActionInstance;
  *    연출 분신이 실제 분신으로 바뀌어, 시퀀스가 끝난 뒤에도 수명 동안 남아 발판을 누르고 있는다
  *  - bTriggerOnOverlap을 끄면 트리거로는 재생하지 않고, 다른 액터가 PlaySequence/PlaySequenceAt을 불러 재생한다 (보스 이벤트 컷신)
  *  - bOriginFollowsMarker를 켜면 SequenceOrigin 마커 위치가 시퀀스 키 공간의 SequenceKeyAnchor 지점이 되도록
- *    TransformOrigin을 자동으로 맞춘다. 컷신 위치를 바꿀 때는 마커(또는 트리거 액터 전체)만 옮기면 된다
- *  - bAllowSkip을 켜면 이미 끝까지 본 시퀀스를 다시 재생할 때 SkipAction 키(IMC_SkipCinematic: ESC·게임패드 메뉴 버튼)를 SkipHoldTime초 동안 눌러 건너뛸 수 있다.
- *    누르는 동안 화면 우측 상단에 테두리가 시계방향으로 차는 안내가 뜨고, 그동안 일시정지 메뉴는 열리지 않는다
+ *    TransformOrigin을 자동으로 맞춘다. PlayerEndPoint가 있으면 마커 대신 그 지점을 쓰므로, 트리거 상자는 자유롭게 옮기고
+ *    컷신 위치는 PlayerEndPoint(연출용 닌자가 끝나는 자리)만 옮겨 바꾼다. 이때 SequenceKeyAnchor는 시퀀스 키 공간의 PlayerEndPoint 위치다
+ *  - bAllowSkip을 켜면 이미 끝까지 본 시퀀스를 다시 재생할 때 HUD의 건너뛰기 위젯(UCinematicSkipWidget)을 켠다.
+ *    입력·누른 시간·표시는 위젯이 맡고, 위젯이 끝까지 눌렸다고 알리면 이 트리거가 시퀀스를 끝 프레임으로 넘긴다
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTutorialSequenceEnded, ATutorialSequenceTrigger*, Trigger);
 
@@ -141,6 +140,10 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UWidgetComponent> QTEPrompt = nullptr;
 
+    // QTE 키 안내 둘레로 퍼지는 파동 테두리. QTEPrompt에 붙어 같은 지점에 뜬다
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UWidgetComponent> QTEPulseRing = nullptr;
+
     // 컷신 기준 마커. bOriginFollowsMarker일 때 이 위치가 시퀀스 키 공간의 SequenceKeyAnchor 지점이 된다
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UArrowComponent> SequenceOrigin = nullptr;
@@ -149,12 +152,12 @@ protected:
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial")
     TObjectPtr<ALevelSequenceActor> SequenceActor = nullptr;
 
-    // 켜면 SequenceOrigin 마커 위치에서 SequenceKeyAnchor를 뺀 값을 SequenceActor의 TransformOrigin으로 쓴다
+    // 켜면 SequenceOrigin 마커 위치(PlayerEndPoint가 있으면 그 위치)에서 SequenceKeyAnchor를 뺀 값을 SequenceActor의 TransformOrigin으로 쓴다
     // PlaySequenceAt으로 원점을 직접 넘긴 재생에는 적용하지 않는다
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Origin")
     bool bOriginFollowsMarker = false;
 
-    // 마커가 나타내는 시퀀스 키 공간의 위치 (예: 연출용 닌자의 위치 키)
+    // 마커(또는 PlayerEndPoint)가 나타내는 시퀀스 키 공간의 위치 (예: 연출용 닌자가 끝나는 위치 키)
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Origin", meta = (EditCondition = "bOriginFollowsMarker"))
     FVector SequenceKeyAnchor = FVector::ZeroVector;
 
@@ -235,6 +238,21 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE")
     FLinearColor QTEOutlineColor = FLinearColor::Red;
 
+    // 키 안내가 떠 있는 동안 키 둘레로 파동 테두리를 반복해 퍼뜨려 "지금 눌러!"를 강조한다. 키 자체는 움직이지 않는다
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE")
+    bool bAnimateQTEPrompt = true;
+
+    // 파동 한 겹이 퍼져 사라지는 데 걸리는 시간
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (ClampMin = "0.2", Units = "s", EditCondition = "bAnimateQTEPrompt"))
+    float QTEPromptPulsePeriod = 1.0f;
+
+    // 파동이 키 가장자리에서 바깥으로 퍼지는 거리(px)
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (ClampMin = "0.0", EditCondition = "bAnimateQTEPrompt"))
+    float QTEPromptPulseSpread = 48.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|QTE", meta = (EditCondition = "bAnimateQTEPrompt"))
+    FLinearColor QTEPromptPulseColor = FLinearColor(1.0f, 0.85f, 0.4f, 1.0f);
+
     // Activate를 토글할 시퀀스 프레임(표시 프레임 기준). 0보다 작으면 쓰지 않는다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Activate")
     int32 ActivateFrame = -1;
@@ -274,47 +292,24 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Clone")
     bool bStartCloneCooldownOnHandoff = true;
 
-    // 켜면 이미 끝까지 본 시퀀스를 다시 재생할 때 SkipAction 키를 길게 눌러 건너뛸 수 있다 (예: 보스 진입 컷신)
+    // 켜면 이미 끝까지 본 시퀀스를 다시 재생할 때 건너뛸 수 있다 (예: 보스 진입 컷신). 키·누르는 시간은 UCinematicSkipWidget에서 정한다
     // 건너뛰면 끝 프레임으로 바로 넘어가므로 QTE·ActivateFrame·HandoffCloneFrame 처리는 하지 않는다. 연출만 있는 시퀀스에 켠다
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Tutorial|Skip")
     bool bAllowSkip = false;
-
-    // 건너뛰기 입력 액션. 기본은 IA_SkipCinematic
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip"))
-    TObjectPtr<UInputAction> SkipAction = nullptr;
-
-    // 건너뛰기 키를 정하는 매핑 컨텍스트. 기본은 IMC_SkipCinematic(ESC·게임패드 메뉴 버튼, 일시정지와 같은 키)
-    // 건너뛰기를 받는 동안 게임플레이 IMC보다 높은 우선순위로 넣고, 일시정지 메뉴는 열리지 않게 막는다
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip"))
-    TObjectPtr<UInputMappingContext> SkipMappingContext = nullptr;
-
-    // 이 시간(초) 동안 계속 누르면 건너뛴다
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip", ClampMin = "0.05", Units = "s"))
-    float SkipHoldTime = 0.5f;
 
     // 건너뛴 직후 화면을 검정에서 이 시간(초) 동안 밝혀 컷이 툭 끊기지 않게 한다. 0이면 페이드 없이 넘어간다
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip", ClampMin = "0.0", Units = "s"))
     float SkipFadeInDuration = 0.3f;
 
-    // 누르는 동안 우측 상단에 띄울 안내 위젯. 모양을 바꾸려면 USkipPromptWidget을 상속한 위젯 블루프린트를 지정한다
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial|Skip", meta = (EditCondition = "bAllowSkip"))
-    TSubclassOf<USkipPromptWidget> SkipPromptClass;
-
 private:
-    // 지금 재생이 건너뛰기를 받을 수 있으면 건너뛰기 입력을 켜고 일시정지 메뉴를 막는다
+    // 지금 재생이 건너뛸 수 있으면(bAllowSkip + 이미 본 시퀀스) 컨트롤러를 통해 HUD 건너뛰기 위젯을 켜고 건너뛰기 요청을 받는다
     void BeginSkipInput();
 
-    // 건너뛰기 입력을 끄고 안내를 지우고 일시정지 메뉴 차단을 푼다. 켜져 있지 않으면 아무것도 하지 않는다
+    // 건너뛰기 위젯을 끄고 요청 받기를 멈춘다. 켜져 있지 않으면 아무것도 하지 않는다
     void EndSkipInput();
 
-    // QTE·건너뛰기 중 지금 필요한 입력만 이 액터의 입력 컴포넌트에 다시 바인딩한다. 둘 다 필요 없으면 입력을 끈다
+    // QTE를 기다리는 동안만 이 액터의 입력 컴포넌트에 QTE 키를 바인딩한다. 아니면 입력을 끈다
     void RefreshTriggerInput();
-
-    // 건너뛰기 키를 누르고 있는 동안 매 프레임 호출된다. 누른 시간이 SkipHoldTime에 닿으면 건너뛴다
-    void OnSkipHeld(const FInputActionInstance& Instance);
-
-    // SkipHoldTime 전에 키를 떼면 안내를 숨기고 진행을 되돌린다
-    void OnSkipReleased();
 
     // 끝 프레임으로 넘어가 시퀀스가 정상 종료 경로로 끝나게 한다
     void SkipSequence();
@@ -328,8 +323,8 @@ private:
     bool bSkipEnabled = false;
     bool bSkipped = false;
 
-    UPROPERTY(Transient)
-    TObjectPtr<USkipPromptWidget> SkipPrompt = nullptr;
+    // 컨트롤러의 OnCinematicSkipRequested 구독 핸들
+    FDelegateHandle SkipRequestHandle;
 
     bool bHasPlayed = false;
 
@@ -367,5 +362,8 @@ private:
     TObjectPtr<USkeletalMeshComponent> QTEOutlineMesh = nullptr;
 
     void SetQTEOutlineVisible(bool bVisible);
+
+    // QTE 키 안내를 보이거나 숨기고, 보이는 동안 키 둘레 파동을 함께 띄운다
+    void SetQTEPromptVisible(bool bVisible);
 
 };

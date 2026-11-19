@@ -19,7 +19,6 @@
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
-#include "UObject/ConstructorHelpers.h"
 #include "Util/EclipseCollisionChannels.h"
 
 // Sets default values
@@ -48,22 +47,7 @@ ABurnableVine::ABurnableVine()
 	this->BurnEffect->SetupAttachment(GetRootComponent());
 	this->BurnEffect->bAutoActivate = false;
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> BurnSystem(
-		TEXT("/Game/VFX/3D_Fire_and_Explosions/Effects/P_Fire_4.P_Fire_4"));
-
-	if (BurnSystem.Succeeded())
-	{
-		this->BurnEffect->SetAsset(BurnSystem.Object);
-	}
-
-	// 불타는 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
-	static ConstructorHelpers::FObjectFinder<USoundBase> BurnSoundFinder(
-		TEXT("/Game/Audio/Fire_Burning_1-2_wav.Fire_Burning_1-2_wav"));
-
-	if (BurnSoundFinder.Succeeded())
-	{
-		this->BurnSound = BurnSoundFinder.Object;
-	}
+	// 불타는 이펙트(BurnEffect의 Niagara System)와 사운드(BurnSound)는 BP에서 등록한다
 
 	this->CheckpointBoundComponent = CreateDefaultSubobject<UCheckpointBoundComponent>(TEXT("CheckpointBoundComponent"));
 }

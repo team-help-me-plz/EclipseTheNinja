@@ -256,9 +256,11 @@ void UGABaseAttack::OnHitEvent(FGameplayEventData Payload)
 		return;
 	}
 
-	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(Character))
+	if (APlayerCharacter* Player = Cast<APlayerCharacter>(Character))
 	{
 		Player->PlaySwordAttackSound(ComboIndex, SourceASC->HasMatchingGameplayTag(EclipseGameplayTags::State_Weapon_Element_Fire));
+		// 휘두르는 소리가 나는 순간 적에게 들리는 공격 소음도 낸다
+		Player->EmitAttackNoise();
 	}
 	else if (Enemy)
 	{

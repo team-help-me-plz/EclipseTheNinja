@@ -75,6 +75,8 @@ private:
 		const FArrayProperty* PathProperty = nullptr;
 		// 등록할 때(문이 닫혀 있을 때)의 충돌 범위. ActorBounds 모양에 쓴다
 		FBox Bounds = FBox(ForceInit);
+		// 등록할 때 보이던 메시들의 범위. 위치 한 점이 바닥 속에 있어도 메시가 보이는 칸이 밝혀지면 발견한다
+		FBox DiscoverBounds = FBox(ForceInit);
 		bool bDiscovered = false;
 	};
 

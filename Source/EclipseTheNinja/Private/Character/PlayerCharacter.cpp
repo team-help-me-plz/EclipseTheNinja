@@ -4,6 +4,8 @@
 #include "Character/PlayerCharacter.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "Save/GameSaveSubsystem.h"
 #include "Checkpoint/CheckpointSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -13,6 +15,8 @@
 #include "Components/InputComponent.h"
 #include "InputActionValue.h"
 #include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "EnhancedPlayerInput.h"
 #include "InputAction.h"
 #include "GAS/Ability/GAParry.h"
 #include "GAS/Tags/EclipseGameplayTags.h"
@@ -27,6 +31,7 @@
 #include "Character/PlayerCharacterController.h"
 #include "Character/PlayerCharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Subsystem/NoiseSubsystem.h"
 #include "GAS/StatAttributeSet.h"
 #include "GAS/Effects/GEDefaultStats.h"
 #include "GAS/Ability/GABaseAttack.h"
@@ -49,9 +54,11 @@
 #include "Character/Enemy.h"
 #include "Component/HidingComponent.h"
 #include "Minimap/MinimapComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Util/EclipseCollisionChannels.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
+#include "AssetManagement/EclipseStageManagerSubsystem.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -71,6 +78,19 @@ APlayerCharacter::APlayerCharacter()
 	HidingComponent = CreateDefaultSubobject<UHidingComponent>(TEXT("HidingComponent"));
 
 	MinimapComponent = CreateDefaultSubobject<UMinimapComponent>(TEXT("MinimapComponent"));
+
+	// 가슴 높이에서 주변을 은은하게 밝힌다. 밤 성 분위기를 해치지 않도록 약한 달빛 색으로 둔다.
+	AuraLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("AuraLight"));
+	AuraLight->SetupAttachment(RootComponent);
+	// 오른쪽을 볼 때(Yaw 0) 기준 위치. 실제 위치는 Tick에서 월드 기준으로 맞춘다.
+	AuraLight->SetRelativeLocation(AuraLightOffset);
+	AuraLight->SetIntensityUnits(ELightUnits::Candelas);
+	AuraLight->SetIntensity(5.0f);
+	AuraLight->SetAttenuationRadius(600.0f);
+	AuraLight->SetLightColor(FLinearColor(0.75f, 0.85f, 1.0f));
+	AuraLight->SetSourceRadius(30.0f);
+	// 이 빛으로는 그림자를 만들지 않는다. 가슴 높이 광원이라 플레이어 몸이 벽·바닥에 큰 그림자를 드리운다.
+	AuraLight->SetCastShadows(false);
 
 	// 암살도 배열의 기본 항목으로 둔다. 기본 공격 항목은 부모 생성자에서 추가한다.
 	FAbilityInfo& AssassinateInfo = AbilityClassArray.AddDefaulted_GetRef();
@@ -108,6 +128,9 @@ APlayerCharacter::APlayerCharacter()
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->MaxWalkSpeedCrouched = 250.0f;
 
+	// 앉은 상태에서도 모서리 밖으로 걸어 나가 떨어지도록 허용한다. 기본값은 막혀 있어 제자리에서 걷기만 한다.
+	GetCharacterMovement()->bCanWalkOffLedgesWhenCrouching = true;
+
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 750.0f, 0.0f);
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 
@@ -137,6 +160,16 @@ void APlayerCharacter::BeginPlay()
   Super::BeginPlay();
   InteractComponent->SetBoxExtent(InteractBoxSize);
   InteractComponent->SetAbsolute(false, true, true);
+  if (IsValid(AuraLight))
+  {
+      // BP에 그림자 켜기가 저장돼 있어도 이 빛은 그림자를 만들지 않는다.
+      AuraLight->SetCastShadows(false);
+      AuraLightBaseIntensity = AuraLight->Intensity;
+      AuraLightAlpha = IsHiding() ? 0.0f : 1.0f;
+      AuraLight->SetIntensity(AuraLightBaseIntensity * AuraLightAlpha);
+      AuraLight->SetVisibility(AuraLightAlpha > 0.0f);
+      UpdateAuraLightLocation();
+  }
   WarnIfAbilityMissing(EAbilityInputID::Assassinate);
   WarnIfAbilityMissing(EAbilityInputID::AerialAssassinate);
   WarnIfAbilityMissing(EAbilityInputID::BelowAssassinate);
@@ -167,7 +200,8 @@ void APlayerCharacter::BeginPlay()
 
 	// TOOD 변수로 만들기
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	Movement->MaxFlySpeed = 121.f;
+	// 벽타기 오르내리기 속도. 벽에 붙으면 Flying 모드라 이 값이 그대로 오르내리는 속도가 된다.
+	Movement->MaxFlySpeed = 181.5f;
 	Movement->BrakingDecelerationFlying = Movement->BrakingDecelerationWalking;
 
     GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
@@ -175,6 +209,15 @@ void APlayerCharacter::BeginPlay()
         GetGameInstance()->GetSubsystem<UGameSaveSubsystem>()->PlayerReady(this);
     }));
 
+	UEclipseStageManagerSubsystem* Stage = GetWorld()->GetSubsystem<UEclipseStageManagerSubsystem>();
+	APlayerController* StagePC = Cast<APlayerController>(GetController());
+	if (Stage && StagePC && !Stage->IsStageLoaded())
+	{
+		// 로드가 끝날 때까지 이동·공격·어빌리티 입력을 모두 막는다. 화면은 스테이지 매니저의 로딩 화면이 가린다.
+		// 다시 켜는 것은 스테이지 매니저가 로드 완료를 알리기 직전에 한다 (시작 컷신이 그 뒤에 입력을 다시 막을 수 있게)
+		// 카메라 페이드는 쓰지 않는다: 시작 컷신의 페이드 트랙이 그 검은 화면을 원래 상태로 저장했다가 끝날 때 되살릴 수 있다
+		DisableInput(StagePC);
+	}
 }
 
 void APlayerCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -195,6 +238,7 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateMovementSound(DeltaSeconds);
+	UpdateAuraLight(DeltaSeconds);
 	// 아래의 조기 반환(공격 중 등)과 관계없이 조준 위젯은 매 프레임 갱신한다.
 	UpdateAimWidget();
 	// 상호작용 키는 암살이 우선이므로, 암살이 가능한 동안에는 상호작용 표시를 숨겨 헷갈리지 않게 한다.
@@ -214,6 +258,47 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 	UpdateCursorFacing(DeltaSeconds);
 }
 
+void APlayerCharacter::UpdateAuraLight(float DeltaSeconds)
+{
+	if (!IsValid(AuraLight))
+	{
+		return;
+	}
+
+	UpdateAuraLightLocation();
+
+	// 은신구역에 들어가는 중·숨어 있는 중·나오는 중에는 빛을 끈다.
+	const float TargetAlpha = IsHiding() ? 0.0f : 1.0f;
+	if (FMath::IsNearlyEqual(AuraLightAlpha, TargetAlpha))
+	{
+		return;
+	}
+
+	AuraLightAlpha = AuraLightFadeTime > KINDA_SMALL_NUMBER
+		? FMath::FInterpConstantTo(AuraLightAlpha, TargetAlpha, DeltaSeconds, 1.0f / AuraLightFadeTime)
+		: TargetAlpha;
+
+	AuraLight->SetIntensity(AuraLightBaseIntensity * AuraLightAlpha);
+	// 완전히 꺼지면 렌더링에서도 빼서 숨은 자리 주변이 조금도 밝아지지 않게 한다.
+	AuraLight->SetVisibility(AuraLightAlpha > 0.0f);
+}
+
+void APlayerCharacter::UpdateAuraLightLocation()
+{
+	if (!IsValid(AuraLight))
+	{
+		return;
+	}
+
+	// 루트에 붙어 있으므로 상대 위치는 플레이어 회전을 따라 돈다.
+	// 회전을 되돌린 값을 상대 위치로 넣어, 왼쪽을 볼 때도 월드 기준 같은 쪽(카메라 쪽)에 있게 한다.
+	const FVector RelativeOffset = GetActorQuat().UnrotateVector(AuraLightOffset);
+	if (!AuraLight->GetRelativeLocation().Equals(RelativeOffset, 0.1f))
+	{
+		AuraLight->SetRelativeLocation(RelativeOffset);
+	}
+}
+
 void APlayerCharacter::PlayCharacterSound(USoundBase* Sound, float Volume) const
 {
 	if (Sound && GetNetMode() != NM_DedicatedServer)
@@ -230,6 +315,43 @@ void APlayerCharacter::PlayActionSound(EPlayerActionSound Action, float Volume) 
 	}
 }
 
+USoundBase* APlayerCharacter::GetActionSound(EPlayerActionSound Action) const
+{
+	const TObjectPtr<USoundBase>* Sound = ActionSounds.Find(Action);
+	return Sound ? Sound->Get() : nullptr;
+}
+
+void APlayerCharacter::PlayCloneSwapSmoke(const FVector& InLocation) const
+{
+	UWorld*	World = GetWorld();
+	if (!CloneSwapSmokeSystem || !World || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	UNiagaraComponent*	Smoke = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World,
+		CloneSwapSmokeSystem,
+		InLocation + CloneSwapSmokeOffset
+	);
+	if (!Smoke || CloneSwapSmokeDuration <= 0.0f)
+	{
+		return;
+	}
+
+	// 루프 이펙트는 지정한 시간이 지나면 새 파티클 생성을 멈춘다. 남은 파티클이 사라지면 컴포넌트는 스스로 정리된다
+	FTimerHandle	StopTimer;
+	World->GetTimerManager().SetTimer(
+		StopTimer,
+		FTimerDelegate::CreateWeakLambda(Smoke, [Smoke]()
+		{
+			Smoke->Deactivate();
+		}),
+		CloneSwapSmokeDuration,
+		false
+	);
+}
+
 void APlayerCharacter::PlaySwordAttackSound(int32 ComboIndex, bool bFire) const
 {
 	const auto& Sounds = bFire ? FireAttackSounds : SwordAttackSounds;
@@ -237,6 +359,31 @@ void APlayerCharacter::PlaySwordAttackSound(int32 ComboIndex, bool bFire) const
 	{
 		PlayCharacterSound(Sounds[ComboIndex - 1]);
 	}
+}
+
+void APlayerCharacter::EmitAttackNoise()
+{
+	UNoiseSubsystem::MakeSomeNoise(this, ENoiseType::Attack, GetAttackNoiseLocation(), this);
+}
+
+FVector APlayerCharacter::GetAttackNoiseLocation() const
+{
+	if (bAttackNoiseFromSwordSocket && !AttackNoiseSocketName.IsNone())
+	{
+		// 칼은 캐릭터 메시와 별도의 메시 컴포넌트이므로 소켓을 가진 메시를 찾는다.
+		TInlineComponentArray<UMeshComponent*> Meshes(this);
+		for (const UMeshComponent* MeshComp : Meshes)
+		{
+			if (MeshComp && MeshComp != GetMesh() && MeshComp->DoesSocketExist(AttackNoiseSocketName))
+			{
+				return MeshComp->GetSocketLocation(AttackNoiseSocketName);
+			}
+		}
+	}
+
+	// 캐릭터 스켈레탈 메시의 바운드 중심
+	const USkeletalMeshComponent* CharacterMesh = GetMesh();
+	return CharacterMesh ? CharacterMesh->Bounds.Origin : GetActorLocation();
 }
 
 void APlayerCharacter::PlayRandomCharacterSound(const TArray<TObjectPtr<USoundBase>>& Sounds) const
@@ -271,7 +418,9 @@ void APlayerCharacter::UpdateMovementSound(float DeltaSeconds)
 		PreviousMovementSounds = &Sounds;
 	}
 
-	const float StepDistance = bOnWall ? 75.0f : (bIsCrouched ? 80.0f : 130.0f);
+	const float StepDistance = bOnWall
+		? WallClimbStepDistance
+		: (bIsCrouched ? CrouchWalkStepDistance : WalkStepDistance);
 	DistanceSinceMovementSound += Speed * DeltaSeconds;
 	if (DistanceSinceMovementSound >= StepDistance)
 	{
@@ -612,6 +761,7 @@ void APlayerCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerIn
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::Move);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &APlayerCharacter::MoveReleased);
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayerCharacter::OnCameraMoveEndInput);
 
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APlayerCharacter::OnCameraMoveEndInput);
@@ -653,6 +803,8 @@ void APlayerCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	PlayActionSound(EPlayerActionSound::Land, 0.75f);
+
+	EndCrouchFall();
 	bCanCoyoteJump = false;
 
 	// 공중에서 앉기 키를 누르고 있었다면 착지하면서 앉는다.
@@ -672,7 +824,46 @@ void APlayerCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uin
 		// save the game time when we started falling, so we can check it later for coyote time jumps
 		LastFallTime = GetWorld()->GetTimeSeconds();
 		bCanCoyoteJump = PrevMovementMode == MOVE_Walking && JumpCurrentCount == 0 && !bPressedJump;
+
+		if (PrevMovementMode == MOVE_Walking && bIsCrouched && bCrouchInputHeld && !bSuppressCrouchFall)
+		{
+			BeginCrouchFall();
+		}
 	}
+	else if (GetCharacterMovement()->MovementMode != EMovementMode::MOVE_Walking)
+	{
+		// 벽 붙기 등 다른 이동으로 넘어가면 앉은 낙하를 끝낸다. 걷기 전환은 Landed가 먼저 처리한다.
+		EndCrouchFall();
+	}
+}
+
+void APlayerCharacter::BeginCrouchFall()
+{
+	bCrouchFalling = true;
+
+	// 공중에서도 앉아서 걷는 속도로 움직인다. 낙하 중 최대 속도는 MaxWalkSpeed를 따르므로 잠시 바꿨다가 끝날 때 되돌린다.
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	CrouchFallSavedMaxWalkSpeed = Movement->MaxWalkSpeed;
+	Movement->MaxWalkSpeed = Movement->MaxWalkSpeedCrouched;
+
+	// 발 위치를 유지한 채 일어선 캡슐로 떨어진다.
+	// 앉은 캡슐로 떨어지면 카메라 기준이 낮아져 선 키 높이의 낙하 포즈가 화면 위쪽으로 치우친다.
+	// 착지하면 Landed에서 다시 앉는다. 위가 막혀 있으면 앉은 채로 떨어지다가 공간이 생기면 일어선다.
+	Movement->bCrouchMaintainsBaseLocation = true;
+	UnCrouch();
+	Movement->UnCrouch(false);
+	Movement->bCrouchMaintainsBaseLocation = false;
+}
+
+void APlayerCharacter::EndCrouchFall()
+{
+	if (!bCrouchFalling)
+	{
+		return;
+	}
+
+	bCrouchFalling = false;
+	GetCharacterMovement()->MaxWalkSpeed = CrouchFallSavedMaxWalkSpeed;
 }
 
 void APlayerCharacter::PossessedBy(AController* NewController)
@@ -716,6 +907,7 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 	if (bIsDead) return;
 
 	FVector2D MoveVector = Value.Get<FVector2D>();
+	HeldMoveInputSign = FMath::Sign(ApplyMoveInputDeadZone(MoveVector.Y));
 	if (IsWallAttached())
 	{
 		DoWAllMove(MoveVector.X);
@@ -729,10 +921,34 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 			&& DownInput > FMath::Abs(MoveVector.Y) * 1.25f)
 			TryActivateAbilityByInputID(EAbilityInputID::LedgeHang);
 
-		DoMove(MoveVector.Y);
+		DoMove(ApplyMoveInputDeadZone(MoveVector.Y));
 	}
 
 
+}
+
+void APlayerCharacter::MoveReleased(const FInputActionValue& Value)
+{
+	HeldMoveInputSign = 0.0f;
+	// 키를 한 번 떼면 다음 이동 입력부터는 공격을 끊는다
+	AttackStartMoveInputSign = 0.0f;
+}
+
+float APlayerCharacter::ApplyMoveInputDeadZone(float RawInput) const
+{
+	const float DeadZone = FMath::Clamp(MoveInputDeadZone, 0.0f, 0.9f);
+	const float Magnitude = FMath::Min(FMath::Abs(RawInput), 1.0f);
+	if (Magnitude <= DeadZone)
+	{
+		return 0.0f;
+	}
+
+	// 데드존 밖 구간을 [최소 배율, 1]로 다시 펼친다. 살살 밀어도 걷기 애니메이션과 발소리가 나는 속도를 보장한다.
+	const float Alpha = (Magnitude - DeadZone) / (1.0f - DeadZone);
+	const float MinScale = FMath::Clamp(MinMoveInputScale, 0.0f, 1.0f);
+	const float Scale = FMath::Lerp(MinScale, 1.0f, Alpha);
+
+	return FMath::Sign(RawInput) * Scale;
 }
 
 void APlayerCharacter::OnHealthChanged(const FOnAttributeChangeData& Data)
@@ -901,6 +1117,8 @@ void APlayerCharacter::DoBasicAttack()
 	if (!ASC->HasMatchingGameplayTag(UGABaseAttack::GetAttackingTag()))
 	{
 		SnapToFacingTarget();
+		// 달리면서 공격을 눌렀을 때 누르고 있던 이동 키 때문에 바로 끊기지 않게 기억해 둔다
+		AttackStartMoveInputSign = HeldMoveInputSign;
 	}
 
 	Super::DoBasicAttack();
@@ -1025,8 +1243,22 @@ void APlayerCharacter::DoMove(float Forward)
 	if (IsParrying()) return;
 	if (bIsDead || IsAssassinating()) return;
 
-	// 공격이 끝나기 전에 반대 방향 입력으로 몸이 돌아가지 않게 한다.
-	if (IsAttacking()) return;
+	// 콤보 공격 중 이동 입력이 들어오면 공격을 끊고 바로 움직인다.
+	// 공격 시작 때부터 누르고 있던 같은 방향 입력은 무시한다(달리면서 공격 가능).
+	if (IsAttacking())
+	{
+		const float MoveSign = FMath::Sign(Forward);
+		if (MoveSign == 0.0f || MoveSign == AttackStartMoveInputSign) return;
+
+		if (FGameplayAbilitySpec* AttackSpec = FindAbilitySpecByInputID(EAbilityInputID::BasicAttack))
+		{
+			ASC->CancelAbilityHandle(AttackSpec->Handle);
+		}
+		AttackStartMoveInputSign = 0.0f;
+
+		// 다른 공격 상태가 남아 있으면 이동하지 않는다
+		if (IsAttacking()) return;
+	}
 
 	// 매달린 동안(모서리에서 오르내리는 중 포함) 일반 이동 입력이 목표 방향을 바꾸지 않게 한다.
 	if (IsOnWall()) return;
@@ -1210,7 +1442,45 @@ void APlayerCharacter::DoCrouch()
 void APlayerCharacter::DoUnCrouch()
 {
 	bCrouchInputHeld = false;
+	EndCrouchFall();
 	UnCrouch();
+}
+
+void APlayerCharacter::SyncHeldInputsAfterInputLock()
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	const ULocalPlayer* LocalPlayer = PC ? PC->GetLocalPlayer() : nullptr;
+	const UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer
+		? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>()
+		: nullptr;
+	const UEnhancedPlayerInput* PlayerInput = Subsystem ? Subsystem->GetPlayerInput() : nullptr;
+	if (!PlayerInput)
+	{
+		return;
+	}
+
+	// 입력 컴포넌트가 빠져 있어도 매핑 컨텍스트는 남아 있어 액션 값은 계속 갱신된다
+	auto IsHeld = [PlayerInput](const UInputAction* Action)
+	{
+		return Action && PlayerInput->GetActionValue(Action).GetMagnitudeSq() > 0.f;
+	};
+
+	if (bCrouchInputHeld && CrouchAction && !IsHeld(CrouchAction))
+	{
+		DoUnCrouch();
+	}
+	if (bIsExploring && AimAction && !IsHeld(AimAction))
+	{
+		OnCameraMoveEndInput();
+	}
+	if (bPressedJump && JumpAction && !IsHeld(JumpAction))
+	{
+		DoJumpEnd();
+	}
+	if (MoveAction && !IsHeld(MoveAction))
+	{
+		MoveReleased(FInputActionValue());
+	}
 }
 
 void APlayerCharacter::DoSwiftStrike()
@@ -1353,6 +1623,9 @@ void APlayerCharacter::MultiJump()
 	if (GetWorld()->GetTimeSeconds() - LastFallTime >= MaxCoyoteTime) return;
 
 	bCanCoyoteJump = false;
+
+	// 앉은 채 떨어지다 점프하면 일반 점프로 본다. 앉은 낙하 포즈와 앉은 착지를 쓰지 않는다.
+	EndCrouchFall();
 
 	LaunchCharacter(FVector(0.0f, 0.0f, GetCharacterMovement()->JumpZVelocity), false, true);
 }
@@ -1535,6 +1808,23 @@ void APlayerCharacter::ReturnToSafePoint_Implementation()
 		ETeleportType::TeleportPhysics
 	);
 	FacingTargetYaw = GetActorForwardVector().X >= 0.f ? 0.f : 180.f;
+
+	// 함정 등으로 옮겨지면 앉은 상태와 앉은 낙하를 끝내고 선 채로 떨어진다.
+	EndCrouchFall();
+	if (bIsCrouched)
+	{
+		UnCrouch();
+		GetCharacterMovement()->UnCrouch(false);
+	}
+
+	// 앉기 키를 계속 누르고 있으면 착지한 뒤 Landed에서 다시 앉는다.
+	// 안전 지점이 바닥에 닿아 있어도 선 채 착지를 거치도록 낙하로 시작한다.
+	// 위가 막혀 앉은 채로 남았더라도 이 낙하를 앉은 낙하로 치지 않는다.
+	if (bCrouchInputHeld)
+	{
+		TGuardValue<bool> SuppressCrouchFallGuard(bSuppressCrouchFall, true);
+		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	}
 }
 
 void APlayerCharacter::PlayInteractMontage_Implementation(AActor* InInteractable, UAnimMontage* InMontage)

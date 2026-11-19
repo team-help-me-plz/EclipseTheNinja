@@ -74,8 +74,11 @@ protected:
 
 	// TargetActors 중 IActivatable을 구현한 대상이 하나라도 있는가
 	bool	HasActivatableTarget() const;
-	// 모든 대상의 Activate 상태를 토글한다
+	// 모든 대상의 Activate 상태를 토글한다. 대상의 Instigator를 마지막으로 작동시킨 폰(LastActivator)으로 넣어 준다
 	void	ToggleTargets();
+
+	// 마지막으로 이 스위치를 작동시킨 폰. 레버처럼 대상 작동이 늦어지거나 시간 스위치가 스스로 되돌릴 때도 이 폰을 넘긴다
+	TWeakObjectPtr<APawn>	LastActivator;
 	// 모든 대상의 Activate 테두리를 켜거나 끈다
 	void	SetTargetIndicator(bool bShow);
 

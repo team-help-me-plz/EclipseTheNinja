@@ -37,6 +37,12 @@ public:
     /** 새 어빌리티가 부여되면 호출된다. 쿨타임 위젯이 획득 시점에 나타날 때 사용한다. */
     FOnAbilityGranted OnAbilityGranted;
 
+    /**
+     * 스탯 GE를 지금 적용한다. 비우면 이 캐릭터의 DefaultStatsEffect를 쓴다.
+     * 풀에서 꺼낸 소환 적처럼 시작 후에 스탯을 다시 정해야 할 때 쓴다. 서버에서만 적용되며, 적용했으면 true다.
+     */
+    bool ApplyStatsEffect(TSubclassOf<UGameplayEffect> StatsEffect = nullptr);
+
 protected:
     virtual void BeginPlay() override;
     virtual void PossessedBy(AController* NewController) override;
@@ -83,8 +89,11 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
     TObjectPtr<UStatAttributeSet> StatAttributeSet;
 
-    /** 시작 시 스탯을 덮어쓸 Instant GE. 캐릭터 종류마다 다른 GE를 지정한다. */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS")
+    /**
+     * 시작 시 스탯을 덮어쓸 Instant GE. 캐릭터 종류마다 다른 GE를 지정한다.
+     * 레벨에 배치한 인스턴스에서 바꾸면 그 개체만 다른 스탯으로 시작한다(구간별 약한 적 등).
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "GAS")
     TSubclassOf<UGameplayEffect> DefaultStatsEffect;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")

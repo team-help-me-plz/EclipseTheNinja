@@ -3,6 +3,8 @@
 #include "Noise/NoiseSettings.h"
 #include "ObjectPool/ObjectPoolSubsystem.h"
 #include "Clone/CloneCharacter.h"
+#include "GAS/Ability/GABossPatternBase.h"
+#include "Character/PlayerCharacter.h"
 
 #include "Engine/DataTable.h"
 
@@ -49,6 +51,11 @@ void UNoiseSubsystem::ReportNoise(ENoiseType InType, const FVector& InLocation, 
 	{
 		return ;
 	}
+	// 암살은 소리 없이 끝나야 하므로, 암살하는 동안(다가가기·찌르기·착지)에는 소음을 내지 않는다
+	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(InInstigator); Player && Player->IsAssassinating())
+	{
+		return ;
+	}
 	if (!this->NoiseTable)
 	{
 		return ;
@@ -79,6 +86,12 @@ void UNoiseSubsystem::SpawnNoiseRing(const FVector& InLocation, const float InRa
 {
 	UObjectPoolSubsystem* Pool = GetWorld()->GetSubsystem<UObjectPoolSubsystem>();
 	if (!Pool || !this->NoiseRingClass)
+	{
+		return ;
+	}
+
+	// 컷신 중에는 시퀀스가 움직이는 플레이어 발소리 노티파이에도 소리 파동이 떠서 연출을 가리므로 띄우지 않는다.
+	if (UGABossPatternBase::IsAnyCinematicPlaying(GetWorld()))
 	{
 		return ;
 	}

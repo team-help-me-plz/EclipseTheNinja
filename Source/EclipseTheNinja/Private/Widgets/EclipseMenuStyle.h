@@ -33,7 +33,8 @@ namespace EclipseMenuStyle
 		return Brush;
 	}
 
-	inline FButtonStyle Button(FLinearColor Fill, FLinearColor Accent)
+	// SoundOwner: 호버·선택 사운드를 가진 메뉴 위젯(UEclipseMenuWidget을 부모로 둔 WBP)
+	inline FButtonStyle Button(FLinearColor Fill, FLinearColor Accent, const UUserWidget* SoundOwner)
 	{
 		FButtonStyle Style;
 		Style.SetNormal(Box(Fill, 3.f, Edge, 1.f));
@@ -43,7 +44,7 @@ namespace EclipseMenuStyle
 		Style.SetPressedPadding(FMargin(0.f));
 
 		// 스타일을 다시 만들어 덮어써도 호버·선택 사운드가 빠지지 않게 한다
-		EclipseUISound::ApplyButtonSounds(Style);
+		EclipseUISound::ApplyButtonSounds(Style, SoundOwner);
 		return Style;
 	}
 

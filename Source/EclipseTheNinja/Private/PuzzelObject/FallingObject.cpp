@@ -10,6 +10,7 @@
 #include "Component/ActivateHighlightComponent.h"
 #include "Component/InteractHighlightComponent.h"
 #include "Save/GameSaveSubsystem.h"
+#include "Subsystem/NoiseSubsystem.h"
 
 #include "Components/BoxComponent.h"
 #include "AbilitySystemComponent.h"
@@ -66,28 +67,7 @@ AFallingObject::AFallingObject()
 	this->LandEffect->SetupAttachment(GetRootComponent());
 	this->LandEffect->bAutoActivate = false;
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> LandSystem(
-		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/LitSandPuff/Looped/NS_SandPuff_Medium_Looped.NS_SandPuff_Medium_Looped"));
-
-	if (LandSystem.Succeeded())
-	{
-		this->LandEffect->SetAsset(LandSystem.Object);
-	}
-
-	// 발동·충돌 기본 사운드(에셋 시트). BP에서 바꿀 수 있다
-	static ConstructorHelpers::FObjectFinder<USoundBase> DropSoundFinder(
-		TEXT("/Game/Audio/dropping_tool_v1.dropping_tool_v1"));
-	static ConstructorHelpers::FObjectFinder<USoundBase> LandSoundFinder(
-		TEXT("/Game/Audio/UI_PopUp_02.UI_PopUp_02"));
-
-	if (DropSoundFinder.Succeeded())
-	{
-		this->DropSound = DropSoundFinder.Object;
-	}
-	if (LandSoundFinder.Succeeded())
-	{
-		this->LandSound = LandSoundFinder.Object;
-	}
+	// 착지 이펙트(LandEffect의 Niagara System)와 발동·충돌 사운드(DropSound/LandSound)는 BP에서 등록한다
 
 	// 착지 진동 기본값은 2단계. BP에서 바꿀 수 있다
 	static ConstructorHelpers::FObjectFinder<UForceFeedbackEffect> LandForceFeedbackFinder(
@@ -161,7 +141,8 @@ void AFallingObject::ToggleActivate_Implementation()
 	{
 		return ;
 	}
-	this->RopeComponent->CutRope();
+	// 스위치가 작동 직전에 자신을 작동시킨 폰을 Instigator로 넣어 준다
+	this->RopeComponent->CutRope(GetInstigator());
 }
 
 void AFallingObject::ShowActivationIndicator_Implementation()
@@ -202,6 +183,7 @@ void AFallingObject::ResetToInitial_Implementation()
 	this->bIsPendingBlock = false;
 	this->FallSpeed = 0.f;
 	this->HitActors.Reset();
+	this->DropInstigator.Reset();
 	this->ClearIgnoredPawns();
 	// 리셋은 즉시 원래 모습이어야 하므로 남은 파티클까지 바로 지운다
 	GetWorldTimerManager().ClearTimer(this->LandEffectTimer);
@@ -326,12 +308,13 @@ void AFallingObject::FindFallingLocation()
 	this->FallingLocation = (bIsObjectHit && !ObjectHit.bStartPenetrating) ? ObjectHit.Location : RayEnd;
 }
 
-void AFallingObject::ObjectDrop()
+void AFallingObject::ObjectDrop(APawn* InCutter)
 {
 	if (this->bIsFalling || this->bIsLanded)
 	{
 		return ;
 	}
+	this->DropInstigator = InCutter;
 	this->FindFallingLocation();
 	this->FallingIndicator->SetVisibility(false);
 	this->bIsFalling = true;
@@ -387,6 +370,15 @@ void AFallingObject::ObjectLand()
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, this->LandSound, LandLocation);
 	}
+
+	// 착지 지점에서 소음을 낸다. 가해자는 줄을 끊은 폰이고,
+	// 레벨 BP·튜토리얼처럼 폰 없이 작동해 알 수 없으면 플레이어 폰으로 대신한다 (소음 시스템은 플레이어/분신 소리만 받는다)
+	APawn*	NoiseInstigator = this->DropInstigator.Get();
+	if (!NoiseInstigator)
+	{
+		NoiseInstigator = UGameplayStatics::GetPlayerPawn(this, 0);
+	}
+	UNoiseSubsystem::MakeSomeNoise(this, ENoiseType::FallingObjectLand, LandLocation, NoiseInstigator);
 
 	this->PlayLandForceFeedback(LandLocation);
 

@@ -8,6 +8,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
+#include "AssetManagement/EclipseAssetManager.h"
 
 UBossEnemyGimmickComponent::UBossEnemyGimmickComponent()
 {
@@ -176,7 +177,7 @@ void UBossEnemyGimmickComponent::StartLaser(const AActor* Target)
 
 	if (!LaserComp)
 	{
-		UNiagaraSystem* System = LaserSystem.LoadSynchronous();
+		UNiagaraSystem* System = UEclipseAssetManager::GetAsset(LaserSystem);
 		if (!System)
 		{
 			return;

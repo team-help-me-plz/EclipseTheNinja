@@ -21,7 +21,6 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "TimerManager.h"
-#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
@@ -54,13 +53,7 @@ UGACloneTech::UGACloneTech()
 {
 	this->InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 
-	static ConstructorHelpers::FObjectFinder<UNiagaraSystem> CloneEffectAsset(
-		TEXT("/Game/VFX/Vefects/Sand_VFX/VFX/LitSandPuff/Looped/NS_SandPuff_Small_Looped.NS_SandPuff_Small_Looped"));
-
-	if (CloneEffectAsset.Succeeded())
-	{
-		this->CloneEffectSystem = CloneEffectAsset.Object;
-	}
+	// 분신 소환·회수 이펙트(CloneEffectSystem)는 BP(GA_CloneTech)에서 등록한다
 }
 
 void UGACloneTech::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -407,6 +400,15 @@ void UGACloneTech::InputPressed(const FGameplayAbilitySpecHandle Handle,
 	Character->SetActorLocation(this->SpawnedClone->GetActorLocation());
 	this->SpawnedClone->SetActorLocation(PlayerLocation);
 	this->SpawnedClone->StopCloneMovement();
+
+	// 교환한 두 자리에서 연기 이펙트와 교환 사운드를 재생한다 (설정은 플레이어 BP)
+	if (const APlayerCharacter* Player = Cast<APlayerCharacter>(Character))
+	{
+		Player->PlayCloneSwapSmoke(PlayerLocation);
+		Player->PlayCloneSwapSmoke(CloneLocation);
+		Player->PlayActionSound(EPlayerActionSound::CloneSwap);
+	}
+
 	this->OnCloneCannotSwap.Broadcast();
 }
 
@@ -454,6 +456,12 @@ void UGACloneTech::OnRecallClone()
 	// 분신이 존재하면 Release 시키기
 	if (this->SpawnedClone.IsValid())
 	{
+		// 실제로 회수할 분신이 있을 때만 회수 사운드를 낸다
+		if (const APlayerCharacter* Player = Cast<APlayerCharacter>(GetAvatarActorFromActorInfo()))
+		{
+			Player->PlayActionSound(EPlayerActionSound::CloneRecall);
+		}
+
 		UObjectPoolSubsystem::Release(this->SpawnedClone.Get());
 	}
 }

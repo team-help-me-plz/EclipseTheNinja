@@ -77,6 +77,9 @@ public:
 
 	inline TSubclassOf<UGameplayEffect>	GetFireBurnEffectClass() const { return (this->FireBurnEffectClass); }
 
+	// 불을 붙일 때 재생하는 사운드 (능력 픽업 획득 사운드로도 쓴다)
+	inline USoundBase*	GetFireImbueSound() const { return (this->FireImbueSound); }
+
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
@@ -105,9 +108,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attack|Fire")
 	float	FireDotRatio = 0.2f;
 
-	/** 불이 붙어 있는 동안 칼에 붙여 재생할 이펙트 */
+	/**
+	 * 불이 붙어 있는 동안 칼에 붙여 재생할 이펙트.
+	 * 이 이펙트는 ChaosNiagara 모듈(WindForce)을 쓰는데, 생성자에서 바로 로드하면
+	 * 게임 모듈이 ChaosNiagara보다 먼저 로드되어 에디터 시작 시 워닝이 난다. 그래서 소프트 참조로 두고 발동 시 로드한다.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ElementalFire|Effect")
-	TObjectPtr<UNiagaraSystem>	FireSwordSystem = nullptr;
+	TSoftObjectPtr<UNiagaraSystem>	FireSwordSystem;
 
 	/**
 	 * 이펙트를 붙일 소켓. 캐릭터에 붙은 메시 중 이 소켓을 가진 메시(칼)에 붙는다.
