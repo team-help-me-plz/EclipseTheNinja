@@ -53,10 +53,16 @@ void UFootstepSoundComponent::TickComponent(
 		return;
 	}
 
+	// 달릴 때는 보폭이 길어지므로 더 긴 간격으로 발소리를 낸다
+	const bool	bRunning = this->RunSpeedThreshold > 0.0f && Speed >= this->RunSpeedThreshold;
+	const float	NearStepDistance = bRunning
+		? this->RunStepDistance
+		: this->StepDistance;
+
 	// 플레이어 주변 범위 밖에서는 더 긴 간격으로 발소리를 낸다
 	const float	CurrentStepDistance = this->IsOwnerNearPlayer()
-		? this->StepDistance
-		: this->OffscreenStepDistance;
+		? NearStepDistance
+		: FMath::Max(NearStepDistance, this->OffscreenStepDistance);
 
 	this->DistanceSinceStep += Speed * DeltaTime;
 	if (this->DistanceSinceStep >= CurrentStepDistance)

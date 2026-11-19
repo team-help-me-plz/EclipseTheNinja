@@ -45,6 +45,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound", meta = (ClampMin = "1.0", Units = "cm"))
 	float	StepDistance = 130.0f;
 
+	/** 이 속도(cm/s) 이상으로 달릴 때는 RunStepDistance 간격으로 발소리를 낸다. 0이면 달리기 간격을 쓰지 않는다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound", meta = (ClampMin = "0", Units = "cm/s"))
+	float	RunSpeedThreshold = 200.0f;
+
+	/** 달릴 때 발소리 한 번을 내는 이동 거리(cm). 달리면 보폭이 길어지므로 걸을 때보다 길게 둔다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound", meta = (ClampMin = "1.0", Units = "cm"))
+	float	RunStepDistance = 120.0f;
+
 	// 플레이어 주변 범위 밖에 있을 때 발소리 한 번을 내는 이동 거리(cm). 멀리 있는 적의 발소리를 덜 자주 낸다
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound", meta = (ClampMin = "1.0", Units = "cm"))
 	float	OffscreenStepDistance = 150.0f;
